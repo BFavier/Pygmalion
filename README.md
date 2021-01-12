@@ -1,2 +1,2 @@
-# pygmalion
+# Pygmalion
 Machine learning library
