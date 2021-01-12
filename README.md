@@ -1,2 +1,2 @@
 # Pygmalion
-Machine learning library
+a machine learning library
