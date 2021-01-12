@@ -1,0 +1,61 @@
+import pathlib
+import json
+import IPython
+import numpy as np
+import pygmalion as ml
+import pygmalion.neural_networks as nn
+import matplotlib.pyplot as plt
+plt.style.use("bmh")
+data_path = pathlib.Path(__file__).parent / ".." / "data" / "cityscapes"
+
+
+# Load data
+with open(data_path / "categories.json", "r") as file:
+    categories = json.load(file)
+x_train = np.load(data_path / "X_train.npy")[:100]
+y_train = np.load(data_path / "Y_train.npy")[:100]
+x_test = np.load(data_path / "X_test.npy")
+y_test = np.load(data_path / "Y_test.npy")
+
+# Create and train the model
+downward = [{"window": (4, 4), "channels": 4},
+            {"window": (4, 4), "channels": 4},
+            {"window": (4, 4), "channels": 4}]
+pooling = [(4, 4), (4, 4), (4, 4)]
+upward = [{"window": (4, 4), "channels": 4},
+          {"window": (4, 4), "channels": 4},
+          {"window": (4, 4), "channels": 4}]
+model = nn.SemanticSegmenter(3, categories,
+                             downsampling=downward,
+                             pooling=pooling,
+                             upsampling=upward,
+                             activation="leaky_relu",
+                             GPU=True,
+                             learning_rate=1.0E-2)
+# print(model.module.shapes)
+train, val = ml.split((x_train, y_train), frac=0.2)
+model.fit(train, val, n_epochs=500, L_minibatchs=10)
+
+# Plot metrics
+# model.plot_residuals()
+# f, ax = plt.subplots()
+# y_pred = model(x_test)
+# ml.plot_confusion_matrix(y_pred, y_test, ax=ax)
+# acc = ml.accuracy(y_pred, y_test)
+# ax.set_title(f"Accuracy = {acc:.3g}")
+# f.tight_layout()
+
+# Plot results
+for x, y_t in zip(x_test, y_test):
+    y_p = model([x])[0]
+    f, axes = plt.subplots(figsize=[15, 5], ncols=3)
+    for im, ax, title in zip([x, y_p, y_t], axes,
+                             ["image", "segmented", "target"]):
+        ax.imshow(im)
+        ax.set_title(title)
+        ax.set_xticks([])
+        ax.set_yticks([])
+    f.tight_layout()
+    plt.show()
+
+IPython.embed()
