@@ -1,0 +1,17 @@
+Metadata-Version: 2.1
+Name: pygmalion
+Version: 0.0.1
+Summary: A machine learning package
+Home-page: https://github.com/BFavier/Pygmalion
+Author: Benoit Favier
+Author-email: benoitfamillefavier@gmail.com
+License: UNKNOWN
+Description: # Pygmalion
+        a machine learning library
+        
+Platform: UNKNOWN
+Classifier: Programming Language :: Python :: 3
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Operating System :: OS Independent
+Classifier: Environment :: GPU :: NVIDIA CUDA
+Description-Content-Type: text/markdown
