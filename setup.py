@@ -6,14 +6,14 @@ with open("README.md", "r") as fh:
 
 setuptools.setup(
     name="pygmalion",
-    version="0.0.2",
+    version="0.0.3",
     author="Benoit Favier",
     author_email="benoitfamillefavier@gmail.com",
     description="A machine learning package",
     long_description=long_description,
     long_description_content_type="text/markdown",
     install_requires=[
-        "pandas>=1.0.0",
+        "pandas>=0.25",
 		"numpy>=1.18",
 		"torch>=1.2"
     ],
