@@ -138,6 +138,7 @@ def neural_network(cls: torch.nn.Module) -> Type:
             ax.set_ylabel("loss")
             ax.set_xlabel("epochs")
             ax.legend()
+            f.tight_layout()
 
         def __call__(self, X):
             """
@@ -390,7 +391,7 @@ def neural_network(cls: torch.nn.Module) -> Type:
                     training_loss = self._batch(training_data, L_minibatchs,
                                                 train=True)
                     if validation_data is not None:
-                        validation_loss = self._batch(validation_data, None,
+                        validation_loss = self._batch(validation_data, L_minibatchs,
                                                       train=False)
                         if validation_loss < best_loss:
                             best_epoch = epoch
@@ -413,7 +414,7 @@ def neural_network(cls: torch.nn.Module) -> Type:
                         print(msg, flush=True)
             except KeyboardInterrupt:
                 if verbose:
-                    print("Training interupted by the user", flush=True)
+                    print("Training interrupted by the user", flush=True)
                 # Trims data in case user interupted in the midle of the loop
                 keys = ["validation loss", "training loss", "epochs"]
                 L = min(len(self.residuals[key]) for key in keys)
@@ -454,7 +455,7 @@ def neural_network(cls: torch.nn.Module) -> Type:
             else:
                 losses = []
                 for batch_data in data():
-                    loss = self._minibatch(self.data_to_tensor(*batch_data),
+                    loss = self._minibatch(self.module.data_to_tensor(*batch_data),
                                            *args, **kwargs)
                     losses.append(loss)
                 return sum(losses)/len(losses)
@@ -527,14 +528,14 @@ def neural_network(cls: torch.nn.Module) -> Type:
                 loss = self.module.loss(self.module(x), y, w)
                 loss = self._regularization(loss)
                 loss.backward()
-                return float(loss)
             else:
                 with torch.no_grad():
                     self.module.eval()
                     loss = self.module.loss(self.module(x), y, w)
-                    self.module.train()
                     loss = self._regularization(loss)
-                    return float(loss)
+                    self.module.train()
+            torch.cuda.empty_cache()
+            return float(loss)
 
         def _regularization(self, loss: torch.Tensor) -> torch.Tensor:
             """

@@ -2,6 +2,7 @@ README.md
 setup.py
 pygmalion/__init__.py
 pygmalion/__model_decorators.py
+pygmalion/info.py
 pygmalion/utilities.py
 pygmalion.egg-info/PKG-INFO
 pygmalion.egg-info/SOURCES.txt

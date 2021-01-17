@@ -11,4 +11,4 @@
 
 from . import neural_networks
 from .utilities import split, kfold, MSE, RMSE, R2, accuracy, plot_correlation, plot_confusion_matrix
-__version__ = "0.0.0"
+from .info import __version__, __author__
