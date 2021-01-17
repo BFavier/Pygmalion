@@ -22,9 +22,9 @@ model.train(train_data, val_data)
 # Plot results
 model.plot_residuals()
 f, ax = plt.subplots()
-x, y = train
+x, y = train_data
 ml.plot_correlation(model(x), y, ax=ax, label="training")
-x, y = val
+x, y = val_data
 ml.plot_correlation(model(x), y, ax=ax, label="validation")
 plt.show()
 
