@@ -14,7 +14,13 @@ class DenseRegressor(torch.nn.Module):
 
     @classmethod
     def from_dump(cls, dump):
-        pass
+        assert cls.__name__ == dump["type"]
+        obj = cls(dump["inputs"])
+        obj.input_norm = BatchNorm1d.from_dump(dump["input norm"])
+        obj.hidden_layers = FullyConnected.from_dump(dump["fully connected"])
+        obj.output = Linear.from_dump(dump["output"])
+        obj.target_norm = BatchNorm1d.from_dump(dump["target norm"])
+        return obj
 
     def __init__(self, inputs: List[str],
                  hidden_layers: List[int] = [10, 10, 10],
@@ -42,7 +48,7 @@ class DenseRegressor(torch.nn.Module):
         else:
             x = floats_to_tensor(X, self.device)
         y = None if Y is None else floats_to_tensor(Y, self.device).view(-1, 1)
-        w = None if weights is None else floats_to_tensor(weights).view(-1, 1)
+        w = None if weights is None else floats_to_tensor(weights, self.device).view(-1, 1)
         return x, y, w
 
     def tensor_to_y(self, tensor: torch.Tensor) -> np.ndarray:
@@ -58,4 +64,9 @@ class DenseRegressor(torch.nn.Module):
 
     @property
     def dump(self):
-        pass
+        return {"type": type(self).__name__,
+                "inputs": self.inputs,
+                "input norm": self.input_norm.dump,
+                "hidden layers": self.hidden_layers.dump,
+                "output": self.output.dump,
+                "target norm": self.target_norm.dump}

@@ -61,12 +61,12 @@ def neural_network(cls: torch.nn.Module) -> Type:
                               "epochs": [],
                               "best epoch": None}
 
-        def fit(self, training_data: Union[tuple, Callable],
-                validation_data: Union[tuple, Callable, None] = None,
-                n_epochs: int = 1000,
-                patience: int = 100,
-                verbose: bool = True,
-                L_minibatchs: Union[int, None] = None):
+        def train(self, training_data: Union[tuple, Callable],
+                  validation_data: Union[tuple, Callable, None] = None,
+                  n_epochs: int = 1000,
+                  patience: int = 100,
+                  verbose: bool = True,
+                  L_minibatchs: Union[int, None] = None):
             """
             Trains a neural network model.
 
@@ -294,6 +294,18 @@ def neural_network(cls: torch.nn.Module) -> Type:
                     m.momentum = f
             self._f = f
 
+        @property
+        def dump(self):
+            return {"type": type(self).__name__,
+                    "module": self.module.dump,
+                    "GPU": self.GPU,
+                    "learning_rate": self.learning_rate,
+                    "norm_update_factor": self.norm_update_factor,
+                    "optimization_method": self.optimization_method,
+                    "L1": self.L1,
+                    "L2": self.L2,
+                    "grad": self._get_state["grad"]}
+
         def _get_state(self) -> tuple:
             """
             Returns a snapshot of the model's state
@@ -303,20 +315,15 @@ def neural_network(cls: torch.nn.Module) -> Type:
 
             Returns
             -------
-            tuple :
-                the tuple of (module, grad, optimizer) state dicts
+            dict :
+                the state of the model
             """
-            module_state = copy.deepcopy(self.module.state_dict())
             params = self.module.state_dict(keep_vars=True)
-            grad_state = OrderedDict([(key, self._copy_grad(params[key].grad))
-                                      for key in params])
-            optimizer_state = copy.deepcopy(self.optimizer.state_dict())
-            return module_state, grad_state, optimizer_state
-
-        def _copy_grad(self, grad: Union[torch.Tensor, None]
-                       ) -> Union[torch.Tensor, None]:
-            """returns a copy of the given grad tensor"""
-            return grad if grad is None else grad.detach().clone()
+            grads = {k: None if t.grad is None else t.grad.tolist()
+                     for k, t in params.items()}
+            return {"params": {k: t.tolist() for k, t in params.items()},
+                    "grad": grads,
+                    "optim": self.optimizer.state_dict()}
 
         def _set_state(self, state: tuple):
             """
@@ -324,15 +331,20 @@ def neural_network(cls: torch.nn.Module) -> Type:
 
             Parameters
             ----------
-            state : tuple
-                The tuple of (module.state_dict(), optimizer.state_dict())
+            state : dict
+                The state of the model
             """
-            module_state, grad_state, optimizer_state = state
-            self.module.load_state_dict(module_state)
-            state = self.module.state_dict(keep_vars=True)
-            for key in module_state.keys():
-                state[key].grad = grad_state[key]
-            self.optimizer.load_state_dict(optimizer_state)
+            if "params" in state.keys():
+                params = {k: torch.tensor(t)
+                          for k, t in state["params"].items()}
+                self.module.load_state_dict(params)
+            if "grad" in state.keys():
+                params = self.module.state_dict(keep_vars=True)
+                for key in params.keys():
+                    t = state["grad"][key]
+                    params[key].grad = None if t is None else torch.tensor(t)
+            if "optim" in state.keys():
+                self.optimizer.load_state_dict(state["optim"])
 
         def _training_loop(self, training_data: tuple,
                            validation_data: Union[tuple, None],
@@ -391,7 +403,8 @@ def neural_network(cls: torch.nn.Module) -> Type:
                     training_loss = self._batch(training_data, L_minibatchs,
                                                 train=True)
                     if validation_data is not None:
-                        validation_loss = self._batch(validation_data, L_minibatchs,
+                        validation_loss = self._batch(validation_data,
+                                                      L_minibatchs,
                                                       train=False)
                         if validation_loss < best_loss:
                             best_epoch = epoch
@@ -455,8 +468,9 @@ def neural_network(cls: torch.nn.Module) -> Type:
             else:
                 losses = []
                 for batch_data in data():
-                    loss = self._minibatch(self.module.data_to_tensor(*batch_data),
-                                           *args, **kwargs)
+                    loss = self._minibatch(
+                        self.module.data_to_tensor(*batch_data),
+                        *args, **kwargs)
                     losses.append(loss)
                 return sum(losses)/len(losses)
 

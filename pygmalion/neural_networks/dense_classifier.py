@@ -14,18 +14,23 @@ class DenseClassifier(torch.nn.Module):
 
     @classmethod
     def from_dump(cls, dump):
-        pass
+        assert cls.__name__ == dump["type"]
+        obj = cls(dump["inputs"], dump["categories"])
+        obj.input_norm = BatchNorm1d.from_dump(dump["input norm"])
+        obj.hidden_layers = FullyConnected.from_dump(dump["fully connected"])
+        obj.output = Linear.from_dump(dump["output"])
+        return obj
 
     def __init__(self, inputs: List[str], categories: List[str],
                  hidden_layers: List[int] = [10, 10, 10],
                  activation: str = "relu"):
         super().__init__()
         self.inputs = list(inputs)
+        self.categories = list(categories)
         self.input_norm = BatchNorm1d(len(inputs))
         self.hidden_layers = FullyConnected(len(inputs),
                                             hidden_layers=hidden_layers,
                                             activation=activation)
-        self.categories = list(categories)
         self.output = Linear(self.hidden_layers.out_features,
                              len(self.categories))
 
@@ -57,4 +62,9 @@ class DenseClassifier(torch.nn.Module):
 
     @property
     def dump(self):
-        pass
+        return {"type": type(self).__name__,
+                "inputs": self.inputs,
+                "categories": self.categories,
+                "input norm": self.input_norm.dump,
+                "hidden layers": self.hidden_layers.dump,
+                "output": self.output.dump}

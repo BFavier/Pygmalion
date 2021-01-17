@@ -22,14 +22,14 @@ downward = [{"window": (3, 3), "channels": 4},
             {"window": (3, 3), "channels": 8},
             {"window": (3, 3), "channels": 16}]
 pooling = [(4, 4), (4, 4), (4, 4)]
-upward = [{"window": (3, 3), "channels": 8},
+upward = [{"window": (3, 3), "channels": 16},
           {"window": (3, 3), "channels": 8},
-          {"window": (3, 3), "channels": 8}]
+          {"window": (3, 3), "channels": 4}]
 model = nn.SemanticSegmenter(3, categories,
                              downsampling=downward,
                              pooling=pooling,
                              upsampling=upward,
-                             activation="leaky_relu",
+                             activation="tanh",
                              GPU=True,
                              learning_rate=1.0E-2)
 # print(model.module.shapes)

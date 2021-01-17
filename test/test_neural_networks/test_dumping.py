@@ -1,6 +1,7 @@
 import sys
 import torch
 import pygmalion.neural_networks.layers as lay
+import pygmalion.neural_networks as nn
 
 rtol, atol = 1.0E-4, 0
 
