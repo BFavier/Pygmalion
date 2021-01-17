@@ -19,9 +19,9 @@ y_test = np.array(categories)[np.load(data_path / "test_labels.npy")]
 in_channels = 1
 
 # Create and train the model
-convolutions = [{"window": (4, 4), "channels": 5},
-                {"window": (4, 4), "channels": 10},
-                {"window": (3, 3), "channels": 20}]
+convolutions = [{"window": (4, 4), "channels": 8},
+                {"window": (4, 4), "channels": 16},
+                {"window": (3, 3), "channels": 32}]
 pooling = [(2, 2), (2, 2), (2, 2)]
 model = nn.ImageClassifier(in_channels, categories,
                            convolutions=convolutions,
@@ -38,7 +38,7 @@ model.fit(train, val, n_epochs=500, L_minibatchs=3000)
 # Plot results
 model.plot_residuals()
 f, ax = plt.subplots()
-y_pred = model(x_test)
+y_pred = sum([model(x_test[i:i+100]) for i in range(0, len(x_test), 100)], [])
 ml.plot_confusion_matrix(y_pred, y_test, ax=ax)
 acc = ml.accuracy(y_pred, y_test)
 ax.set_title(f"Accuracy = {acc:.3g}")

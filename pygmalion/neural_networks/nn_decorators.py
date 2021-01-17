@@ -414,7 +414,7 @@ def neural_network(cls: torch.nn.Module) -> Type:
                         print(msg, flush=True)
             except KeyboardInterrupt:
                 if verbose:
-                    print("Training interupted by the user", flush=True)
+                    print("Training interrupted by the user", flush=True)
                 # Trims data in case user interupted in the midle of the loop
                 keys = ["validation loss", "training loss", "epochs"]
                 L = min(len(self.residuals[key]) for key in keys)
