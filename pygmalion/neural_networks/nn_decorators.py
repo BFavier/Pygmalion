@@ -218,8 +218,7 @@ def neural_network(cls: torch.nn.Module) -> Type:
                 self.module.device = torch.device("cuda:0")
             else:
                 self.module.device = torch.device("cpu")
-            if self._GPU != enable:
-                self.module.to(self.module.device)
+            self.module.to(self.module.device)
 
         @property
         def learning_rate(self) -> float:
@@ -359,14 +358,16 @@ def neural_network(cls: torch.nn.Module) -> Type:
                 The state of the model
             """
             if "params" in state.keys():
-                params = {k: torch.tensor(t)
+                params = {k: torch.tensor(t, device=self.module.device)
                           for k, t in state["params"].items()}
                 self.module.load_state_dict(params)
             if "grad" in state.keys():
                 params = self.module.state_dict(keep_vars=True)
                 for key in params.keys():
                     t = state["grad"][key]
-                    params[key].grad = None if t is None else torch.tensor(t)
+                    if t is not None:
+                        t = torch.tensor(t, device=self.module.device)
+                    params[key].grad = t
             if "optim" in state.keys():
                 self.optimizer.load_state_dict(state["optim"])
 
