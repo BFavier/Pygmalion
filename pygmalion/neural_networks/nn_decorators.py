@@ -1,11 +1,9 @@
 import math
-import copy
 import torch
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from typing import Union, Callable, Type, List, Iterable
-from collections import OrderedDict
 from .conversions import tensor_to_index, tensor_to_probabilities
 
 
@@ -21,6 +19,22 @@ def neural_network(cls: torch.nn.Module) -> Type:
         optimizer : torch.optim
             the optimizer used for training
         """
+
+        @staticmethod
+        def _load_dump(this: type, dump: dict) -> object:
+            obj = this({k: dump[k]
+                        for k in ["GPU", "learning_rate",
+                                  "norm_update_factor",
+                                  "optimization_method",
+                                  "L1", "L2"]})
+            obj.residuals = dump["residuals"]
+            obj.module = cls.from_dump(dump["module"])
+            obj._set_state({"grad": dump["gradient"]})
+
+        @classmethod
+        def from_dump(this, dump: dict) -> 'NeuralNetwork':
+            return this._load_dump(this, dump)
+
         def __init__(self, *args,
                      GPU: bool = False,
                      learning_rate: float = 1.0E-3,
@@ -297,14 +311,15 @@ def neural_network(cls: torch.nn.Module) -> Type:
         @property
         def dump(self):
             return {"type": type(self).__name__,
-                    "module": self.module.dump,
                     "GPU": self.GPU,
                     "learning_rate": self.learning_rate,
                     "norm_update_factor": self.norm_update_factor,
                     "optimization_method": self.optimization_method,
                     "L1": self.L1,
                     "L2": self.L2,
-                    "grad": self._get_state["grad"]}
+                    "residuals": self.residuals,
+                    "module": self.module.dump,
+                    "gradient": self._get_state["grad"]}
 
         def _get_state(self) -> tuple:
             """
@@ -581,7 +596,15 @@ def neural_network(cls: torch.nn.Module) -> Type:
 def nn_classifier(cls: Type) -> Type:
     """A decorator that wraps a classifier 'torch.nn.Module'"""
 
-    class NeuralNetworkClassifier(neural_network(cls)):
+    parent = neural_network(cls)
+
+    class NeuralNetworkClassifier(parent):
+
+        @classmethod
+        def from_dump(this: type, dump: dict) -> 'NeuralNetworkClassifier':
+            obj = this._load_dump(this, dump)
+            obj.class_weights = dump["class weights"]
+            return obj
 
         def __init__(self, *args, class_weights=None, **kwargs):
             super().__init__(*args, **kwargs)
