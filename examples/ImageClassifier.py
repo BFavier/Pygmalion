@@ -20,8 +20,8 @@ in_channels = 1
 
 # Create and train the model
 convolutions = [{"window": (4, 4), "channels": 8},
-                {"window": (4, 4), "channels": 16},
-                {"window": (3, 3), "channels": 32}]
+                {"window": (4, 4), "channels": 12},
+                {"window": (3, 3), "channels": 16}]
 pooling = [(2, 2), (2, 2), (2, 2)]
 model = nn.ImageClassifier(in_channels, categories,
                            convolutions=convolutions,
