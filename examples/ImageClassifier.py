@@ -32,8 +32,8 @@ model = nn.ImageClassifier(in_channels, categories,
                            GPU=True,
                            learning_rate=1.0E-2)
 # print(model.module.shapes)
-train, val = ml.split((x_train, y_train), frac=0.2)
-model.fit(train, val, n_epochs=500, L_minibatchs=3000)
+train_data, val_data = ml.split((x_train, y_train), frac=0.2)
+model.train(train_data, val_data, n_epochs=500, L_minibatchs=3000)
 
 # Plot results
 model.plot_residuals()

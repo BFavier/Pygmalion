@@ -15,7 +15,8 @@ class SemanticSegmenter(torch.nn.Module):
     @classmethod
     def from_dump(cls, dump):
         assert cls.__name__ == dump["type"]
-        colors = {cat: col for cat, col in zip(dump["categories"], dump["colors"])}
+        colors = {cat: col for cat, col in zip(dump["categories"],
+                                               dump["colors"])}
         obj = cls(1, colors, [], [], [])
         obj.input_norm = BatchNorm2d.from_dump(dump["input norm"])
         obj.UNet = UNet2d.from_dump(dump["U-net"])
@@ -33,7 +34,6 @@ class SemanticSegmenter(torch.nn.Module):
                  padded: bool = True,
                  activation: str = "relu"):
         super().__init__()
-        assert len(downsampling) == len(pooling) == len(upsampling)
         self.categories = [c for c in colors.keys()]
         self.colors = [colors[c] for c in self.categories]
         self.input_norm = BatchNorm2d(in_channels)

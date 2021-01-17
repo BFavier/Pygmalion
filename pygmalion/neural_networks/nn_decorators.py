@@ -21,19 +21,29 @@ def neural_network(cls: torch.nn.Module) -> Type:
         """
 
         @staticmethod
-        def _load_dump(this: type, dump: dict) -> object:
-            obj = this({k: dump[k]
-                        for k in ["GPU", "learning_rate",
-                                  "norm_update_factor",
-                                  "optimization_method",
-                                  "L1", "L2"]})
+        def _load_dump(decorator: Callable, dump: dict) -> object:
+
+            @decorator
+            class Dummy(torch.nn.Module):
+                def __init__(self):
+                    super().__init__()
+                    self.param = torch.nn.Linear(1, 1)
+
+            obj = Dummy()
             obj.residuals = dump["residuals"]
             obj.module = cls.from_dump(dump["module"])
+            obj.optimization_method = dump["optimization method"]
+            obj.norm_update_factor = dump["norm update factor"]
+            obj.GPU = dump["GPU"]
+            obj.learning_rate = dump["learning rate"]
+            obj.L1 = dump["L1"]
+            obj.L2 = dump["L2"]
             obj._set_state({"grad": dump["gradient"]})
+            return obj
 
         @classmethod
         def from_dump(this, dump: dict) -> 'NeuralNetwork':
-            return this._load_dump(this, dump)
+            return this._load_dump(neural_network, dump)
 
         def __init__(self, *args,
                      GPU: bool = False,
@@ -200,17 +210,16 @@ def neural_network(cls: torch.nn.Module) -> Type:
             bool :
                 whether the GPU mode is enabled
             """
-            if hasattr(self, "_GPU") and self._GPU == enable:
-                return
             if enable and not(torch.cuda.is_available()):
                 raise RuntimeError("CUDA is not available on this computer, \
                                     can't train on GPU")
             self._GPU = enable
-            if self.GPU:
+            if enable:
                 self.module.device = torch.device("cuda:0")
             else:
                 self.module.device = torch.device("cpu")
-            self.module.to(self.module.device)
+            if self._GPU != enable:
+                self.module.to(self.module.device)
 
         @property
         def learning_rate(self) -> float:
@@ -312,14 +321,14 @@ def neural_network(cls: torch.nn.Module) -> Type:
         def dump(self):
             return {"type": type(self).__name__,
                     "GPU": self.GPU,
-                    "learning_rate": self.learning_rate,
-                    "norm_update_factor": self.norm_update_factor,
-                    "optimization_method": self.optimization_method,
+                    "learning rate": self.learning_rate,
+                    "norm update factor": self.norm_update_factor,
+                    "optimization method": self.optimization_method,
                     "L1": self.L1,
                     "L2": self.L2,
                     "residuals": self.residuals,
                     "module": self.module.dump,
-                    "gradient": self._get_state["grad"]}
+                    "gradient": self._get_state()["grad"]}
 
         def _get_state(self) -> tuple:
             """
@@ -602,7 +611,7 @@ def nn_classifier(cls: Type) -> Type:
 
         @classmethod
         def from_dump(this: type, dump: dict) -> 'NeuralNetworkClassifier':
-            obj = this._load_dump(this, dump)
+            obj = this._load_dump(nn_classifier, dump)
             obj.class_weights = dump["class weights"]
             return obj
 
@@ -647,7 +656,7 @@ def nn_classifier(cls: Type) -> Type:
                 where each column corresponds to a category
             """
             x, _, _ = self.module.data_to_tensor(X, None, None)
-            return tensor_to_probabilities(self.module(x))
+            return tensor_to_probabilities(self.module(x), self.categories)
 
         @property
         def class_weights(self):
@@ -667,5 +676,11 @@ def nn_classifier(cls: Type) -> Type:
         @property
         def categories(self):
             return self.module.categories
+
+        @property
+        def dump(self):
+            d = super().dump
+            d["class weights"] = self.class_weights
+            return d
 
     return NeuralNetworkClassifier

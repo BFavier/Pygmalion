@@ -16,8 +16,8 @@ data = (x, y)
 
 # Create and train the model
 model = ml.neural_networks.DenseRegressor(inputs, activation="tanh")
-train, val = ml.split(data, frac=0.2)
-model.train(train, val)
+train_data, val_data = ml.split(data, frac=0.2)
+model.train(train_data, val_data)
 
 # Plot results
 model.plot_residuals()

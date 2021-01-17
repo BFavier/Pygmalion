@@ -1,5 +1,7 @@
 import sys
 import torch
+import pandas as pd
+import numpy as np
 import pygmalion.neural_networks.layers as lay
 import pygmalion.neural_networks as nn
 
@@ -249,11 +251,53 @@ def test_FullyConnected():
     assert torch.allclose(lay1(tensor), lay2(tensor), rtol=rtol, atol=atol)
 
 
+def test_DenseRegressor():
+    df = pd.DataFrame(np.random.uniform(size=(30, 5)))
+    obj1 = nn.DenseRegressor(df.columns)
+    obj2 = nn.DenseRegressor.from_dump(obj1.dump)
+    assert np.allclose(obj1(df), obj2(df), rtol=rtol, atol=atol)
+
+
+def test_DenseClassifier():
+    df = pd.DataFrame(np.random.uniform(size=(30, 5)))
+    obj1 = nn.DenseClassifier(df.columns, ["1", "2", "3", "4"])
+    obj2 = nn.DenseClassifier.from_dump(obj1.dump)
+    assert np.allclose(obj1.probability(df), obj2.probability(df),
+                       rtol=rtol, atol=atol)
+
+
+def test_ImageClassifier():
+    convolutions = [{"window": (4, 4), "channels": 8},
+                    {"window": (4, 4), "channels": 12},
+                    {"window": (3, 3), "channels": 16}]
+    pooling = [(2, 2), (2, 2), (2, 2)]
+    images = np.random.randint(0, 256, size=(30, 32, 32, 4)).astype("uint8")
+    obj1 = nn.ImageClassifier(4, ["1", "2", "3", "4"], convolutions, pooling)
+    obj2 = nn.ImageClassifier.from_dump(obj1.dump)
+    assert np.allclose(obj1.probability(images), obj2.probability(images),
+                       rtol=rtol, atol=atol)
+
+
+def test_SemanticSegmenter():
+    downward = [{"window": (3, 3), "channels": 4},
+                {"window": (3, 3), "channels": 5},
+                {"window": (3, 3), "channels": 6}]
+    pooling = [(2, 2), (2, 2), (2, 2)]
+    upward = [{"window": (3, 3), "channels": 6},
+              {"window": (3, 3), "channels": 5},
+              {"window": (3, 3), "channels": 4}]
+    images = np.random.randint(0, 256, size=(30, 32, 32, 4)).astype("uint8")
+    obj1 = nn.SemanticSegmenter(4, {"1": 0, "2": 150, "3": 200, "4": 255},
+                                downward, pooling, upward)
+    obj2 = nn.SemanticSegmenter.from_dump(obj1.dump)
+    np.allclose(obj1(images), obj2(images), rtol=rtol, atol=atol)
+
+
 if __name__ == "__main__":
     module = sys.modules[__name__]
     for attr in dir(module):
         if not attr.startswith("test_"):
             continue
         func = getattr(module, attr)
-        print(attr)
+        print(attr, end=": Passed\n")
         func()

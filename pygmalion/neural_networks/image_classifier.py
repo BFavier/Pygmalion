@@ -21,6 +21,7 @@ class ImageClassifier(torch.nn.Module):
         obj.overall_pool = OverallPool2d.from_dump(dump["overall pool"])
         obj.fully_connected = FullyConnected.from_dump(dump["fully connected"])
         obj.output = Linear.from_dump(dump["output"])
+        return obj
 
     def __init__(self, in_channels: int,
                  categories: List[str],

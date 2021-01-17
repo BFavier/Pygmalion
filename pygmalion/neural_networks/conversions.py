@@ -103,7 +103,7 @@ def tensor_to_probabilities(tensor: torch.Tensor,
     Converts the raw output of a classifier neural network
     to a dataframe of class probability for each observation
     """
-    arr = torch.tensor_to_floats(torch.softmax(tensor, dim=-1))
+    arr = tensor_to_floats(torch.softmax(tensor, dim=-1))
     return pd.DataFrame(data=arr, columns=categories)
 
 

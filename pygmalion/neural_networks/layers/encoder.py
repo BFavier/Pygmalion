@@ -18,8 +18,9 @@ class _Encoder(torch.nn.Module):
             obj.stages.append(load_poolingstage(d))
         return obj
 
-    def __init__(self):
+    def __init__(self, in_channels):
         super().__init__()
+        self.in_channels = in_channels
 
     def forward(self, X: torch.Tensor) -> torch.Tensor:
         for stage in self.stages:
@@ -52,12 +53,11 @@ class _Encoder(torch.nn.Module):
                 "stages": [s.dump for s in self.stages]}
 
     @property
-    def in_channels(self):
-        return self.stages[0].in_channels
-
-    @property
     def out_channels(self):
-        return self.stages[-1].out_channels
+        if len(self.stages) > 0:
+            return self.stages[-1].out_channels
+        else:
+            return self.in_channels
 
 
 class Encoder1d(_Encoder):
@@ -90,7 +90,7 @@ class Encoder1d(_Encoder):
             default value for the "activation" key in the kwargs
             If omited, the default is used
         """
-        super().__init__()
+        super().__init__(in_channels)
         self.stages = torch.nn.ModuleList()
         for conv, pool in zip(convolution_stages, pooling_windows):
             conv.setdefault("padded", padded)
@@ -135,7 +135,7 @@ class Encoder2d(_Encoder):
             default value for the "activation" key in the kwargs
             If omited, the default is used
         """
-        super().__init__()
+        super().__init__(in_channels)
         self.stages = torch.nn.ModuleList()
         for conv, pool in zip(convolution_stages, pooling_windows):
             cp = PoolingStage2d(in_channels, conv,

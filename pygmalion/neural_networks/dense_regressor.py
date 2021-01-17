@@ -17,7 +17,7 @@ class DenseRegressor(torch.nn.Module):
         assert cls.__name__ == dump["type"]
         obj = cls(dump["inputs"])
         obj.input_norm = BatchNorm1d.from_dump(dump["input norm"])
-        obj.hidden_layers = FullyConnected.from_dump(dump["fully connected"])
+        obj.fully_connected = FullyConnected.from_dump(dump["fully connected"])
         obj.output = Linear.from_dump(dump["output"])
         obj.target_norm = BatchNorm1d.from_dump(dump["target norm"])
         return obj
@@ -67,6 +67,6 @@ class DenseRegressor(torch.nn.Module):
         return {"type": type(self).__name__,
                 "inputs": self.inputs,
                 "input norm": self.input_norm.dump,
-                "hidden layers": self.hidden_layers.dump,
+                "fully connected": self.fully_connected.dump,
                 "output": self.output.dump,
                 "target norm": self.target_norm.dump}

@@ -20,8 +20,8 @@ data, test = ml.split((x, y), frac=0.1)
 # Create and train the model
 model = nn.DenseClassifier(inputs, categories, hidden_layers=[5, 5, 5],
                            activation="elu")
-train, val = ml.split(data, frac=0.1)
-model.fit(train, val, n_epochs=2000)
+train_data, val_data = ml.split(data, frac=0.1)
+model.train(train_data, val_data, n_epochs=2000)
 
 # Plot results
 model.plot_residuals()
