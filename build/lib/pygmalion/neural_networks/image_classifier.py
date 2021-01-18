@@ -14,7 +14,14 @@ class ImageClassifier(torch.nn.Module):
 
     @classmethod
     def from_dump(cls, dump):
-        pass
+        assert cls.__name__ == dump["type"]
+        obj = cls(1, dump["categories"], [], [])
+        obj.input_norm = BatchNorm2d.from_dump(dump["input norm"])
+        obj.encoder = Encoder2d.from_dump(dump["encoder"])
+        obj.overall_pool = OverallPool2d.from_dump(dump["overall pool"])
+        obj.fully_connected = FullyConnected.from_dump(dump["fully connected"])
+        obj.output = Linear.from_dump(dump["output"])
+        return obj
 
     def __init__(self, in_channels: int,
                  categories: List[str],
@@ -26,7 +33,6 @@ class ImageClassifier(torch.nn.Module):
                  activation: str = "relu"):
         super().__init__()
         assert len(convolutions) == len(pooling)
-        self.in_channels = in_channels
         self.categories = list(categories)
         self.input_norm = BatchNorm2d(in_channels)
         self.encoder = Encoder2d(in_channels, convolutions, pooling,
@@ -53,7 +59,7 @@ class ImageClassifier(torch.nn.Module):
         x = images_to_tensor(X, self.device)
         y = None if Y is None else categories_to_tensor(Y, self.categories,
                                                         self.device)
-        w = None if weights is None else floats_to_tensor(weights)
+        w = None if weights is None else floats_to_tensor(weights, self.device)
         return x, y, w
 
     def tensor_to_y(self, tensor: torch.Tensor) -> np.ndarray:
@@ -71,9 +77,9 @@ class ImageClassifier(torch.nn.Module):
     @property
     def dump(self):
         return {"type": type(self).__name__,
-                "shape in": self.shape_in,
                 "categories": list(self.categories),
                 "input norm": self.input_norm.dump,
-                "convolutional": [c.dump for c in self.convolutional],
-                "fully connected": [d.dump for d in self.fully_connected],
+                "encoder": self.encoder.dump,
+                "overall pool": self.overall_pool.dump,
+                "fully connected": self.fully_connected.dump,
                 "output": self.output.dump}

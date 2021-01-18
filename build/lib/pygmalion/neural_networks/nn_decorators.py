@@ -1,11 +1,9 @@
 import math
-import copy
 import torch
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from typing import Union, Callable, Type, List, Iterable
-from collections import OrderedDict
 from .conversions import tensor_to_index, tensor_to_probabilities
 
 
@@ -21,6 +19,32 @@ def neural_network(cls: torch.nn.Module) -> Type:
         optimizer : torch.optim
             the optimizer used for training
         """
+
+        @staticmethod
+        def _load_dump(decorator: Callable, dump: dict) -> object:
+
+            @decorator
+            class Dummy(torch.nn.Module):
+                def __init__(self):
+                    super().__init__()
+                    self.param = torch.nn.Linear(1, 1)
+
+            obj = Dummy()
+            obj.residuals = dump["residuals"]
+            obj.module = cls.from_dump(dump["module"])
+            obj.optimization_method = dump["optimization method"]
+            obj.norm_update_factor = dump["norm update factor"]
+            obj.GPU = dump["GPU"]
+            obj.learning_rate = dump["learning rate"]
+            obj.L1 = dump["L1"]
+            obj.L2 = dump["L2"]
+            obj._set_state({"grad": dump["gradient"]})
+            return obj
+
+        @classmethod
+        def from_dump(this, dump: dict) -> 'NeuralNetwork':
+            return this._load_dump(neural_network, dump)
+
         def __init__(self, *args,
                      GPU: bool = False,
                      learning_rate: float = 1.0E-3,
@@ -61,12 +85,12 @@ def neural_network(cls: torch.nn.Module) -> Type:
                               "epochs": [],
                               "best epoch": None}
 
-        def fit(self, training_data: Union[tuple, Callable],
-                validation_data: Union[tuple, Callable, None] = None,
-                n_epochs: int = 1000,
-                patience: int = 100,
-                verbose: bool = True,
-                L_minibatchs: Union[int, None] = None):
+        def train(self, training_data: Union[tuple, Callable],
+                  validation_data: Union[tuple, Callable, None] = None,
+                  n_epochs: int = 1000,
+                  patience: int = 100,
+                  verbose: bool = True,
+                  L_minibatchs: Union[int, None] = None):
             """
             Trains a neural network model.
 
@@ -186,13 +210,11 @@ def neural_network(cls: torch.nn.Module) -> Type:
             bool :
                 whether the GPU mode is enabled
             """
-            if hasattr(self, "_GPU") and self._GPU == enable:
-                return
             if enable and not(torch.cuda.is_available()):
                 raise RuntimeError("CUDA is not available on this computer, \
                                     can't train on GPU")
             self._GPU = enable
-            if self.GPU:
+            if enable:
                 self.module.device = torch.device("cuda:0")
             else:
                 self.module.device = torch.device("cpu")
@@ -294,6 +316,19 @@ def neural_network(cls: torch.nn.Module) -> Type:
                     m.momentum = f
             self._f = f
 
+        @property
+        def dump(self):
+            return {"type": type(self).__name__,
+                    "GPU": self.GPU,
+                    "learning rate": self.learning_rate,
+                    "norm update factor": self.norm_update_factor,
+                    "optimization method": self.optimization_method,
+                    "L1": self.L1,
+                    "L2": self.L2,
+                    "residuals": self.residuals,
+                    "module": self.module.dump,
+                    "gradient": self._get_state()["grad"]}
+
         def _get_state(self) -> tuple:
             """
             Returns a snapshot of the model's state
@@ -303,20 +338,15 @@ def neural_network(cls: torch.nn.Module) -> Type:
 
             Returns
             -------
-            tuple :
-                the tuple of (module, grad, optimizer) state dicts
+            dict :
+                the state of the model
             """
-            module_state = copy.deepcopy(self.module.state_dict())
             params = self.module.state_dict(keep_vars=True)
-            grad_state = OrderedDict([(key, self._copy_grad(params[key].grad))
-                                      for key in params])
-            optimizer_state = copy.deepcopy(self.optimizer.state_dict())
-            return module_state, grad_state, optimizer_state
-
-        def _copy_grad(self, grad: Union[torch.Tensor, None]
-                       ) -> Union[torch.Tensor, None]:
-            """returns a copy of the given grad tensor"""
-            return grad if grad is None else grad.detach().clone()
+            grads = {k: None if t.grad is None else t.grad.tolist()
+                     for k, t in params.items()}
+            return {"params": {k: t.tolist() for k, t in params.items()},
+                    "grad": grads,
+                    "optim": self.optimizer.state_dict()}
 
         def _set_state(self, state: tuple):
             """
@@ -324,15 +354,22 @@ def neural_network(cls: torch.nn.Module) -> Type:
 
             Parameters
             ----------
-            state : tuple
-                The tuple of (module.state_dict(), optimizer.state_dict())
+            state : dict
+                The state of the model
             """
-            module_state, grad_state, optimizer_state = state
-            self.module.load_state_dict(module_state)
-            state = self.module.state_dict(keep_vars=True)
-            for key in module_state.keys():
-                state[key].grad = grad_state[key]
-            self.optimizer.load_state_dict(optimizer_state)
+            if "params" in state.keys():
+                params = {k: torch.tensor(t, device=self.module.device)
+                          for k, t in state["params"].items()}
+                self.module.load_state_dict(params)
+            if "grad" in state.keys():
+                params = self.module.state_dict(keep_vars=True)
+                for key in params.keys():
+                    t = state["grad"][key]
+                    if t is not None:
+                        t = torch.tensor(t, device=self.module.device)
+                    params[key].grad = t
+            if "optim" in state.keys():
+                self.optimizer.load_state_dict(state["optim"])
 
         def _training_loop(self, training_data: tuple,
                            validation_data: Union[tuple, None],
@@ -391,7 +428,8 @@ def neural_network(cls: torch.nn.Module) -> Type:
                     training_loss = self._batch(training_data, L_minibatchs,
                                                 train=True)
                     if validation_data is not None:
-                        validation_loss = self._batch(validation_data, L_minibatchs,
+                        validation_loss = self._batch(validation_data,
+                                                      L_minibatchs,
                                                       train=False)
                         if validation_loss < best_loss:
                             best_epoch = epoch
@@ -455,8 +493,9 @@ def neural_network(cls: torch.nn.Module) -> Type:
             else:
                 losses = []
                 for batch_data in data():
-                    loss = self._minibatch(self.module.data_to_tensor(*batch_data),
-                                           *args, **kwargs)
+                    loss = self._minibatch(
+                        self.module.data_to_tensor(*batch_data),
+                        *args, **kwargs)
                     losses.append(loss)
                 return sum(losses)/len(losses)
 
@@ -567,7 +606,15 @@ def neural_network(cls: torch.nn.Module) -> Type:
 def nn_classifier(cls: Type) -> Type:
     """A decorator that wraps a classifier 'torch.nn.Module'"""
 
-    class NeuralNetworkClassifier(neural_network(cls)):
+    parent = neural_network(cls)
+
+    class NeuralNetworkClassifier(parent):
+
+        @classmethod
+        def from_dump(this: type, dump: dict) -> 'NeuralNetworkClassifier':
+            obj = this._load_dump(nn_classifier, dump)
+            obj.class_weights = dump["class weights"]
+            return obj
 
         def __init__(self, *args, class_weights=None, **kwargs):
             super().__init__(*args, **kwargs)
@@ -610,7 +657,7 @@ def nn_classifier(cls: Type) -> Type:
                 where each column corresponds to a category
             """
             x, _, _ = self.module.data_to_tensor(X, None, None)
-            return tensor_to_probabilities(self.module(x))
+            return tensor_to_probabilities(self.module(x), self.categories)
 
         @property
         def class_weights(self):
@@ -630,5 +677,11 @@ def nn_classifier(cls: Type) -> Type:
         @property
         def categories(self):
             return self.module.categories
+
+        @property
+        def dump(self):
+            d = super().dump
+            d["class weights"] = self.class_weights
+            return d
 
     return NeuralNetworkClassifier

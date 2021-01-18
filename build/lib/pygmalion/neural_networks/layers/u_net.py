@@ -12,62 +12,62 @@ class _UNet(torch.nn.Module):
 
     @classmethod
     def from_dump(cls, dump: dict) -> '_UNet':
-        obj = cls(dump["in channels"])
-        obj.upward = torch.nn.ModuleList()
-        for d in dump["upward"]:
+        obj = cls(dump["in channels"], [], [], [])
+        obj.upsampling = torch.nn.ModuleList()
+        for d in dump["upsampling"]:
             pooling_stage = load_poolingstage(d)
-            obj.upward.append(pooling_stage)
-        obj.downward = torch.nn.ModuleList()
-        for d in dump["downward"]:
+            obj.upsampling.append(pooling_stage)
+        obj.downsampling = torch.nn.ModuleList()
+        for d in dump["downsampling"]:
             pooling_stage = load_poolingstage(d)
-            obj.downward.append(pooling_stage)
+            obj.downsampling.append(pooling_stage)
         return obj
 
     def __init__(self, PoolingStage: type,
                  in_channels: int,
-                 downward: List[Union[dict, List[dict]]],
+                 downsampling: List[Union[dict, List[dict]]],
                  pooling: List[int],
-                 upward: List[Union[dict, List[dict]]],
+                 upsampling: List[Union[dict, List[dict]]],
                  pooling_type: str = "Max",
                  padded: bool = True,
                  activation: str = "relu"):
         super().__init__()
-        assert len(downward) == len(upward) > 0
+        assert len(downsampling) == len(pooling) == len(upsampling)
         self.in_channels = in_channels
-        self.downward = torch.nn.ModuleList()
-        downward_channels = []
-        for down, pool in zip(downward, pooling):
-            downward_channels.append(in_channels)
+        self.downsampling = torch.nn.ModuleList()
+        downsampling_channels = []
+        for down, pool in zip(downsampling, pooling):
+            downsampling_channels.append(in_channels)
             cp = PoolingStage(in_channels, down,
                               pooling_type=pooling_type,
                               pooling_size=pool,
                               padded=padded,
                               activation=activation)
-            self.downward.append(cp)
+            self.downsampling.append(cp)
             in_channels = cp.out_channels
-        self.upward = torch.nn.ModuleList()
-        for up, down_channels in zip(upward, downward_channels[::-1]):
+        self.upsampling = torch.nn.ModuleList()
+        for up, down_channels in zip(upsampling, downsampling_channels[::-1]):
             cp = PoolingStage(in_channels+down_channels, up,
                               pooling_type=None,
                               padded=True,
                               activation=activation)
-            self.upward.append(cp)
+            self.upsampling.append(cp)
             in_channels = cp.out_channels
 
     def forward(self, X: torch.Tensor) -> torch.Tensor:
         results = []
-        for stage in self.downward:
+        for stage in self.downsampling:
             results.append(X)
             X = stage(X)
-        for upward, downward, Y in zip(self.upward, self.downward[::-1],
+        for upsampling, downsampling, Y in zip(self.upsampling, self.downsampling[::-1],
                                        results[::-1]):
-            X = self.align(Y, downward.upsample(X))
-            X = upward(X)
+            X = self.align(Y, downsampling.upsample(X))
+            X = upsampling(X)
         return X
 
     def shape_out(self, shape_in: list) -> list:
         shape = shape_in
-        for stage in self.upward:
+        for stage in self.upsampling:
             shape = stage.shape_out(shape)
         return shape
 
@@ -79,8 +79,8 @@ class _UNet(torch.nn.Module):
 
     @property
     def out_channels(self):
-        if len(self.upward) > 0:
-            return self.upward[-1].out_channels
+        if len(self.upsampling) > 0:
+            return self.upsampling[-1].out_channels
         else:
             return self.in_channels
 
@@ -88,8 +88,8 @@ class _UNet(torch.nn.Module):
     def dump(self):
         return {"type": type(self).__name__,
                 "in channels": self.in_channels,
-                "downward": [d.dump for d in self.downward],
-                "upward": [d.dump for d in self.upward]}
+                "downsampling": [d.dump for d in self.downsampling],
+                "upsampling": [d.dump for d in self.upsampling]}
 
 
 class UNet1d(_UNet):
