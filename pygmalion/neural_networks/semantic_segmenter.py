@@ -2,7 +2,7 @@ import torch
 import numpy as np
 import torch.nn.functional as F
 from typing import Union, List, Tuple, Dict, Iterable
-from .layers import PoolingStage2d, Linear, BatchNorm2d, Conv2d
+from .layers import PoolingStage2d, BatchNorm2d, Conv2d
 from .layers import UNet2d
 from .conversions import floats_to_tensor, tensor_to_index
 from .conversions import segmented_to_tensor, images_to_tensor
