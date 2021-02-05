@@ -31,8 +31,8 @@ class ImageClassifierModule(torch.nn.Module):
                  pooling_type: str = "max",
                  padded: bool = True,
                  activation: str = "relu",
-                 stacked=False,
-                 dropout=None):
+                 stacked: bool = False,
+                 dropout: Union[float, None] = None):
         """
         Parameters
         ----------

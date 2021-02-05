@@ -2,15 +2,14 @@ import torch
 import numpy as np
 import torch.nn.functional as F
 from typing import Union, List, Tuple, Dict, Iterable
-from .layers import PoolingStage2d, BatchNorm2d, Conv2d
+from .layers import Dense2d, BatchNorm2d, Conv2d
 from .layers import UNet2d
 from .conversions import floats_to_tensor, tensor_to_index
 from .conversions import segmented_to_tensor, images_to_tensor
-from .nn_decorators import nn_classifier
+from .neural_network_classifier import NeuralNetworkClassifier
 
 
-@nn_classifier
-class SemanticSegmenter(torch.nn.Module):
+class SemanticSegmenterModule(torch.nn.Module):
 
     @classmethod
     def from_dump(cls, dump):
@@ -20,7 +19,6 @@ class SemanticSegmenter(torch.nn.Module):
         obj.classes = dump["classes"]
         obj.input_norm = BatchNorm2d.from_dump(dump["input norm"])
         obj.UNet = UNet2d.from_dump(dump["U-net"])
-        obj.dense = PoolingStage2d.from_dump(dump["dense"])
         obj.output = Conv2d.from_dump(dump["output"])
         return obj
 
@@ -29,24 +27,27 @@ class SemanticSegmenter(torch.nn.Module):
                  downsampling: List[Union[dict, List[dict]]],
                  pooling: List[Tuple[int, int]],
                  upsampling: List[Union[dict, List[dict]]],
-                 dense: List[dict] = [],
-                 pooling_type: str = "Max",
-                 padded: bool = True,
-                 activation: str = "relu"):
+                 pooling_type: str = "max",
+                 upsampling_method: str = "nearest",
+                 activation: str = "relu",
+                 stacked: bool = False,
+                 dropout: Union[float, None] = None):
         super().__init__()
         self.classes = [c for c in colors.keys()]
         self.colors = [colors[c] for c in self.classes]
         self.input_norm = BatchNorm2d(in_channels)
-        self.UNet = UNet2d(in_channels, downsampling, pooling, upsampling,
-                           padded=padded)
-        self.dense = PoolingStage2d(self.UNet.out_channels, dense,
-                                    pooling_type=None, padded=True)
-        self.output = Conv2d(self.dense.out_channels,
-                             len(self.classes), (1, 1))
+        self.u_net = UNet2d(in_channels, downsampling, pooling, upsampling,
+                           pooling_type=pooling_type,
+                           upsampling_method=upsampling_method,
+                           activation=activation,
+                           stacked=stacked,
+                           dropout=dropout)
+        in_channels = self.u_net.out_channels(in_channels)
+        self.output = Conv2d(in_channels, len(self.classes), (1, 1))
 
     def forward(self, X: torch.Tensor):
         X = self.input_norm(X)
-        X = self.UNet(X)
+        X = self.u_net(X)
         X = self.dense(X)
         return self.output(X)
 
@@ -57,7 +58,7 @@ class SemanticSegmenter(torch.nn.Module):
         x = images_to_tensor(X, self.device)
         y = None if Y is None else segmented_to_tensor(Y, self.colors,
                                                        self.device)
-        w = None if weights is None else floats_to_tensor(weights)
+        w = None if weights is None else floats_to_tensor(weights, self.device)
         return x, y, w
 
     def tensor_to_y(self, tensor: torch.Tensor) -> np.ndarray:
@@ -77,6 +78,13 @@ class SemanticSegmenter(torch.nn.Module):
                 "classes": self.classes,
                 "colors": self.colors,
                 "input norm": self.input_norm.dump,
-                "U-net": self.UNet.dump,
-                "dense": self.dense.dump,
+                "U-net": self.u_net.dump,
                 "output": self.output.dump}
+
+
+class SemanticSegmenter(NeuralNetworkClassifier):
+
+    ModuleType = SemanticSegmenterModule
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)

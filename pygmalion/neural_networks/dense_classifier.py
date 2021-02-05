@@ -24,7 +24,8 @@ class DenseClassifierModule(torch.nn.Module):
 
     def __init__(self, inputs: List[str], classes: List[str],
                  hidden_layers: List[dict],
-                 activation: str = "relu", stacked=False, dropout=None):
+                 activation: str = "relu", stacked: bool = False,
+                 dropout: Union[float, None] = None):
         """
         Parameters
         ----------
