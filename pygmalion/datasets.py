@@ -128,7 +128,7 @@ def fashion_mnist(directory: str):
 
 def cityscapes(directory: str):
     """downloads the 'cityscapes' dataset in the given directory"""
-    file_names = ["class_factions.json", "classes.json", "test_images.npy",
+    file_names = ["class_fractions.json", "classes.json", "test_images.npy",
                   "test_segmented.npy", "train_images.npy",
                   "train_segmented.npy"]
     urls = ["https://drive.google.com/file/d/1WVUVJgoaovv-rHeIjztcY7J98oB3Hgmq/view?usp=sharing",

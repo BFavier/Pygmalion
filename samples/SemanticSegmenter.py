@@ -12,6 +12,11 @@ data_path = pathlib.Path(__file__).parent / "data" / "cityscapes"
 ml.datasets.cityscapes(data_path.parent)
 
 # Load data
+with open(data_path / "class_fractions.json", "r") as file:
+    fractions = json.load(file)
+class_weights = {k: 1/(f+1.0E-8) for k, f in fractions.items()}
+mean = sum([w for w in class_weights.values()])
+class_weights = {k: w/mean for k, w in class_weights.items()}
 with open(data_path / "classes.json", "r") as file:
     classes = json.load(file)
 x_train = np.load(data_path / "train_images.npy")[:300]
@@ -34,6 +39,7 @@ model = nn.SemanticSegmenter(3, classes,
                              upsampling_method="nearest",
                              activation="tanh",
                              GPU=True,
+                             class_weights=class_weights,
                              learning_rate=1.0E-2)
 # print(model.module.shapes)
 train_data, val_data = ml.split((x_train, y_train), frac=0.2)

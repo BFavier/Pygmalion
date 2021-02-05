@@ -69,7 +69,7 @@ class NeuralNetworkClassifier(NeuralNetwork):
         if other is not None:
             assert len(other) == len(self.classes)
             other = torch.tensor(other, dtype=torch.float,
-                                 device=self.device)
+                                 device=self.module.device)
         self.module.class_weights = other
 
     @property
