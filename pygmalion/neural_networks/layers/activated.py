@@ -137,7 +137,7 @@ class Activated1d(Activated):
                  stacked: bool = False):
         super().__init__()
         if padded:
-            left, right = window // 2, window - window // 2
+            left, right = window // 2, window - 1 - window // 2
             self.padding = Padding1d((left, right))
         self.weighting = Conv1d(in_channels, channels, kernel_size=window,
                                 stride=stride, bias=bias)
@@ -170,7 +170,7 @@ class Activated2d(Activated):
         super().__init__()
         if padded:
             top, left = [w // 2 for w in window]
-            bot, right = [w - w // 2 for w in window]
+            bot, right = [w - 1 - w // 2 for w in window]
             self.padding = Padding2d((left, right, top, bot))
         self.weighting = Conv2d(in_channels, channels, kernel_size=window,
                                 stride=stride, bias=bias)
