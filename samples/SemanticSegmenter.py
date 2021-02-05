@@ -31,6 +31,7 @@ model = nn.SemanticSegmenter(3, classes,
                              downsampling=downward,
                              pooling=pooling,
                              upsampling=upward,
+                             upsampling_method="interpolate",
                              activation="tanh",
                              GPU=True,
                              learning_rate=1.0E-2)

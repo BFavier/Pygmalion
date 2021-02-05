@@ -72,7 +72,6 @@ class SemanticSegmenterModule(torch.nn.Module):
     def forward(self, X: torch.Tensor):
         X = self.input_norm(X)
         X = self.u_net(X)
-        X = self.dense(X)
         return self.output(X)
 
     def data_to_tensor(self, X: Iterable[np.ndarray],
