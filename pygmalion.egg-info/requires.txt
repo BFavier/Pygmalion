@@ -1,3 +1,0 @@
-pandas>=0.25
-numpy>=1.18
-torch>=1.2
