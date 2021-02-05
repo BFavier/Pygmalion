@@ -7,6 +7,7 @@ from .layers import BatchNorm1d, Linear, Dense0d
 from .conversions import dataframe_to_tensor, classes_to_tensor, \
                          floats_to_tensor, tensor_to_classes
 from .neural_network_classifier import NeuralNetworkClassifier
+from .loss_functions import cross_entropy
 
 
 class DenseClassifierModule(torch.nn.Module):
@@ -76,11 +77,8 @@ class DenseClassifierModule(torch.nn.Module):
 
     def loss(self, y_pred: torch.Tensor, y_target: torch.Tensor,
              weights: Union[None, torch.Tensor]) -> torch.Tensor:
-        if weights is None:
-            return F.cross_entropy(y_pred, y_target, weight=self.class_weights)
-        else:
-            return F.nll_loss(F.log_softmax(y_pred) * weights, y_target,
-                              weight=self.class_weights)
+        return cross_entropy(y_pred, y_target, weights=weights,
+                             class_weights=self.class_weights)
 
     @property
     def dump(self):

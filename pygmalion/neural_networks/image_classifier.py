@@ -1,5 +1,4 @@
 import torch
-import torch.nn.functional as F
 import numpy as np
 from typing import Union, List, Tuple
 from .layers import Linear, BatchNorm2d
@@ -7,6 +6,7 @@ from .layers import Encoder2d, Pooling2d, Dense0d
 from .conversions import floats_to_tensor, tensor_to_index
 from .conversions import classes_to_tensor, images_to_tensor
 from .neural_network_classifier import NeuralNetworkClassifier
+from .loss_functions import cross_entropy
 
 
 class ImageClassifierModule(torch.nn.Module):
@@ -97,11 +97,8 @@ class ImageClassifierModule(torch.nn.Module):
 
     def loss(self, y_pred: torch.Tensor, y_target: torch.Tensor,
              weights: Union[torch.Tensor, None]):
-        if weights is None:
-            return F.cross_entropy(y_pred, y_target, weight=self.class_weights)
-        else:
-            return F.nll_loss(F.log_softmax(y_pred, dim=1) * weights,
-                              y_target, weight=self.class_weights)
+        return cross_entropy(y_pred, y_target, weights=weights,
+                             class_weights=self.class_weights)
 
     @property
     def dump(self):

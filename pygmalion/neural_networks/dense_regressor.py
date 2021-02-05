@@ -1,13 +1,12 @@
 import torch
 import pandas as pd
 import numpy as np
-import torch.nn.functional as F
 from typing import List, Union, Iterable
 from .layers import Dense0d, BatchNorm0d, Linear
 from .conversions import dataframe_to_tensor, \
                          floats_to_tensor, tensor_to_floats
 from .neural_network import NeuralNetwork
-# from .nn_decorators import neural_network
+from .loss_functions import RMSE
 
 
 class DenseRegressorModule(torch.nn.Module):
@@ -79,11 +78,7 @@ class DenseRegressorModule(torch.nn.Module):
 
     def loss(self, y_pred: torch.Tensor, y_target: torch.Tensor,
              weights: Union[None, torch.Tensor]) -> torch.Tensor:
-        y_target = self.target_norm(y_target)
-        if weights is None:
-            return torch.sqrt(F.mse_loss(y_pred, y_target))
-        else:
-            return torch.sqrt(torch.mean(weights * (y_pred - y_target)**2))
+        return RMSE(y_pred, y_target, self.target_norm, weights=weights)
 
     @property
     def dump(self):
