@@ -20,7 +20,6 @@ class Decoder(torch.nn.Module):
 
     @classmethod
     def from_layers(cls, layers: List[object]):
-        super().__init__()
         obj = cls.__new__(cls)
         torch.nn.Module.__init__(obj)
         obj.stages = torch.nn.ModuleList()

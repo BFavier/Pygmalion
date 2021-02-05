@@ -51,24 +51,25 @@ class UNet(torch.nn.Module):
         channels = []
         for dense, pool in zip(downsampling, pooling):
             channels.append(in_channels)
-            down = self.EncoderNd.DownsamplingNd(in_channels, dense, pool,
-                                                 pooling_type=pooling_type,
-                                                 stacked=stacked,
-                                                 dropout=dropout,
-                                                 activation=activation,
-                                                 padded=True)
+            down = self.DownsamplingNd(in_channels, dense, pool,
+                                       pooling_type=pooling_type,
+                                       stacked=stacked,
+                                       dropout=dropout,
+                                       activation=activation,
+                                       padded=True)
             in_channels = down.out_channels(in_channels)
             encoder.append(down)
         for dense, down, stack_channels in zip(upsampling, encoder[::-1],
                                                channels[::-1]):
-            up = self.DecoderNd.UpsamplingNd(in_channels+stack_channels,
-                                             down.factor,
-                                             upsampling_method=upsampling_method,
-                                             stacked=stacked,
-                                             dropout=dropout,
-                                             activation=activation,
-                                             padded=True)
-            in_channels = up.out_channels(in_channels)
+            up = self.UpsamplingNd(in_channels+stack_channels,
+                                   dense,
+                                   down.downsampling_factor,
+                                   upsampling_method=upsampling_method,
+                                   stacked=stacked,
+                                   dropout=dropout,
+                                   activation=activation,
+                                   padded=True)
+            in_channels = up.out_channels(in_channels+stack_channels)
             decoder.append(up)
         self.encoder = self.EncoderNd.from_layers(encoder)
         self.decoder = self.DecoderNd.from_layers(decoder)
@@ -78,33 +79,38 @@ class UNet(torch.nn.Module):
         for stage in self.encoder.stages:
             stack.append(X)
             X = stage(X)
-        for stage, Xstack in zip(self.decoder.stages, stack):
+        for stage, Xstack in zip(self.decoder.stages, stack[::-1]):
             X = stage(X, Xstack)
         return X
 
     def shape_out(self, shape_in: list) -> list:
         shape = shape_in
-        for stage in self.upsampling:
-            shape = stage.shape_out(shape)
+        shape = self.encoder.shape_out(shape)
+        shape = self.decoder.shape_out(shape)
         return shape
 
     def shape_in(self, shape_out: list) -> list:
         shape = shape_out
-        for stage in self.stages[::-1]:
-            shape = stage.shape_in(shape)
+        shape = self.decoder.shape_in(shape)
+        shape = self.encoder.shape_in(shape)
         return shape
 
     def out_channels(self, in_channels):
-        channels = in_channels
-        for stage in self.stages:
-            channels = stage.out_channels(channels)
-        return channels
+        channels = []
+        for stage in self.encoder.stages:
+            channels.append(in_channels)
+            in_channels = stage.out_channels(in_channels)
+        for stage, stack in zip(self.decoder.stages, channels[::-1]):
+            in_channels = stage.out_channels(in_channels+stack)
+        return in_channels
 
-    def in_channels(self, out_channels):
-        channels = out_channels
-        for stage in self.stages[::-1]:
-            channels = stage.in_channels(channels)
-        return channels
+    @property
+    def UpsamplingNd(self):
+        return self.DecoderNd.UpsamplingNd
+
+    @property
+    def DownsamplingNd(self):
+        return self.EncoderNd.DownsamplingNd
 
     @property
     def dump(self):

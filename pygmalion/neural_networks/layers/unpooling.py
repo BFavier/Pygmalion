@@ -59,6 +59,7 @@ class Unpooling2d(Unpooling):
 
     def forward(self, X):
         mode = "bilinear" if self.method == "interpolate" else "nearest"
+        align = False if self.method == "interpolate" else None
         return F.interpolate(X, scale_factor=self.factor,
                              mode=mode,
-                             align_corners=False)
+                             align_corners=align)

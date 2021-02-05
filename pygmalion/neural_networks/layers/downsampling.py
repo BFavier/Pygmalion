@@ -77,7 +77,7 @@ class Downsampling1d(Downsampling):
     @property
     def downsampling_factor(self) -> int:
         f = 1
-        for activated in self.dense:
+        for activated in self.dense.layers:
             f *= activated.weighting.stride
         f *= self.pooling.pooling_window
         return f
@@ -94,7 +94,7 @@ class Downsampling2d(Downsampling):
     @property
     def downsampling_factor(self) -> int:
         fh, fw = 1, 1
-        for activated in self.dense:
+        for activated in self.dense.layers:
             h, w = activated.weighting.stride
             fh *= h
             fw *= w

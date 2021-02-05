@@ -5,8 +5,10 @@ import pygmalion as ml
 import pygmalion.neural_networks as nn
 import matplotlib.pyplot as plt
 plt.style.use("bmh")
-data_path = pathlib.Path(__file__).parent / ".." / "data" / "Fashion-MNIST"
+data_path = pathlib.Path(__file__).parent / "data" / "fashion-MNIST"
 
+# Download the data
+ml.datasets.fashion_mnist(data_path.parent)
 
 # Load data
 with open(data_path / "classes.txt", "r") as file:

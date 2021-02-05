@@ -6,16 +6,18 @@ import pygmalion as ml
 import pygmalion.neural_networks as nn
 import matplotlib.pyplot as plt
 plt.style.use("bmh")
-data_path = pathlib.Path(__file__).parent / ".." / "data" / "cityscapes"
+data_path = pathlib.Path(__file__).parent / "data" / "cityscapes"
 
+# Download the data
+ml.datasets.cityscapes(data_path.parent)
 
 # Load data
 with open(data_path / "classes.json", "r") as file:
     classes = json.load(file)
-x_train = np.load(data_path / "X_train.npy")
-y_train = np.load(data_path / "Y_train.npy")
-x_test = np.load(data_path / "X_test.npy")
-y_test = np.load(data_path / "Y_test.npy")
+x_train = np.load(data_path / "train_images.npy")[:300]
+y_train = np.load(data_path / "train_segmented.npy")[:300]
+x_test = np.load(data_path / "test_images.npy")[:100]
+y_test = np.load(data_path / "test_segmented.npy")[:100]
 
 # Create and train the model
 downward = [{"window": (3, 3), "channels": 4},

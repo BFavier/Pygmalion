@@ -81,7 +81,7 @@ class Upsampling(torch.nn.Module):
     def out_channels(self, in_channels: int) -> int:
         return self.dense.out_channels(in_channels)
 
-    def concat(X1: torch.Tensor, X2: torch.Tensor) -> torch.Tensor:
+    def concat(self, X1: torch.Tensor, X2: torch.Tensor) -> torch.Tensor:
         """
         return [X1, X2] concatenated along the channel axis
         if X2 is smaller than X1, it is padded with 0

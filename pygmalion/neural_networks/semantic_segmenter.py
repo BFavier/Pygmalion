@@ -2,7 +2,7 @@ import torch
 import numpy as np
 import torch.nn.functional as F
 from typing import Union, List, Tuple, Dict, Iterable
-from .layers import Dense2d, BatchNorm2d, Conv2d
+from .layers import BatchNorm2d, Conv2d
 from .layers import UNet2d
 from .conversions import floats_to_tensor, tensor_to_index
 from .conversions import segmented_to_tensor, images_to_tensor
@@ -37,11 +37,11 @@ class SemanticSegmenterModule(torch.nn.Module):
         self.colors = [colors[c] for c in self.classes]
         self.input_norm = BatchNorm2d(in_channels)
         self.u_net = UNet2d(in_channels, downsampling, pooling, upsampling,
-                           pooling_type=pooling_type,
-                           upsampling_method=upsampling_method,
-                           activation=activation,
-                           stacked=stacked,
-                           dropout=dropout)
+                            pooling_type=pooling_type,
+                            upsampling_method=upsampling_method,
+                            activation=activation,
+                            stacked=stacked,
+                            dropout=dropout)
         in_channels = self.u_net.out_channels(in_channels)
         self.output = Conv2d(in_channels, len(self.classes), (1, 1))
 

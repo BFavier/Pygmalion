@@ -4,7 +4,10 @@ import pygmalion as ml
 import pandas as pd
 import matplotlib.pyplot as plt
 plt.style.use("bmh")
-data_path = pathlib.Path(__file__).parent / ".." / "data"
+data_path = pathlib.Path(__file__).parent / "data"
+
+# Download the data
+ml.datasets.boston_housing(data_path)
 
 # Load the data
 df = pd.read_csv(data_path / "boston_housing.csv")
