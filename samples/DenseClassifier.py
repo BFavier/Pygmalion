@@ -5,7 +5,10 @@ import pygmalion.neural_networks as nn
 import pandas as pd
 import matplotlib.pyplot as plt
 plt.style.use("bmh")
-data_path = pathlib.Path(__file__).parent / ".." / "data"
+data_path = pathlib.Path(__file__).parent / "data"
+
+# Download the data
+ml.datasets.iris(data_path)
 
 # Load the data
 df = pd.read_csv(data_path / "iris.csv")

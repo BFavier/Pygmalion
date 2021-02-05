@@ -136,8 +136,3 @@ def cityscapes(directory: str):
             "https://drive.google.com/file/d/13DzRX1yUlDW8oXNiWEa-Bu02_myttlem/view?usp=sharing",
             "https://drive.google.com/file/d/1BmhXfQraa37rwsnvcub0x-FjPhir6RsJ/view?usp=sharing"]
     downloads(directory, "cityscapes", file_names, urls)
-
-
-if __name__ == "__main__":
-    directory = r"C:\Users\Benoit\Desktop"
-    cityscapes(directory)
