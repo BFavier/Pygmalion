@@ -10,8 +10,8 @@ class Model:
         if not file.is_file():
             raise FileNotFoundError("The file '{file}' does not exist")
         with open(file) as json_file:
-            data = json.load(json_file)
-        return cls.from_dump(data)
+            dump = json.load(json_file)
+        return cls.from_dump(dump)
 
     def save(self, file: str, overwrite: bool = False):
         file = pathlib.Path(file)
