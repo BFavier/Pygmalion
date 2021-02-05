@@ -22,7 +22,7 @@ class SemanticSegmenterModule(torch.nn.Module):
         obj.output = Conv2d.from_dump(dump["output"])
         return obj
 
-    def __init__(self, in_channels: Tuple[int, int, int],
+    def __init__(self, in_channels: int,
                  colors: Dict[str, Union[int, List[int]]],
                  downsampling: List[Union[dict, List[dict]]],
                  pooling: List[Tuple[int, int]],
@@ -32,6 +32,30 @@ class SemanticSegmenterModule(torch.nn.Module):
                  activation: str = "relu",
                  stacked: bool = False,
                  dropout: Union[float, None] = None):
+        """
+        Parameters
+        ----------
+        in_channels : int
+            The number of channels of the input
+        colors : dict
+            a dict of {class: color}
+        downsampling : list of [dict / list of dict]
+            the kwargs for the 'Activated2d' layers for all 'downsampling'
+        pooling : list of [int / tuple of int]
+            the pooling window of all downsampling layers
+        upsampling : list of [dict / list of dict]
+            the kwargs for the 'Activated2d' layers for all 'upsampling'
+        pooling_type : one of {'max', 'avg'}
+            the type of pooling
+        upsampling_method : one of {'nearest', 'interpolate'}
+            the method used for the unpooling layers
+        activation : str
+            the default value for the 'activation' key of the kwargs
+        stacked : bool
+            the default value for the 'stacked' key of the kwargs
+        dropout : float or None
+            the default value for the 'dropout' key of the kwargs
+        """
         super().__init__()
         self.classes = [c for c in colors.keys()]
         self.colors = [colors[c] for c in self.classes]

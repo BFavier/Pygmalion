@@ -1,8 +1,7 @@
 import torch
-import torch.nn.functional as F
 from typing import Union, List, Tuple
-from .encoder import Encoder, Encoder1d, Encoder2d
-from .decoder import Decoder, Decoder1d, Decoder2d
+from .encoder import Encoder1d, Encoder2d
+from .decoder import Decoder1d, Decoder2d
 
 
 class UNet(torch.nn.Module):
@@ -29,11 +28,11 @@ class UNet(torch.nn.Module):
         in_channels : int
             The number of channels of the input
         downsampling : list of [dict / list of dict]
-            the kwargs for the Dense layer for each
-        pooling : list of [dict / list of dict]
-            the kwargs for the Dense layer for each
+            the kwargs for the Dense layer for all downsampling layers
+        pooling : list of [int / tuple of int]
+            the pooling window of all downsampling layers
         upsampling : list of [dict / list of dict]
-            the kwargs for the Dense layer for each
+            the kwargs for the Dense layer for all upsampling layers
         pooling_type : one of {"max", "avg"}
             The type of pooling to perform
         upsampling_method : one of {"nearest", "interpolate"}

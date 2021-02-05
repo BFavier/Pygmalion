@@ -37,6 +37,25 @@ class ImageClassifierModule(torch.nn.Module):
         Parameters
         ----------
         in_channels : int
+            the number of channels in the input images
+        class : list of str
+            the unique classes the model can predict
+        downsampling : list of [dict / list of dict]
+            the kwargs for the 'Activated2d' layers for all 'downsampling'
+        pooling : list of [int / tuple of int]
+            the pooling window of all downsampling layers
+        dense : list of dict
+            the kwargs for the 'Activated0d' of the final 'Dense1d' layer
+        pooling_type : one of {'max', 'avg'}
+            the type of pooling
+        padded : bool
+            the default value for the 'padded' key of the kwargs
+        activation : str
+            the default value for the 'activation' key of the kwargs
+        stacked : bool
+            the default value for the 'stacked' key of the kwargs
+        dropout : float or None
+            the default value for the 'dropout' key of the kwargs
         """
         super().__init__()
         assert len(convolutions) == len(pooling)
@@ -50,7 +69,8 @@ class ImageClassifierModule(torch.nn.Module):
                                  dropout=dropout)
         in_channels = self.encoder.out_channels(in_channels)
         self.final_pool = Pooling2d(None, pooling_type)
-        self.dense = Dense0d(in_channels, dense, activation=activation)
+        self.dense = Dense0d(in_channels, dense, activation=activation,
+                             stacked=stacked, dropout=dropout)
         in_channels = self.dense.out_channels(in_channels)
         self.output = Linear(in_channels, len(classes))
 
