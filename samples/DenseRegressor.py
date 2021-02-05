@@ -18,15 +18,13 @@ y = df[target]
 data = (x, y)
 
 # Create and train the model
-hidden_layers = [{"channels": 2, "stacked": True},
-                 {"channels": 2, "stacked": True},
-                 {"channels": 2, "stacked": True},
-                 {"channels": 8},
-                 {"channels": 4}]
+hidden_layers = [{"channels": 8},
+                 {"channels": 8}]
 model = ml.neural_networks.DenseRegressor(inputs, hidden_layers=hidden_layers,
                                           activation="tanh")
+data, test_data = ml.split(data, frac=0.2)
 train_data, val_data = ml.split(data, frac=0.2)
-model.train(train_data, val_data, patience=500)
+model.train(train_data, val_data, patience=100)
 
 # Plot results
 model.plot_residuals()
@@ -35,6 +33,9 @@ x, y = train_data
 ml.plot_correlation(model(x), y, ax=ax, label="training")
 x, y = val_data
 ml.plot_correlation(model(x), y, ax=ax, label="validation")
+x, y = test_data
+ml.plot_correlation(model(x), y, ax=ax, label="testing", color="C3")
+ax.set_title(f"R²={ml.R2(model(x), y):.3g}")
 plt.show()
 
 IPython.embed()
