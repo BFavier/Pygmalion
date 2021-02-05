@@ -16,7 +16,8 @@ setuptools.setup(
     install_requires=[
         "pandas>=0.25",
 		"numpy>=1.18",
-		"torch>=1.2"
+		"torch>=1.2",
+		"requests>=2.25"
     ],
 	python_requires='>=3.6',
     url="https://github.com/BFavier/Pygmalion",
