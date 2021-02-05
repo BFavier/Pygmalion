@@ -16,11 +16,11 @@ class ImageSegmenter(_common.NNtemplate, _templates.ModelTemplate):
 
     Attributes:
     -----------
-    categories : list of uint8
+    classes : list of uint8
         gray levels the output image can be segmented into
     convolution_layers : list
         The list of ConvolutionLayer objects
-    channels_in : int
+    in_channels : int
         channels of the input image
     mean : np.ndarray
         The mean value for normalization of each input channel
@@ -35,7 +35,7 @@ class ImageSegmenter(_common.NNtemplate, _templates.ModelTemplate):
         self.convolution_layers = []
         self.upsampling_layers = []
         self.out_layer = None
-        self.channels_in = 0
+        self.in_channels = 0
         self.loss = _torch.nn.functional.cross_entropy
         self.args = None
 
@@ -82,7 +82,7 @@ class ImageSegmenter(_common.NNtemplate, _templates.ModelTemplate):
         training, validation = self._validation_split(training, validation,
                                                       validation_fraction)
         res = self._preprocess(training, validation)
-        (self.mean, self.std, self.channels_in, self.categories,
+        (self.mean, self.std, self.in_channels, self.classes,
             frequ, _, _) = res
         # redefine loss with correct weights
         weights = _torch.Tensor([1/f for f in frequ])
@@ -131,7 +131,7 @@ class ImageSegmenter(_common.NNtemplate, _templates.ModelTemplate):
         """
         # preprocess
         res = self._preprocess(training, validation)
-        (self.mean, self.std, self.channels_in, self.categories,
+        (self.mean, self.std, self.in_channels, self.classes,
             frequ, n_training, n_validation) = res
         # redefine loss with correct weights
         weights = _torch.Tensor([1/f for f in frequ])
@@ -194,24 +194,24 @@ class ImageSegmenter(_common.NNtemplate, _templates.ModelTemplate):
                                     lambda: (yield validation))
         # treat by batches
         sum_, sum2, n = 0., 0., 0.
-        channels_in = set()
-        categories = []
+        in_channels = set()
+        classes = []
         frequencies = []
         # treat training data
         for i, (images, masks) in enumerate(training()):
             sum_, sum2, n = self._sums(images, sum_, sum2, n)
             for image in images:
-                channels_in = channels_in | {image.tensor.shape[0]}
+                in_channels = in_channels | {image.tensor.shape[0]}
             masks = _np.concatenate([mask.data for mask in masks])
             masks = masks.reshape((-1,) + masks.shape[2:])
             uniques, counts = _np.unique(masks, axis=0, return_counts=True)
             for u, c in zip(uniques, counts):
                 u = u.tolist()
                 try:
-                    index = categories.index(u)
+                    index = classes.index(u)
                 except ValueError:
-                    index = len(categories)
-                    categories.append(u)
+                    index = len(classes)
+                    classes.append(u)
                     frequencies.append(c)
                 finally:
                     frequencies[index] += c
@@ -220,30 +220,30 @@ class ImageSegmenter(_common.NNtemplate, _templates.ModelTemplate):
         for i, (images, masks) in enumerate(validation()):
             sum_, sum2, n = self._sums(images, sum_, sum2, n)
             for image in images:
-                channels_in = channels_in | {image.tensor.shape[0]}
+                in_channels = in_channels | {image.tensor.shape[0]}
             masks = _np.concatenate([mask.data for mask in masks])
             masks = masks.reshape((-1,) + masks.shape[2:])
             uniques, counts = _np.unique(masks, axis=0, return_counts=True)
             for u, c in zip(uniques, counts):
                 u = u.tolist()
                 try:
-                    index = categories.index(u)
+                    index = classes.index(u)
                 except ValueError:
-                    index = len(categories)
-                    categories.append(u)
+                    index = len(classes)
+                    classes.append(u)
                     frequencies.append(c)
                 finally:
                     frequencies[index] += c
         n_validation = i+1
-        # treating categories
+        # treating classes
         s = sum(frequencies)
         frequencies = [f/s for f in frequencies]
         # returns values
-        if len(channels_in) > 1:
+        if len(in_channels) > 1:
             raise ValueError("found different put channels count: "
-                             f"{channels_in}")
+                             f"{in_channels}")
         mean, std = self._mean_std(sum_, sum2, n)
-        return (mean, std, channels_in.pop(), categories, frequencies,
+        return (mean, std, in_channels.pop(), classes, frequencies,
                 n_training, n_validation)
 
     def _set_layers(self, *args):
@@ -262,7 +262,7 @@ class ImageSegmenter(_common.NNtemplate, _templates.ModelTemplate):
         conv = _layers.ConvolutionLayer
         up = _layers.UpsamplingLayer
         # Set convolution layers
-        c_in = self.channels_in
+        c_in = self.in_channels
         for i, c_out in enumerate(down_channels):
             window = down_windows[i]
             pooling = pooling_windows[i]
@@ -274,7 +274,7 @@ class ImageSegmenter(_common.NNtemplate, _templates.ModelTemplate):
             c_in = c_out
         # Set upsampling_layer
         down_channels.reverse()
-        down_channels = down_channels[1:] + [self.channels_in]
+        down_channels = down_channels[1:] + [self.in_channels]
         for i, c_out in enumerate(up_channels):
             window = up_windows[i]
             layer = up(c_in+down_channels[i], c_out, non_linear=non_linear,
@@ -283,7 +283,7 @@ class ImageSegmenter(_common.NNtemplate, _templates.ModelTemplate):
             setattr(self, f"upsample{len(self.upsampling_layers)}", layer)
             c_in = c_out
         # out layer
-        c_out = len(self.categories)
+        c_out = len(self.classes)
         layer = conv(c_in, c_out, non_linear="identity",
                      convolution_window=(1, 1), padding_size="auto",
                      stride=(1, 1), pooling_window=(1, 1))
@@ -296,11 +296,11 @@ class ImageSegmenter(_common.NNtemplate, _templates.ModelTemplate):
     @property
     def dump(self):
         parameters = dict()
-        parameters["categories"] = self.categories
+        parameters["classes"] = self.classes
         parameters["mean"] = self.mean.tolist()
         parameters["std"] = self.std.tolist()
         parameters["args"] = self.args
-        parameters["channels_in"] = self.channels_in
+        parameters["in_channels"] = self.in_channels
         conv = [conv.dump for conv in self.convolution_layers]
         parameters["convolution_layers"] = conv
         up = [up.dump for up in self.upsampling_layers]
@@ -313,11 +313,11 @@ class ImageSegmenter(_common.NNtemplate, _templates.ModelTemplate):
         if type(self).__name__ not in other.keys():
             raise ValueError(f"Expected dump from a '{type(self).__name__}'")
         other = other[type(self).__name__]
-        self.categories = other["categories"]
+        self.classes = other["classes"]
         self.mean = _np.array(other["mean"])
         self.std = _np.array(other["std"])
         self.args = other["args"]
-        self.channels_in = other["channels_in"]
+        self.in_channels = other["in_channels"]
         if self.args is not None:
             self._set_layers(*self.args)
         for i, d in enumerate(other["convolution_layers"]):

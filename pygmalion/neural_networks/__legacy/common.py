@@ -373,26 +373,26 @@ class NNtemplate(_torch.nn.Module):
         return array
 
     def _labels_to_tensor(self, labels):
-        Y = [self.categories.index(label) for label in labels]
+        Y = [self.classes.index(label) for label in labels]
         return _torch.tensor(Y, dtype=_torch.long, device=self.device)
 
     def _tensor_to_labels(self, tensor):
         indexes = _torch.argmax(tensor, dim=1)
-        labels = [self.categories[index] for index in indexes]
+        labels = [self.classes[index] for index in indexes]
         return labels
 
     def _segmented_images_to_tensor(self, segmented):
         """convert grayscale segmented images to a tensor"""
         S = [image.data for image in segmented]
         Y = [_np.argmax([_np.all(s == c, axis=-1)
-             for c in self.categories], axis=0)
+             for c in self.classes], axis=0)
              for s in S]
         return _torch.tensor(Y, dtype=_torch.long, device=self.device)
 
     def _tensor_to_segmented_images(self, tensor):
         data = tensor.detach().cpu().numpy()
         data = _np.argmax(data, axis=1)
-        data = _np.array(self.categories)[data]
+        data = _np.array(self.classes)[data]
         return [_ml.Image(data=d) for d in data]
 
     def _to_tensor(self, data):

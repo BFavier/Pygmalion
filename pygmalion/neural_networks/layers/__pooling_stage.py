@@ -1,16 +1,11 @@
 import torch
 from typing import Union, List, Tuple
-from .convolution_stage import ConvStage1d, ConvStage2d, \
-                                load_activatedconv
+from .convolution_stage import ConvStage1d, ConvStage2d
 from .operations import linear_interpolation, bilinear_interpolation
 from . import pooling as pool
 
 
-def load_poolingstage(dump: dict):
-    return globals()[dump["type"]].from_dump(dump)
-
-
-class _PoolingStage(torch.nn.Module):
+class PoolingStage(torch.nn.Module):
     """
     A succession of activated convolutions
     followed by an optional pooling operation
@@ -65,7 +60,7 @@ class _PoolingStage(torch.nn.Module):
         return self.convolutions[-1].out_channels
 
 
-class PoolingStage1d(_PoolingStage):
+class PoolingStage1d(PoolingStage):
 
     def __init__(self, in_channels,
                  convolutions: Union[dict, List[dict]] = dict(),
@@ -121,7 +116,7 @@ class PoolingStage1d(_PoolingStage):
         return linear_interpolation(X, size=(h, w))
 
 
-class PoolingStage2d(_PoolingStage):
+class PoolingStage2d(PoolingStage):
 
     def __init__(self, in_channels,
                  convolutions: Union[dict, List[dict]] = dict(),

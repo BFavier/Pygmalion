@@ -80,10 +80,10 @@ Table<double> as_table(double* data, unsigned int n_rows, unsigned int n_columns
 	return table;
 }
 
-// A function that returns two tables from the data of a python numpy.ndarray of dtype=str (codes and categories)
+// A function that returns two tables from the data of a python numpy.ndarray of dtype=str (codes and classes)
 Table<unsigned int> as_table(char* data, unsigned int n_rows, unsigned int n_columns, unsigned int n_chars)
 {
-	//Initialize the table of categories, and codes associated
+	//Initialize the table of classes, and codes associated
 	Table<unsigned int> cat;
 	cat.reserve(n_columns);
 	//Loop on columns of the data
@@ -503,7 +503,7 @@ void leaf_prediction(const std::vector<Ty>& y, Branch& branch);
 template<>
 void leaf_prediction<double>(const std::vector<double>& y, Branch& branch)
 {
-	std::vector<unsigned int> categories;
+	std::vector<unsigned int> classes;
 
 	unsigned int n = 0;
 	branch.y_num = 0.;

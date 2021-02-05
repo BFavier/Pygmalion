@@ -106,7 +106,7 @@ def plot_correlation(predicted: Iterable[float], target: Iterable[float],
     Parameters
     ----------
     predicted : iterable of str
-        the categories predicted by the model
+        the classes predicted by the model
     target : iterable of str
         the target to predict
     ax : None or matplotlib.axes.Axes
@@ -135,7 +135,7 @@ def plot_correlation(predicted: Iterable[float], target: Iterable[float],
 
 
 def confusion_matrix(predicted: Iterable[str], target: Iterable[str],
-                     categories: Union[None, List[str]] = None):
+                     classes: Union[None, List[str]] = None):
     """
     Returns the confusion matrix between prediction and target
     of a classifier
@@ -143,27 +143,27 @@ def confusion_matrix(predicted: Iterable[str], target: Iterable[str],
     Parameters
     ----------
     predicted : iterable of str
-        the categories predicted by the model
+        the classes predicted by the model
     target : iterable of str
         the target to predict
-    categories : None or list of str
-        the unique categories to plot
-        (can be a subset of the categories in 'predicted' and 'target')
-        If None, the categories are infered from unique values from
+    classes : None or list of str
+        the unique classes to plot
+        (can be a subset of the classes in 'predicted' and 'target')
+        If None, the classes are infered from unique values from
         'predicted' and 'target'
     """
     assert len(predicted) == len(target)
-    if categories is None:
-        categories = np.unique(np.stack([predicted, target]))
+    if classes is None:
+        classes = np.unique(np.stack([predicted, target]))
     predicted = pd.Series(predicted).reset_index(drop=True)
     target = pd.Series(target).reset_index(drop=True)
     tab = pd.crosstab(predicted, target, normalize="all")
-    for c in categories:
+    for c in classes:
         if c not in tab.index:
             tab.loc[c] = 0
         if c not in tab.columns:
             tab[c] = 0
-    return tab.loc[categories, categories]
+    return tab.loc[classes, classes]
 
 
 def plot_confusion_matrix(*args, ax: Union[None, matplotlib.axes.Axes] = None,

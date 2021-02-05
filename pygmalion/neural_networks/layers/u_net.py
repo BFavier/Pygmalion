@@ -1,68 +1,85 @@
 import torch
 import torch.nn.functional as F
 from typing import Union, List, Tuple
-from .pooling_stage import PoolingStage2d, PoolingStage1d, load_poolingstage
+from .encoder import Encoder, Encoder1d, Encoder2d
+from .decoder import Decoder, Decoder1d, Decoder2d
 
 
-class _UNet(torch.nn.Module):
+class UNet(torch.nn.Module):
     """
     An UNet structure is a encoder followed by a decoder
     with a skip connection between layers of same depth
     """
 
     @classmethod
-    def from_dump(cls, dump: dict) -> '_UNet':
-        obj = cls(dump["in channels"], [], [], [])
-        obj.upsampling = torch.nn.ModuleList()
-        for d in dump["upsampling"]:
-            pooling_stage = load_poolingstage(d)
-            obj.upsampling.append(pooling_stage)
-        obj.downsampling = torch.nn.ModuleList()
-        for d in dump["downsampling"]:
-            pooling_stage = load_poolingstage(d)
-            obj.downsampling.append(pooling_stage)
-        return obj
+    def from_dump(cls, dump: dict) -> object:
+        cls = globals()[dump["type"]]
+        return cls.from_dump(dump)
 
-    def __init__(self, PoolingStage: type,
-                 in_channels: int,
+    def __init__(self, in_channels: int,
                  downsampling: List[Union[dict, List[dict]]],
-                 pooling: List[int],
+                 pooling: List[Union[int, Tuple[int, int]]],
                  upsampling: List[Union[dict, List[dict]]],
-                 pooling_type: str = "Max",
-                 padded: bool = True,
-                 activation: str = "relu"):
-        super().__init__()
+                 pooling_type: str = "max",
+                 upsampling_method: str = "nearest",
+                 activation: str = "relu",
+                 stacked: bool = False,
+                 dropout: Union[float, None] = None):
+        """
+        in_channels : int
+            The number of channels of the input
+        downsampling : list of [dict / list of dict]
+            the kwargs for the Dense layer for each
+        pooling : list of [dict / list of dict]
+            the kwargs for the Dense layer for each
+        upsampling : list of [dict / list of dict]
+            the kwargs for the Dense layer for each
+        pooling_type : one of {"max", "avg"}
+            The type of pooling to perform
+        upsampling_method : one of {"nearest", "interpolate"}
+            The type of pooling to perform
+        stacked : bool
+            default value for "stacked" in the 'dense_layers' kwargs
+        activation : str
+            default value for "activation" in the 'dense_layers' kwargs
+        dropout : float or None
+            default value for "dropout" in the 'dense_layers' kwargs
+        """
         assert len(downsampling) == len(pooling) == len(upsampling)
-        self.in_channels = in_channels
-        self.downsampling = torch.nn.ModuleList()
-        downsampling_channels = []
-        for down, pool in zip(downsampling, pooling):
-            downsampling_channels.append(in_channels)
-            cp = PoolingStage(in_channels, down,
-                              pooling_type=pooling_type,
-                              pooling_size=pool,
-                              padded=padded,
-                              activation=activation)
-            self.downsampling.append(cp)
-            in_channels = cp.out_channels
-        self.upsampling = torch.nn.ModuleList()
-        for up, down_channels in zip(upsampling, downsampling_channels[::-1]):
-            cp = PoolingStage(in_channels+down_channels, up,
-                              pooling_type=None,
-                              padded=True,
-                              activation=activation)
-            self.upsampling.append(cp)
-            in_channels = cp.out_channels
+        super().__init__()
+        encoder, decoder = [], []
+        channels = []
+        for dense, pool in zip(downsampling, pooling):
+            channels.append(in_channels)
+            down = self.EncoderNd.DownsamplingNd(in_channels, dense, pool,
+                                                 pooling_type=pooling_type,
+                                                 stacked=stacked,
+                                                 dropout=dropout,
+                                                 activation=activation,
+                                                 padded=True)
+            in_channels = down.out_channels(in_channels)
+            encoder.append(down)
+        for dense, down, stack_channels in zip(upsampling, encoder[::-1],
+                                               channels[::-1]):
+            up = self.DecoderNd.UpsamplingNd(in_channels+stack_channels,
+                                             down.factor,
+                                             upsampling_method=upsampling_method,
+                                             stacked=stacked,
+                                             dropout=dropout,
+                                             activation=activation,
+                                             padded=True)
+            in_channels = up.out_channels(in_channels)
+            decoder.append(up)
+        self.encoder = self.EncoderNd.from_layers(encoder)
+        self.decoder = self.DecoderNd.from_layers(decoder)
 
     def forward(self, X: torch.Tensor) -> torch.Tensor:
-        results = []
-        for stage in self.downsampling:
-            results.append(X)
+        stack = []
+        for stage in self.encoder.stages:
+            stack.append(X)
             X = stage(X)
-        for upsampling, downsampling, Y in zip(self.upsampling, self.downsampling[::-1],
-                                       results[::-1]):
-            X = self.align(Y, downsampling.upsample(X))
-            X = upsampling(X)
+        for stage, Xstack in zip(self.decoder.stages, stack):
+            X = stage(X, Xstack)
         return X
 
     def shape_out(self, shape_in: list) -> list:
@@ -77,41 +94,38 @@ class _UNet(torch.nn.Module):
             shape = stage.shape_in(shape)
         return shape
 
-    @property
-    def out_channels(self):
-        if len(self.upsampling) > 0:
-            return self.upsampling[-1].out_channels
-        else:
-            return self.in_channels
+    def out_channels(self, in_channels):
+        channels = in_channels
+        for stage in self.stages:
+            channels = stage.out_channels(channels)
+        return channels
+
+    def in_channels(self, out_channels):
+        channels = out_channels
+        for stage in self.stages[::-1]:
+            channels = stage.in_channels(channels)
+        return channels
 
     @property
     def dump(self):
         return {"type": type(self).__name__,
-                "in channels": self.in_channels,
-                "downsampling": [d.dump for d in self.downsampling],
-                "upsampling": [d.dump for d in self.upsampling]}
+                "encoder": self.encoder.dump,
+                "decoder": self.decoder.dump}
 
 
-class UNet1d(_UNet):
+class UNet1d(UNet):
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(PoolingStage1d, *args, **kwargs)
-
-    def align(self, X1: torch.Tensor, X2: torch.Tensor):
-        delta = X1.shape[2]-X2.shape[2]
-        if delta != 0:
-            X2 = F.pad(X2, (0, delta), mode="constant", value=0.)
-        return torch.cat([X1, X2], dim=1)
-
-
-class UNet2d(_UNet):
+    EncoderNd = Encoder1d
+    DecoderNd = Decoder1d
 
     def __init__(self, *args, **kwargs):
-        super().__init__(PoolingStage2d, *args, **kwargs)
+        super().__init__(*args, **kwargs)
 
-    def align(self, X1: torch.Tensor, X2: torch.Tensor):
-        dh = X1.shape[2]-X2.shape[2]
-        dw = X1.shape[3]-X2.shape[3]
-        if (dh, dw) != (0, 0):
-            X2 = F.pad(X2, (0, dw, 0, dh), mode="constant", value=0.)
-        return torch.cat([X1, X2], dim=1)
+
+class UNet2d(UNet):
+
+    EncoderNd = Encoder2d
+    DecoderNd = Decoder2d
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)

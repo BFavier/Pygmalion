@@ -13,19 +13,22 @@ target = "variety"
 inputs = [c for c in df.columns if c != "variety"]
 x = df[inputs]
 y = df[target]
-categories = y.unique()
+classes = y.unique()
 
-data, test = ml.split((x, y), frac=0.1)
+data, test_data = ml.split((x, y), frac=0.2)
 
 # Create and train the model
-model = nn.DenseClassifier(inputs, categories, hidden_layers=[5, 5, 5],
+hidden_layers = [{"channels": 5},
+                 {"channels": 5},
+                 {"channels": 5}]
+model = nn.DenseClassifier(inputs, classes, hidden_layers=hidden_layers,
                            activation="elu")
 train_data, val_data = ml.split(data, frac=0.1)
 model.train(train_data, val_data, n_epochs=2000)
 
 # Plot results
 model.plot_residuals()
-x, y = test
+x, y = test_data
 y_pred = model(x)
 f, ax = plt.subplots()
 ml.plot_confusion_matrix(y_pred, y, ax=ax)

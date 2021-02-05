@@ -15,9 +15,15 @@ y = df[target]
 data = (x, y)
 
 # Create and train the model
-model = ml.neural_networks.DenseRegressor(inputs, activation="tanh")
+hidden_layers = [{"channels": 2, "stacked": True},
+                 {"channels": 2, "stacked": True},
+                 {"channels": 2, "stacked": True},
+                 {"channels": 8},
+                 {"channels": 4}]
+model = ml.neural_networks.DenseRegressor(inputs, hidden_layers=hidden_layers,
+                                          activation="tanh")
 train_data, val_data = ml.split(data, frac=0.2)
-model.train(train_data, val_data)
+model.train(train_data, val_data, patience=500)
 
 # Plot results
 model.plot_residuals()

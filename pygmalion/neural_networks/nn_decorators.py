@@ -657,7 +657,7 @@ def nn_classifier(cls: Type) -> Type:
                 where each column corresponds to a category
             """
             x, _, _ = self.module.data_to_tensor(X, None, None)
-            return tensor_to_probabilities(self.module(x), self.categories)
+            return tensor_to_probabilities(self.module(x), self.classes)
 
         @property
         def class_weights(self):
@@ -669,14 +669,14 @@ def nn_classifier(cls: Type) -> Type:
         @class_weights.setter
         def class_weights(self, other: Iterable[float]):
             if other is not None:
-                assert len(other) == len(self.categories)
+                assert len(other) == len(self.classes)
                 other = torch.tensor(other, dtype=torch.float,
                                      device=self.device)
             self.module.class_weights = other
 
         @property
-        def categories(self):
-            return self.module.categories
+        def classes(self):
+            return self.module.classes
 
         @property
         def dump(self):

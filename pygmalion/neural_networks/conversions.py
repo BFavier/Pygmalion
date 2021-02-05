@@ -64,16 +64,16 @@ def tensor_to_images(tensor: torch.Tensor,
         return colors[tensor_to_longs(tensor)]
 
 
-def categories_to_tensor(input: Iterable[str],
-                         categories: List[str],
+def classes_to_tensor(input: Iterable[str],
+                         classes: List[str],
                          device: torch.device) -> torch.Tensor:
     """
     converts a list of categorical variables to tensor
-    'categories' must be a list of unique possible categories.
+    'classes' must be a list of unique possible classes.
     The tensor contains for each input the index of the category.
     """
-    assert isinstance(categories, list)
-    return longs_to_tensor([categories.index(i) for i in input], device=device)
+    assert isinstance(classes, list)
+    return longs_to_tensor([classes.index(i) for i in input], device=device)
 
 
 def tensor_to_index(tensor: torch.tensor) -> np.ndarray:
@@ -81,11 +81,11 @@ def tensor_to_index(tensor: torch.tensor) -> np.ndarray:
     return tensor_to_longs(torch.argmax(tensor, dim=1))
 
 
-def tensor_to_categories(tensor: torch.Tensor,
-                         categories: List[str]) -> List[str]:
+def tensor_to_classes(tensor: torch.Tensor,
+                         classes: List[str]) -> List[str]:
     """Converts a tensor of category indexes to str category"""
     indexes = tensor_to_index(tensor)
-    return np.array(categories)[indexes]
+    return np.array(classes)[indexes]
 
 
 def dataframe_to_tensor(df: pd.DataFrame,
@@ -98,13 +98,13 @@ def dataframe_to_tensor(df: pd.DataFrame,
 
 
 def tensor_to_probabilities(tensor: torch.Tensor,
-                            categories: List[str]) -> pd.DataFrame:
+                            classes: List[str]) -> pd.DataFrame:
     """
     Converts the raw output of a classifier neural network
     to a dataframe of class probability for each observation
     """
     arr = tensor_to_floats(torch.softmax(tensor, dim=-1))
-    return pd.DataFrame(data=arr, columns=categories)
+    return pd.DataFrame(data=arr, columns=classes)
 
 
 def segmented_to_tensor(images: np.ndarray, colors: Iterable,

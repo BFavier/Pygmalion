@@ -12,7 +12,7 @@ namespace pygmalion
     Tensor<double> pad(const Tensor<double>& input, double value, unsigned int left, unsigned int right, unsigned int top, unsigned int bottom);
     ///< Unroll an input tensor of shape {C, H, W} into a shape {H_out, W_out, C, H_kernel, W_kernel}. This is used for faster convolutions.
     Tensor<double> unroll(const Tensor<double>& input, unsigned int H_kernel, unsigned int W_kernel, unsigned int S_h, unsigned int S_w);
-    ///< Returns the tensor convolved by the kernel, with the given stride. The input must have a shape of {Channels_in, Height, Width}, the kernel must have a shape of {C_out, C_in, Kernel_height, kernel_Width}, the bias must have a shape of {C_out}.
+    ///< Returns the tensor convolved by the kernel, with the given stride. The input must have a shape of {in_channels, Height, Width}, the kernel must have a shape of {C_out, C_in, Kernel_height, kernel_Width}, the bias must have a shape of {C_out}.
     Tensor<double> convolve(const Tensor<double>& input, const Tensor<double>& kernel, const Tensor<double>& bias, unsigned int stride_height, unsigned int stride_width);
     ///< Performs a max pooling operation on the input. The input must be of shape {Channels, Height, Width}.
     Tensor<double> max_pool(const Tensor<double>& input, unsigned int height, unsigned int width);

@@ -10,8 +10,8 @@ data_path = pathlib.Path(__file__).parent / ".." / "data" / "cityscapes"
 
 
 # Load data
-with open(data_path / "categories.json", "r") as file:
-    categories = json.load(file)
+with open(data_path / "classes.json", "r") as file:
+    classes = json.load(file)
 x_train = np.load(data_path / "X_train.npy")
 y_train = np.load(data_path / "Y_train.npy")
 x_test = np.load(data_path / "X_test.npy")
@@ -25,7 +25,7 @@ pooling = [(4, 4), (4, 4), (4, 4)]
 upward = [{"window": (3, 3), "channels": 16},
           {"window": (3, 3), "channels": 8},
           {"window": (3, 3), "channels": 4}]
-model = nn.SemanticSegmenter(3, categories,
+model = nn.SemanticSegmenter(3, classes,
                              downsampling=downward,
                              pooling=pooling,
                              upsampling=upward,

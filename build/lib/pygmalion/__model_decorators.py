@@ -46,11 +46,11 @@ def classifier(cls):
         def plot_confusion_matrix(self, x, y, ax=None, cmap="Blues"):
             """
             """
-            indexes = range(len(self.categories))
+            indexes = range(len(self.classes))
             if ax is None:
                 f, ax = plt.subplots()
             y_pred = pd.Series(self.index(x))
-            y_target = pd.Series([self.categories.index(c) for c in y])
+            y_target = pd.Series([self.classes.index(c) for c in y])
             tab = pd.crosstab(y_pred, y_target, normalize="all")
             for i in indexes:
                 if i not in tab.index:
@@ -61,10 +61,10 @@ def classifier(cls):
             ax.imshow(tab, origin="lower", interpolation="nearest", cmap=cmap)
             ax.grid(False)
             ax.set_xticks(indexes)
-            ax.set_xticklabels(self.categories)
+            ax.set_xticklabels(self.classes)
             ax.set_xlabel("target")
             ax.set_yticks(indexes)
-            ax.set_yticklabels(self.categories)
+            ax.set_yticklabels(self.classes)
             ax.set_ylabel("predicted")
             for y in indexes:
                 for x in indexes:

@@ -118,8 +118,8 @@ class DecisionTree:
 
     def predict(self, x: _pd.DataFrame):
         "predict y for the input x"
-        if hasattr(self, "categories"):
-            L = _np.max([len(s) for s in self.categories])
+        if hasattr(self, "classes"):
+            L = _np.max([len(s) for s in self.classes])
             y_pred = _np.ndarray(len(x), dtype=f"U{L}")
         else:
             y_pred = _np.ndarray(len(x), dtype=float)
@@ -138,7 +138,7 @@ class ClassificationTree(DecisionTree, _Classifier):
         if isinstance(y, _pd.Series):
             y = y.to_numpy()
         y = y.astype(str)
-        self.categories = _np.unique(y)
+        self.classes = _np.unique(y)
         x_num, x_cat = DecisionTree.split_num_cat(x)
         ctree = _dt.grow_classifier_tree(x_num.to_numpy(float),
                                          x_cat.to_numpy(str),

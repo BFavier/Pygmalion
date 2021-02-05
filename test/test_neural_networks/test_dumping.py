@@ -298,6 +298,7 @@ if __name__ == "__main__":
     for attr in dir(module):
         if not attr.startswith("test_"):
             continue
+        print(attr, end="")
         func = getattr(module, attr)
-        print(attr, end=": Passed\n")
         func()
+        print(": Passed")

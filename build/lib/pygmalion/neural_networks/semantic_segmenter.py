@@ -15,7 +15,7 @@ class SemanticSegmenter(torch.nn.Module):
     @classmethod
     def from_dump(cls, dump):
         assert cls.__name__ == dump["type"]
-        colors = {cat: col for cat, col in zip(dump["categories"],
+        colors = {cat: col for cat, col in zip(dump["classes"],
                                                dump["colors"])}
         obj = cls(1, colors, [], [], [])
         obj.input_norm = BatchNorm2d.from_dump(dump["input norm"])
@@ -34,15 +34,15 @@ class SemanticSegmenter(torch.nn.Module):
                  padded: bool = True,
                  activation: str = "relu"):
         super().__init__()
-        self.categories = [c for c in colors.keys()]
-        self.colors = [colors[c] for c in self.categories]
+        self.classes = [c for c in colors.keys()]
+        self.colors = [colors[c] for c in self.classes]
         self.input_norm = BatchNorm2d(in_channels)
         self.UNet = UNet2d(in_channels, downsampling, pooling, upsampling,
                            padded=padded)
         self.dense = PoolingStage2d(self.UNet.out_channels, dense,
                                     pooling_type=None, padded=True)
         self.output = Conv2d(self.dense.out_channels,
-                             len(self.categories), (1, 1))
+                             len(self.classes), (1, 1))
 
     def forward(self, X: torch.Tensor):
         X = self.input_norm(X)
@@ -74,7 +74,7 @@ class SemanticSegmenter(torch.nn.Module):
     @property
     def dump(self):
         return {"type": type(self).__name__,
-                "categories": self.categories,
+                "classes": self.classes,
                 "colors": self.colors,
                 "input norm": self.input_norm.dump,
                 "U-net": self.UNet.dump,

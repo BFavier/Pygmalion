@@ -30,20 +30,20 @@ std::string ImageSegmenter::type_name() const
 
 Image ImageSegmenter::predict(const Image& image) const
 {
-    if (image.channels() != channels_in)
+    if (image.channels() != in_channels)
     {
         throw std::runtime_error(std::string(__func__)+": Unexpected number of input channels in the image.");
     }
     Tensor<double> input = image.as_tensor();
     Tensor<double> output = (*this)(input);
-    Tensor<unsigned char> indexed = categories.at_index(output.index_max());
+    Tensor<unsigned char> indexed = classes.at_index(output.index_max());
     return Image(indexed);
 }
 
 ImageSegmenter& ImageSegmenter::operator=(const ImageSegmenter& other)
 {
-    categories = other.categories;
-    channels_in = other.channels_in;
+    classes = other.classes;
+    in_channels = other.in_channels;
     mean = other.mean;
     standard_deviation = other.standard_deviation;
     convolution_layers = other.convolution_layers;
@@ -74,10 +74,10 @@ void ImageSegmenter::parse(const json& dump)
     check_name(dump);
     check_version(dump);
     json parameters = dump[type_name()];
-    categories = parameters["categories"];
+    classes = parameters["classes"];
     mean = Tensor<double>(parameters["mean"]).flatten();
     standard_deviation = Tensor<double>(parameters["std"]).flatten();
-    channels_in = parameters["channels_in"];
+    in_channels = parameters["in_channels"];
     for (const json& conv_dump : parameters["convolution_layers"])
     {
         convolution_layers.push_back(conv_dump);

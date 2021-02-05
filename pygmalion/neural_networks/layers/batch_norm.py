@@ -7,17 +7,18 @@ def load_batchnorm(dump):
     return globals()[dump["type"]].from_dump(dump)
 
 
-class _BatchNorm:
+class BatchNorm:
     """A template for batch norm layers"""
 
     @classmethod
-    def from_dump(cls, dump: dict) -> '_BatchNorm':
-        """returns a '_BatchNorm' layer from a dump"""
-        assert dump["type"] == cls.__name__
-        obj = cls(dump["num features"],
-                  momentum=dump["momentum"],
-                  affine=dump["affine"],
-                  eps=dump["eps"])
+    def from_dump(cls, dump: dict) -> 'BatchNorm':
+        """returns a 'BatchNorm' layer from a dump"""
+        cls = globals()[dump["type"]]
+        obj = cls.__new__(cls)
+        torch.nn.Module.__init__(obj)
+        obj.momentum = dump["momentum"]
+        obj.affine = dump["affine"]
+        obj.eps = dump["eps"]
         obj.running_mean = torch.tensor(dump["running mean"],
                                         dtype=torch.float)
         obj.running_var = torch.tensor(dump["running var"],
@@ -60,7 +61,7 @@ class _BatchNorm:
         return X*(self.running_var+self.eps)**0.5 + self.running_mean
 
 
-class BatchNorm1d(torch.nn.BatchNorm1d, _BatchNorm):
+class BatchNorm1d(torch.nn.BatchNorm1d, BatchNorm):
     """A wrapper around torch.nn.BatchNorm1d"""
 
     def __init__(self, num_features: int,
@@ -87,7 +88,13 @@ class BatchNorm1d(torch.nn.BatchNorm1d, _BatchNorm):
                                       eps=eps)
 
 
-class BatchNorm2d(torch.nn.BatchNorm2d, _BatchNorm):
+class BatchNorm0d(BatchNorm1d):
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+
+class BatchNorm2d(torch.nn.BatchNorm2d, BatchNorm):
     """A wrapper around torch.nn.BatchNorm2d"""
 
     def __init__(self, num_features: int,

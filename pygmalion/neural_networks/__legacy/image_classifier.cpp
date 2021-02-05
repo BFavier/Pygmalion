@@ -54,12 +54,12 @@ std::string ImageClassifier::predict(const Image& image) const
         throw("Input tensor doesn't have the right shape");
     }
     unsigned int i = predict_index(input);
-    return categories[i];
+    return classes[i];
 }
 
 ImageClassifier& ImageClassifier::operator=(const ImageClassifier& other)
 {
-    categories = other.categories;
+    classes = other.classes;
     input_shape = other.input_shape;
     mean = other.mean;
     standard_deviation = other.standard_deviation;
@@ -87,7 +87,7 @@ void ImageClassifier::parse(const json& dump)
     check_name(dump);
     check_version(dump);
     json parameters = dump[type_name()];
-    categories = static_cast<std::vector<std::string>>(parameters["categories"]);
+    classes = static_cast<std::vector<std::string>>(parameters["classes"]);
     input_shape = static_cast<std::vector<unsigned int>>(parameters["input_shape"]);
     mean = Tensor<double>(parameters["mean"]).flatten();
     standard_deviation = Tensor<double>(parameters["std"]).flatten();

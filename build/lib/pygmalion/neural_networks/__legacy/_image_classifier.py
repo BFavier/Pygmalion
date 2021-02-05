@@ -13,7 +13,7 @@ class ImageClassifier(_common.NNtemplate, _templates.ClassifierTemplate):
 
     Attributes:
     -----------
-    categories : list of categories
+    classes : list of classes
     convolution_layers : list of ConvolutionLayer
     dense_layers : list of DenseLayer
     input_shape : tuple of int
@@ -85,7 +85,7 @@ class ImageClassifier(_common.NNtemplate, _templates.ClassifierTemplate):
         training, validation = self._validation_split(training, validation,
                                                       validation_fraction)
         res = self._preprocess(training, validation)
-        self.mean, self.std, self.input_shape, self.categories, _, _ = res
+        self.mean, self.std, self.input_shape, self.classes, _, _ = res
         # create layers
         if restart:
             self._set_layers(windows, channels, strides, pooling, dense,
@@ -138,7 +138,7 @@ class ImageClassifier(_common.NNtemplate, _templates.ClassifierTemplate):
         **kwargs from self.train_loop(...)
         """
         # preprocess
-        self.mean, self.std, self.input_shape, self.categories, n_training, \
+        self.mean, self.std, self.input_shape, self.classes, n_training, \
             n_validation = self._preprocess(training, validation)
         # create layers
         if restart:
@@ -258,11 +258,11 @@ class ImageClassifier(_common.NNtemplate, _templates.ClassifierTemplate):
         # treat by batches
         sum_, sum2, n = 0., 0., 0.
         shapes = []
-        categories = set()
+        classes = set()
         # treat training data
         for i, (images, labels) in enumerate(training()):
             sum_, sum2, n = self._sums(images, sum_, sum2, n)
-            categories = categories | set(labels)
+            classes = classes | set(labels)
             for image in images:
                 shape = image.tensor.shape
                 if shape not in shapes:
@@ -271,7 +271,7 @@ class ImageClassifier(_common.NNtemplate, _templates.ClassifierTemplate):
         # treat validation data
         for i, (images, labels) in enumerate(validation()):
             sum_, sum2, n = self._sums(images, sum_, sum2, n)
-            categories = categories | set(labels)
+            classes = classes | set(labels)
             for image in images:
                 shape = image.tensor.shape
                 if shape not in shapes:
@@ -280,7 +280,7 @@ class ImageClassifier(_common.NNtemplate, _templates.ClassifierTemplate):
         mean, std = self._mean_std(sum_, sum2, n)
         if len(shapes) > 1:
             raise ValueError(f"Expected a single image shape, found {shapes}")
-        return mean, std, shapes.pop(), list(categories), \
+        return mean, std, shapes.pop(), list(classes), \
             n_training, n_validation
 
     def _set_layers(self, *args):
@@ -318,7 +318,7 @@ class ImageClassifier(_common.NNtemplate, _templates.ClassifierTemplate):
             n = layer.shape_out
         # out layer
         i = len(self.dense_layers)
-        n_out = len(self.categories)
+        n_out = len(self.classes)
         layer = dens(n, n_out, non_linear="identity")
         self.dense_layers.append(layer)
         setattr(self, f"dense{i}", layer)
@@ -343,7 +343,7 @@ class ImageClassifier(_common.NNtemplate, _templates.ClassifierTemplate):
     def dump(self):
         parameters = dict()
         parameters["args"] = self.args
-        parameters["categories"] = self.categories
+        parameters["classes"] = self.classes
         parameters["mean"] = self.mean.tolist()
         parameters["std"] = self.std.tolist()
         parameters["input_shape"] = self.input_shape
@@ -358,7 +358,7 @@ class ImageClassifier(_common.NNtemplate, _templates.ClassifierTemplate):
         if type(self).__name__ not in other.keys():
             raise ValueError(f"Expected dump from a '{type(self).__name__}'")
         other = other[type(self).__name__]
-        self.categories = other["categories"]
+        self.classes = other["classes"]
         self.mean = _np.array(other["mean"])
         self.std = _np.array(other["std"])
         self.input_shape = other["input_shape"]

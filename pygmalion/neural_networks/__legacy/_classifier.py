@@ -15,8 +15,8 @@ class Classifier(_common.NNtemplate, _templates.ClassifierTemplate):
     -----------
     x : list of str
         name of x observations columns
-    categories : list
-        categories the inputs can be classified into
+    classes : list
+        classes the inputs can be classified into
     mean : np.ndarray
         The mean value for normalization of input
     std : np.ndarray
@@ -71,7 +71,7 @@ class Classifier(_common.NNtemplate, _templates.ClassifierTemplate):
         training, validation = self._validation_split(training, validation,
                                                       validation_fraction)
         res = self._preprocess(training, validation)
-        self.mean, self.std, self.categories, self.x, _, _ = res
+        self.mean, self.std, self.classes, self.x, _, _ = res
         # create layers
         if restart:
             self._set_layers(layers, non_linear)
@@ -113,7 +113,7 @@ class Classifier(_common.NNtemplate, _templates.ClassifierTemplate):
         """
         # preprocess
         res = self._preprocess(training, validation)
-        self.mean, self.std, self.categories, self.x, \
+        self.mean, self.std, self.classes, self.x, \
             n_training, n_validation = res
         # create layers
         if restart:
@@ -163,7 +163,7 @@ class Classifier(_common.NNtemplate, _templates.ClassifierTemplate):
                                     lambda: (yield validation))
         # treat by batches
         sum_, sum2, n = 0., 0., 0.
-        categories = set()
+        classes = set()
         x = None
         # treat training data
         for i, (obs, labels) in enumerate(training()):
@@ -174,7 +174,7 @@ class Classifier(_common.NNtemplate, _templates.ClassifierTemplate):
                     raise ValueError(f"At batch {i}: Found NaN in "
                                      f"training x['{key}']")
             sum_, sum2, n = self._sums(obs.values, sum_, sum2, n)
-            categories = categories | set(labels)
+            classes = classes | set(labels)
         n_training = i+1
         # treat validation data
         for i, (obs, labels) in enumerate(validation()):
@@ -183,11 +183,11 @@ class Classifier(_common.NNtemplate, _templates.ClassifierTemplate):
                     raise ValueError(f"At batch {i}: Found NaN in "
                                      f"validation x['{key}']")
             sum_, sum2, n = self._sums(obs.values, sum_, sum2, n)
-            categories = categories | set(labels)
+            classes = classes | set(labels)
         n_validation = i+1
         # returns values
         mean, std = self._mean_std(sum_, sum2, n)
-        return mean, std, list(categories), x, n_training, n_validation
+        return mean, std, list(classes), x, n_training, n_validation
 
     def _set_layers(self, *args):
         """Remove the previous layers and create new ones"""
@@ -207,7 +207,7 @@ class Classifier(_common.NNtemplate, _templates.ClassifierTemplate):
             n = layer.shape_out
         # out layer
         i = len(self.dense_layers)
-        n_out = len(self.categories)
+        n_out = len(self.classes)
         layer = dens(n, n_out, non_linear="identity")
         self.dense_layers.append(layer)
         setattr(self, f"dense{i}", layer)
@@ -221,7 +221,7 @@ class Classifier(_common.NNtemplate, _templates.ClassifierTemplate):
         parameters = dict()
         parameters["args"] = self.args
         parameters["x"] = self.x
-        parameters["categories"] = self.categories
+        parameters["classes"] = self.classes
         parameters["mean"] = self.mean.tolist()
         parameters["std"] = self.std.tolist()
         dense = [d.dump for d in self.dense_layers]
@@ -234,7 +234,7 @@ class Classifier(_common.NNtemplate, _templates.ClassifierTemplate):
             raise ValueError(f"Expected dump from a '{type(self).__name__}'")
         other = other[type(self).__name__]
         self.x = other["x"]
-        self.categories = other["categories"]
+        self.classes = other["classes"]
         self.mean = _np.array(other["mean"])
         self.std = _np.array(other["std"])
         self.args = other["args"]

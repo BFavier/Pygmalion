@@ -13,8 +13,8 @@ namespace pygmalion
         ImageSegmenter(const std::string& path);
         ~ImageSegmenter();
     public:
-        Tensor<unsigned char> categories;
-        unsigned int channels_in;
+        Tensor<unsigned char> classes;
+        unsigned int in_channels;
         Tensor<double> mean;
         Tensor<double> standard_deviation;
         std::vector<ConvolutionLayer> convolution_layers;

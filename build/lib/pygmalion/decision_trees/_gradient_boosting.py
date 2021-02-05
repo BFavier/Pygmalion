@@ -93,17 +93,17 @@ class GradientBoostedClassificationTree(_ClassifierTemplate):
     def _softmax(self, output: _pd.DataFrame) -> _pd.DataFrame:
         """
         Calculate the softmax of the model's output.
-        This converts the unborned model outputs for each categories
+        This converts the unborned model outputs for each classes
         to a probability 0 < pj < 1, such that sum_j(p_j) = 1.
             pij = exp(f[i,j]) / sum_j(exp(f[i,j]))
         with i the index of the observations,
-        and j the index of the categories to predict,
+        and j the index of the classes to predict,
         f[i,j] is the model's output at observation i for category j
         """
         exp = _np.exp(output.values)
         denominator = _np.sum(exp, axis=1)
         exp /= denominator[:, None]
-        return _pd.DataFrame(data=exp, columns=self.categories)
+        return _pd.DataFrame(data=exp, columns=self.classes)
 
     def _cross_entropy(cls, proba_predicted: _pd.DataFrame,
                        proba_target: _pd.DataFrame) -> float:
@@ -114,7 +114,7 @@ class GradientBoostedClassificationTree(_ClassifierTemplate):
             -sum_i(ln(p[i,k])
         where:
         i is the index over the observations,
-        j is the index over the categories to predict,
+        j is the index over the classes to predict,
         k is the target category of the ith observation,
         c[i,j] is the one-hot target vector (1 if j==k, 0 otherwise),
         p[i,j] is the predicted probability of category j for observation i
@@ -125,7 +125,7 @@ class GradientBoostedClassificationTree(_ClassifierTemplate):
                         target: _pd.DataFrame) -> float:
         """
         Returns the log-likelihood loss function from the non-normalized
-        predictions and the target categories.
+        predictions and the target classes.
         It is calculated as the cross entropy of the softmaxed model's output.
         This reduces to:
             L = - sum_i,j( c[i,j] * ln( exp(f[i,j]) / sum_j(exp(f[i,j])) ) )
@@ -133,7 +133,7 @@ class GradientBoostedClassificationTree(_ClassifierTemplate):
             L = - sum_i(ln( exp(f[i,k]) / sum_j(exp(f[i,j]))))
         where:
         i is the index over the observations,
-        j is the index over the categories to predict,
+        j is the index over the classes to predict,
         k is the target category of the ith observation,
         c[i,j] is the one-hot target vector (1 if j==k, 0 otherwise),
         f[i,j] is the predicted value for observation i, class j
@@ -153,24 +153,24 @@ class GradientBoostedClassificationTree(_ClassifierTemplate):
         proba_predicted = self._softmax(output)
         return proba_predicted - target
 
-    def _to_categories(self, one_hot: _pd.DataFrame) -> _np.ndarray:
+    def _to_classes(self, one_hot: _pd.DataFrame) -> _np.ndarray:
         """
         Converts a dataframe of one-hot encoded vectors to a list of
-        categories.
+        classes.
         """
-        return [self.categories[i] for i in _np.argmax(one_hot.values, axis=1)]
+        return [self.classes[i] for i in _np.argmax(one_hot.values, axis=1)]
 
     def _to_one_hot(self, y: _np.ndarray) -> _pd.DataFrame:
         """
-        Converts a vector of observed categories to a dataframe of one-hot
+        Converts a vector of observed classes to a dataframe of one-hot
         encoded vectors.
         Each column of the dataframe is a category, each line corresponds to
         an observation.
         """
         y = _np.array(y)  # in case a _pd.Series is passed instead
-        data = [[1. if c == y[j] else 0 for c in self.categories]
+        data = [[1. if c == y[j] else 0 for c in self.classes]
                 for j in range(len(y))]
-        return _pd.DataFrame(data=data, columns=self.categories)
+        return _pd.DataFrame(data=data, columns=self.classes)
 
     def _scalar_output(self, x: _pd.DataFrame, category: str):
         """
@@ -184,11 +184,11 @@ class GradientBoostedClassificationTree(_ClassifierTemplate):
     def _output(self, x: _pd.DataFrame) -> _pd.DataFrame:
         """
         Calculate the raw output of the model without converting back
-        to categories nor probabilities
+        to classes nor probabilities
         """
         vectorial = _np.transpose([self._scalar_output(x, c)
-                                  for c in self.categories])
-        return _pd.DataFrame(data=vectorial, columns=self.categories,
+                                  for c in self.classes])
+        return _pd.DataFrame(data=vectorial, columns=self.classes,
                              dtype=float)
 
     def fit(self, x: _pd.DataFrame, y: _np.ndarray, validation_data=None,
@@ -205,8 +205,8 @@ class GradientBoostedClassificationTree(_ClassifierTemplate):
             x_train, y_train = x, y
             x_val, y_val = validation_data
         # initializing variables
-        self.categories = _np.unique(_np.concatenate([y_train, y_val]))
-        self.trees = {c: [] for c in self.categories}
+        self.classes = _np.unique(_np.concatenate([y_train, y_val]))
+        self.trees = {c: [] for c in self.classes}
         val_target = self._to_one_hot(y_val)
         train_target = self._to_one_hot(y_train)
         target = train_target
@@ -218,7 +218,7 @@ class GradientBoostedClassificationTree(_ClassifierTemplate):
         # Training loop
         try:
             for n_trees in range(n_max_trees):
-                for c in self.categories:
+                for c in self.classes:
                     tree = _RegressionTree()
                     tree.fit(x_train, target[c], **kwargs)
                     self.trees[c].append(tree)
@@ -242,11 +242,11 @@ class GradientBoostedClassificationTree(_ClassifierTemplate):
         except KeyboardInterrupt:
             pass
         # Removing excess DecisionTrees
-        for c in self.categories:
+        for c in self.classes:
             self.trees[c] = self.trees[c][:best_loss+1]
 
     def predict(self, x: _pd.DataFrame) -> _np.ndarray:
         """
         Predict the model on the given data
         """
-        return self._to_categories(self._output(x))
+        return self._to_classes(self._output(x))

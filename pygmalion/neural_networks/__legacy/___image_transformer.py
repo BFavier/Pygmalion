@@ -14,9 +14,9 @@ class ImageTransformer(_common.NNtemplate):
     -----------
     convolution_layers : list
         The list of ConvolutionLayer objects
-    channels_in : int
+    in_channels : int
         channels of the input image
-    channels_out : int
+    out_channels : int
         channels of the output image
     mean_x : np.ndarray
         The mean value for normalization of each input channel
@@ -33,8 +33,8 @@ class ImageTransformer(_common.NNtemplate):
     def __init__(self):
         super().__init__()
         self.convolution_layers = []
-        self.channels_in = 0
-        self.channels_out = 0
+        self.in_channels = 0
+        self.out_channels = 0
         self.args = None
 
     def fit(self, images, masks, validation=None, validation_fraction=0.2,
@@ -79,8 +79,8 @@ class ImageTransformer(_common.NNtemplate):
         training, validation = self._validation_split(training, validation,
                                                       validation_fraction)
         res = self._preprocess(training, validation)
-        self.mean_x, self.std_x, self.mean_y, self.std_y, self.channels_in, \
-            self.channels_out, _, _ = res
+        self.mean_x, self.std_x, self.mean_y, self.std_y, self.in_channels, \
+            self.out_channels, _, _ = res
         # create layers
         if restart:
             self._set_layers(windows, channels, non_linear, low_memory)
@@ -123,8 +123,8 @@ class ImageTransformer(_common.NNtemplate):
         """
         # preprocess
         res = self._preprocess(training, validation)
-        self.mean_x, self.std_x, self.mean_y, self.std_y, self.channels_in, \
-            self.channels_out, n_training, n_validation = res
+        self.mean_x, self.std_x, self.mean_y, self.std_y, self.in_channels, \
+            self.out_channels, n_training, n_validation = res
         # create layers
         if restart:
             self._set_layers(windows, channels, non_linear, low_memory)
@@ -178,37 +178,37 @@ class ImageTransformer(_common.NNtemplate):
         # treat by batches
         sum_x, sum2_x, n_x = 0., 0., 0.
         sum_y, sum2_y, n_y = 0., 0., 0.
-        channels_in = set()
-        channels_out = set()
+        in_channels = set()
+        out_channels = set()
         # treat training data
         for i, (images, masks) in enumerate(training()):
             sum_x, sum2_x, n_x = self._sums(images, sum_x, sum2_x, n_x)
             sum_y, sum2_y, n_y = self._sums(masks, sum_y, sum2_y, n_y)
             for image in images:
-                channels_in = channels_in | {image.tensor.shape[0]}
+                in_channels = in_channels | {image.tensor.shape[0]}
             for mask in masks:
-                channels_out = channels_out | {mask.tensor.shape[0]}
+                out_channels = out_channels | {mask.tensor.shape[0]}
         n_training = i+1
         # treat validation data
         for i, (images, masks) in enumerate(validation()):
             sum_x, sum2_x, n_x = self._sums(images, sum_x, sum2_x, n_x)
             sum_y, sum2_y, n_y = self._sums(masks, sum_y, sum2_y, n_y)
             for image in images:
-                channels_in = channels_in | {image.tensor.shape[0]}
+                in_channels = in_channels | {image.tensor.shape[0]}
             for mask in masks:
-                channels_out = channels_out | {mask.tensor.shape[0]}
+                out_channels = out_channels | {mask.tensor.shape[0]}
         n_validation = i+1
         # returns values
-        if len(channels_in) > 1:
+        if len(in_channels) > 1:
             raise ValueError("found different put channels count: "
-                             f"{channels_in}")
-        if len(channels_out) > 1:
+                             f"{in_channels}")
+        if len(out_channels) > 1:
             raise ValueError("found different output channels count: "
-                             f"{channels_out}")
+                             f"{out_channels}")
         mean_x, std_x = self._mean_std(sum_x, sum2_x, n_x)
         mean_y, std_y = self._mean_std(sum_y, sum2_y, n_y)
-        channels_in, channels_out = channels_in.pop(), channels_out.pop()
-        return (mean_x, std_x, mean_y, std_y, channels_in, channels_out,
+        in_channels, out_channels = in_channels.pop(), out_channels.pop()
+        return (mean_x, std_x, mean_y, std_y, in_channels, out_channels,
                 n_training, n_validation)
 
     def _set_layers(self, *args):
@@ -221,7 +221,7 @@ class ImageTransformer(_common.NNtemplate):
         self.convolution_layers = []
         # Set convolution layers
         conv = _layers.ConvolutionLayer
-        c_in = self.channels_in
+        c_in = self.in_channels
         for i, c_out in enumerate(channels):
             window = windows[i]
             layer = conv(c_in, c_out, non_linear=non_linear,
@@ -232,7 +232,7 @@ class ImageTransformer(_common.NNtemplate):
             setattr(self, f"conv{i}", layer)
             c_in = c_out
         # out layer
-        c_out = self.channels_out
+        c_out = self.out_channels
         i = len(self.convolution_layers)
         layer = conv(c_in, c_out, non_linear="identity",
                      convolution_window=(1, 1), padding_size="auto",
@@ -247,8 +247,8 @@ class ImageTransformer(_common.NNtemplate):
     @property
     def dump(self):
         parameters = dict()
-        parameters["channels_in"] = self.channels_in
-        parameters["channels_out"] = self.channels_out
+        parameters["in_channels"] = self.in_channels
+        parameters["out_channels"] = self.out_channels
         parameters["args"] = self.args
         parameters["mean_x"] = self.mean_x.tolist()
         parameters["std_x"] = self.std_x.tolist()
@@ -263,8 +263,8 @@ class ImageTransformer(_common.NNtemplate):
         if type(self).__name__ not in other.keys():
             raise ValueError(f"Expected dump from a '{type(self).__name__}'")
         other = other[type(self).__name__]
-        self.channels_in = other["channels_in"]
-        self.channels_out = other["channels_out"]
+        self.in_channels = other["in_channels"]
+        self.out_channels = other["out_channels"]
         self.mean_x = _np.array(other["mean_x"])
         self.std_x = _np.array(other["std_x"])
         self.mean_y = _np.array(other["mean_y"])

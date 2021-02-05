@@ -9,31 +9,36 @@ data_path = pathlib.Path(__file__).parent / ".." / "data" / "Fashion-MNIST"
 
 
 # Load data
-with open(data_path / "categories.txt", "r") as file:
+with open(data_path / "classes.txt", "r") as file:
     data = file.read()
-categories = data.split(",")
+classes = data.split(",")
 x_train = np.load(data_path / "train_images.npy")
-y_train = np.array(categories)[np.load(data_path / "train_labels.npy")]
+y_train = np.array(classes)[np.load(data_path / "train_labels.npy")]
 x_test = np.load(data_path / "test_images.npy")
-y_test = np.array(categories)[np.load(data_path / "test_labels.npy")]
+y_test = np.array(classes)[np.load(data_path / "test_labels.npy")]
 in_channels = 1
 
 # Create and train the model
-convolutions = [{"window": (4, 4), "channels": 8},
-                {"window": (4, 4), "channels": 12},
-                {"window": (3, 3), "channels": 16}]
+convolutions = [[{"window": (3, 3), "channels": 8, "padded": False},
+                 {"window": (3, 3), "channels": 8}],
+                [{"window": (3, 3), "channels": 16, "padded": False, "dropout": 0.2},
+                 {"window": (3, 3), "channels": 16, "dropout": 0.2}],
+                [{"window": (3, 3), "channels": 32, "padded": False, "dropout": 0.2},
+                 {"window": (3, 3), "channels": 32, "dropout": 0.2}]]
 pooling = [(2, 2), (2, 2), (2, 2)]
-model = nn.ImageClassifier(in_channels, categories,
+dense = [{"channels": 16, "dropout": 0.2}]
+model = nn.ImageClassifier(in_channels, classes,
                            convolutions=convolutions,
                            pooling=pooling,
-                           fully_connected=[],
+                           dense=dense,
                            activation="leaky_relu",
-                           padded=False,
                            GPU=True,
                            learning_rate=1.0E-2)
 # print(model.module.shapes)
 train_data, val_data = ml.split((x_train, y_train), frac=0.2)
-model.train(train_data, val_data, n_epochs=500, L_minibatchs=3000)
+model.train(train_data, val_data, n_epochs=300, L_minibatchs=1000)
+model.learning_rate = 5.0E-3
+model.train(train_data, val_data, n_epochs=300, L_minibatchs=1000)
 
 # Plot results
 model.plot_residuals()
