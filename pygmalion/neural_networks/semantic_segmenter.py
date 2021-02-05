@@ -91,9 +91,10 @@ class SemanticSegmenterModule(torch.nn.Module):
     def loss(self, y_pred: torch.Tensor, y_target: torch.Tensor,
              weights: Union[torch.Tensor, None]):
         if weights is None:
-            return F.cross_entropy(y_pred, y_target)
+            return F.cross_entropy(y_pred, y_target, weight=self.class_weights)
         else:
-            return F.nll_loss(F.log_softmax(y_pred) * weights, y_target)
+            return F.nll_loss(F.log_softmax(y_pred) * weights, y_target,
+                              weight=self.class_weights)
 
     @property
     def dump(self):
