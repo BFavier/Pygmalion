@@ -19,16 +19,16 @@ y_test = np.array(classes)[np.load(data_path / "test_labels.npy")]
 in_channels = 1
 
 # Create and train the model
-convolutions = [[{"window": (3, 3), "channels": 8, "padded": False},
-                 {"window": (3, 3), "channels": 8}],
-                [{"window": (3, 3), "channels": 16, "padded": False, "dropout": 0.2},
-                 {"window": (3, 3), "channels": 16, "dropout": 0.2}],
-                [{"window": (3, 3), "channels": 32, "padded": False, "dropout": 0.2},
-                 {"window": (3, 3), "channels": 32, "dropout": 0.2}]]
+conv = [[{"window": (3, 3), "channels": 16, "dropout": 0.2, "padded": False},
+         {"window": (3, 3), "channels": 16, "dropout": 0.2}],
+        [{"window": (3, 3), "channels": 32, "dropout": 0.2, "padded": False},
+         {"window": (3, 3), "channels": 32, "dropout": 0.2}],
+        [{"window": (3, 3), "channels": 64, "dropout": 0.2, "padded": False},
+         {"window": (3, 3), "channels": 64, "dropout": 0.2}]]
 pooling = [(2, 2), (2, 2), (2, 2)]
-dense = [{"channels": 16, "dropout": 0.2}]
+dense = [{"channels": 32, "dropout": 0.2}, {"channels": 16, "dropout": 0.2}]
 model = nn.ImageClassifier(in_channels, classes,
-                           convolutions=convolutions,
+                           convolutions=conv,
                            pooling=pooling,
                            dense=dense,
                            activation="leaky_relu",
