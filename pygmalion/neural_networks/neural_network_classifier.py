@@ -15,6 +15,16 @@ class NeuralNetworkClassifier(NeuralNetwork):
         return obj
 
     def __init__(self, *args, class_weights=None, **kwargs):
+        """
+        Parameters
+        ----------
+        *args : tuple
+            args passed to the NeuralNetwork constructor
+        class_weights : dict or None
+            a dict of {class: weight} or None
+        **kwargs : dict
+            kwargs passed to the NeuralNetwork constructor
+        """
         super().__init__(*args, **kwargs)
         if class_weights is None:
             self.class_weights = None

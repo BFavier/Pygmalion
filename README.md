@@ -121,7 +121,7 @@ The neural network models all share some common attributes:
 
 The classifier neural networks have an additional attribute:
 
-* The **class_weights** parameters is a list of float weighting each class in the loss function. The order is the same as the **self.classes** attribute
+* The **class_weights** parameters is a dict of {class: weight}.
 
 All these attributes are key word arguments of the constructors, and can also be accessed/modified as an attribute of the model after creation.
 
