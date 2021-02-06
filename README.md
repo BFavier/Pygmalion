@@ -167,7 +167,8 @@ If you restart training by calling **train** a second time, it will starts back 
 ### **DenseRegressor**
 
 A dense regressor (or multi layer perceptron regressor) predicts a scalar value given an input of several variables.
-This implementation takes in input **x** a pandas.DataFrame of numerical observations, and predict a, **y** numpy.ndarray of floats of the same length. The optional **weights** are numpy.ndarray of floats.
+
+This implementation takes in input **x** a pandas.DataFrame of numerical observations, and returns **y** a numpy.ndarray of floats of the same length. The optional **weights** weighting of the observations during training are numpy.ndarray of floats.
 
 It is implemented as a sucession of hidden **Activated0d** layers (linear weighting/non linear activation/batch normalization) and a final linear weighting to reduces the number of features to one scalar prediction.
 
@@ -182,7 +183,15 @@ def __init__(self, inputs: List[str],
 ~~~
 
 * The **inputs** argument is a list of str, the name of the columns to use as inputs in dataframes
-* The **hidden_layers** argument is a list of dict
+* The **hidden_layers** argument is a list of dict passed as kwargs to the **Activated0d** layers:
+    * The **channels** kwarg is the number of features in the layer
+    * The **activation** kwarg is the string name of the activation function
+    * The **dropout** kwarg (either None or a float between 0 and 1) is dropout rate applied on the channels.
+    * The **bias** kwarg is a boolean. If False there is no bias in the linear operation.
+    * The **stacked** kwarg is a boolean. If True the features of the input are concatenated to the output of the layer (activation and dropout are not applied to them).
+* The **activation** argument is a default value for the **activation** kwargs of the layers
+* The **stacked** argument is a default value for the **stacked** kwargs of the layers
+* The **dropout** argument is a default value for the **dropout** kwargs of the layers
 
 Here below an example of model architecture:
 
@@ -191,19 +200,30 @@ Here below an example of model architecture:
 >>>                  columns=["A", "B", "C", "D"])
 >>> y = x["A"] - 10*x["B"]**2 + np.maximum(x["C"], x["D"])
 >>> hidden_layers = [{"channels": 4, "stacked": True},
->>>                  {"channels": 8, "stacked": True, "dropout": 0.2},
+>>>                  {"channels": 16, "stacked": True, "dropout": 0.2},
 >>>                  {"channels": 16, "dropout": 0.5}]
 >>> model = nn.DenseRegressor(x.columns, hidden_layers, learning_rate=1.0E-3, GPU=False)
->>> model.train((x, y), n_epcohs=1000, patience=100)
->>> ml.plot_correlation(model(x), y)
+>>> model.train((x, y), n_epochs=1000, patience=100)
 ~~~
 
 ### **DenseClassifier**
 
-A dense classifier (or multi layer perceptron classifier) predicts a scalar value given an input of several variables.
-This implementation takes in input **x** a pandas.DataFrame of numerical observations, and predict a, **y** numpy.ndarray of floats of the same length. The optional **weights** are numpy.ndarray of floats.
+A dense classifier (or multi layer perceptron classifier) predicts a str class value given an input of several variables.
 
-It is implemented as a sucession of hidden **Activated0d** layers (linear weighting/non linear activation/batch normalization) and a final linear weighting to reduces the number of features to one scalar prediction.
+This implementation takes in input **x** a pandas.DataFrame of numerical observations, and returns **y** list of str of the same length. The optional **weights** weighting of the observations during training are numpy.ndarray of floats.
+
+Similarly to the DenseRegressor it is a succession of hidden **Activated0d** layers, and a final linear layer with as much output as there are classes to predict.
+
+The args and kwargs passed to the underlying pytorch Module are mostly the same as the DenseRegressor:
+
+~~~python
+>>> def __init__(self, inputs: List[str], classes: List[str],
+>>>              hidden_layers: List[dict],
+>>>              activation: str = "relu", stacked: bool = False,
+>>>              dropout: Union[float, None] = None):
+~~~
+
+The only addition is the **classes** argument, which is a list of the unique str classes the model can classify into.
 
 ### **ImageClassifier**
 
