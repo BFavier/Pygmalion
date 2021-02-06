@@ -27,7 +27,7 @@ class ImageClassifierModule(torch.nn.Module):
                  classes: List[str],
                  convolutions: Union[List[dict], List[List[dict]]],
                  pooling: List[Tuple[int, int]],
-                 dense: List[dict] = [],
+                 dense: List[dict],
                  pooling_type: str = "max",
                  padded: bool = True,
                  activation: str = "relu",
@@ -40,10 +40,11 @@ class ImageClassifierModule(torch.nn.Module):
             the number of channels in the input images
         class : list of str
             the unique classes the model can predict
-        downsampling : list of [dict / list of dict]
+        convolutions : list of [dict / list of dict]
             the kwargs for the 'Activated2d' layers for all 'downsampling'
         pooling : list of [int / tuple of int]
             the pooling window of all downsampling layers
+            (excepted the last one which is an overall pool)
         dense : list of dict
             the kwargs for the 'Activated0d' of the final 'Dense1d' layer
         pooling_type : one of {'max', 'avg'}
@@ -58,17 +59,16 @@ class ImageClassifierModule(torch.nn.Module):
             the default value for the 'dropout' key of the kwargs
         """
         super().__init__()
-        assert len(convolutions) == len(pooling)
+        assert len(pooling) == len(convolutions) - 1
         self.classes = list(classes)
         self.input_norm = BatchNorm2d(in_channels)
-        self.encoder = Encoder2d(in_channels, convolutions, pooling,
+        self.encoder = Encoder2d(in_channels, convolutions, pooling+[None],
                                  pooling_type=pooling_type,
                                  padded=padded,
                                  activation=activation,
                                  stacked=stacked,
                                  dropout=dropout)
         in_channels = self.encoder.out_channels(in_channels)
-        self.final_pool = Pooling2d(None, pooling_type)
         self.dense = Dense0d(in_channels, dense, activation=activation,
                              stacked=stacked, dropout=dropout)
         in_channels = self.dense.out_channels(in_channels)
@@ -77,7 +77,6 @@ class ImageClassifierModule(torch.nn.Module):
     def forward(self, X: torch.Tensor):
         X = self.input_norm(X)
         X = self.encoder(X)
-        X = self.final_pool(X)
         X = self.dense(X)
         return self.output(X)
 
@@ -106,7 +105,6 @@ class ImageClassifierModule(torch.nn.Module):
                 "classes": list(self.classes),
                 "input norm": self.input_norm.dump,
                 "encoder": self.encoder.dump,
-                "final pool": self.final_pool.dump,
                 "dense": self.dense.dump,
                 "output": self.output.dump}
 

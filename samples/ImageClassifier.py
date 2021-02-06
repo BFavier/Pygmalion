@@ -27,7 +27,7 @@ conv = [[{"window": (3, 3), "channels": 16, "dropout": 0.2, "padded": False},
          {"window": (3, 3), "channels": 32, "dropout": 0.2}],
         [{"window": (3, 3), "channels": 64, "dropout": 0.2, "padded": False},
          {"window": (3, 3), "channels": 64, "dropout": 0.2}]]
-pooling = [(2, 2), (2, 2), (2, 2)]
+pooling = [(2, 2), (2, 2)]
 dense = [{"channels": 32, "dropout": 0.2}, {"channels": 16, "dropout": 0.2}]
 model = nn.ImageClassifier(in_channels, classes,
                            convolutions=conv,

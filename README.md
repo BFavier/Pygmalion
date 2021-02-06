@@ -193,19 +193,6 @@ def __init__(self, inputs: List[str],
 * The **stacked** argument is a default value for the **stacked** kwargs of the layers
 * The **dropout** argument is a default value for the **dropout** kwargs of the layers
 
-Here below an example of model architecture:
-
-~~~python
->>> x = pd.DataFrame(np.random.uniform(size=(1000, 4)), 
->>>                  columns=["A", "B", "C", "D"])
->>> y = x["A"] - 10*x["B"]**2 + np.maximum(x["C"], x["D"])
->>> hidden_layers = [{"channels": 4, "stacked": True},
->>>                  {"channels": 16, "stacked": True, "dropout": 0.2},
->>>                  {"channels": 16, "dropout": 0.5}]
->>> model = nn.DenseRegressor(x.columns, hidden_layers, learning_rate=1.0E-3, GPU=False)
->>> model.train((x, y), n_epochs=1000, patience=100)
-~~~
-
 ### **DenseClassifier**
 
 A dense classifier (or multi layer perceptron classifier) predicts a str class value given an input of several variables.
@@ -226,6 +213,46 @@ The args and kwargs passed to the underlying pytorch Module are mostly the same 
 The only addition is the **classes** argument, which is a list of the unique str classes the model can classify into.
 
 ### **ImageClassifier**
+
+An ImageClassifier predicts a str class given as input an image. Here below the predictions of a model trained on the fashion-MNIST dataset. You can see at the 2nd row 3rd column, it missclassified a very square pullover as a hand bag.
+
+![fashion-MNIST predictions](images/Fashion_MNIST_illustration.png)
+
+It is implemented as a Convolutional Neural Network similar to LeNet.
+
+The args and kwargs passed to the underlying pytorch Module are:
+
+~~~python
+>>> def __init__(self, in_channels: int,
+>>>              classes: List[str],
+>>>              convolutions: Union[List[dict], List[List[dict]]],
+>>>              pooling: List[Tuple[int, int]],
+>>>              dense: List[dict],
+>>>              pooling_type: str = "max",
+>>>              padded: bool = True,
+>>>              activation: str = "relu",
+>>>              stacked: bool = False,
+>>>              dropout: Union[float, None] = None):
+~~~
+
+* The **in_channels** argument is the number of channels in the input images (1 for grayscale, 3 for RGB, 4 for RGBA, ...)
+* The **classes** argument is a list of the unique str classes the model can classify into.
+* The **convolutions** argument is a list of list of dict. Each item in the list is a pooling stage. Before pooling a succession of **Activated2d** layers are applied. The dict contains the kwargs passed to the **Activated0d**:
+    * The **channels** kwarg is the number of channels as output of the convolution
+    * The **window** kwarg is a tuple of (height, width) integers, defining the size of the convolution window
+    * The **stride** kwarg is a tuple of (dy, dx) integers, defining the steps performed by the window
+    * The **padded** kwarg is a boolean. If True the input feature map is padded to have the same (height, width) after the convolution
+    * The **activation** kwarg is the string name of the activation function
+    * The **dropout** kwarg (either None or a float between 0 and 1) is the dropout rate applied on the channels.
+    * The **bias** kwarg is a boolean. If False there is no bias in the convolution operations.
+    * The **stacked** kwarg is a boolean. If True the input feature map is downsampled (if some stride is used) and concatenated to the output of the layer (activation and dropout are not applied to the downsampled input).
+* The **pooling** argument is a list of (height, width) tuples, defining the pooling window at eahc pooling stage. The last pooling window is an over-all pooling and so must not be included.
+* The **dense** argument is a list of kwargs used to create a **Dense0d** layer (similar to the hidden layers of a DenseRegressor). This is used to further process the single pixel feature maps output of the previous stage.
+* The **pooling_type** argument is the type of pooling performed. It must be one of {"max", "avg"} for max pooling and average pooling.
+* The **padded** argument is a default value for the **padded** kwargs of the layers
+* The **activation** argument is a default value for the **activation** kwargs of the layers
+* The **stacked** argument is a default value for the **stacked** kwargs of the layers
+* The **dropout** argument is a default value for the **dropout** kwargs of the layers
 
 ### **SemanticSegmenter**
 
