@@ -16,7 +16,10 @@ class NeuralNetworkClassifier(NeuralNetwork):
 
     def __init__(self, *args, class_weights=None, **kwargs):
         super().__init__(*args, **kwargs)
-        self.class_weights = [class_weights[c] for c in self.classes]
+        if class_weights is None:
+            self.class_weights = None
+        else:
+            self.class_weights = [class_weights[c] for c in self.classes]
 
     def index(self, X) -> np.ndarray:
         """

@@ -3,7 +3,7 @@
 Pygmalion in the greek mythologie is a sculptor that fell in love with one of his creations.
 In the myth, Aphrodite gives life to Galatea, the sculpture he fell in love with.
 
-This package is a machine learning library. It contains all the tools you need to give a mind of their own to inanimate objects.
+This package is a machine learning library. It contains all the tools you need to give a mind of their own to inanimate computers.
 
 ## installing pygmalion
 
@@ -15,16 +15,22 @@ pip install pygmalion
 
 ## Fast prototyping with pygmalion
 
-Architectures for several common machine learning tasks are implemented in this package.
-The inputs and outputs of the model are common python object (such as numpy array and pandas dataframes)
+Architectures for several common machine learning tasks (regression, image classification, ...) are implemented in this package.
 
-You can download a dataset and split it with the **split** function.
+The inputs and outputs of the model are common python object (such as numpy array and pandas dataframes) so that the learning curve is not too steep.
+
+In this part we are going to see how to load a dataset, train a model, and display some metrics. As a first step you can import the following packages.
 
 ~~~python
 >>> import pygmalion as ml
 >>> import pygmalion.neural_networks as nn
 >>> import pandas as pd
 >>> import matplotlib.pyplot as plt
+~~~
+
+You can download a dataset and split it with the **split** function.
+
+~~~python
 >>> ml.datasets.boston_housing("./")
 >>> df = pd.read_csv("./boston_housing.csv")
 >>> x, y = df[[c for c in df.columns if c != "medv"]], df["medv"]
@@ -32,7 +38,7 @@ You can download a dataset and split it with the **split** function.
 >>> train_data, val_data = ml.split(data, frac=0.1)
 ~~~
 
-Creating and training a model is done in a few lines.
+Creating and training a model is done in a few lines of code.
 
 ~~~python
 >>> hidden_layers = [{"channels": 8}, {"channels": 8}]
@@ -40,7 +46,9 @@ Creating and training a model is done in a few lines.
 >>> model.train(train_data, val_data, n_epochs=1000, patience=100)
 ~~~
 
-Some usefull metric can easily be evaluated/displayed.
+Some usefull metrics can easily be evaluated.
+
+For a regressor model, the available metrics are [**MSE**](https://en.wikipedia.org/wiki/Mean_squared_error), [**RMSE**](https://en.wikipedia.org/wiki/Root-mean-square_deviation), [**R²**](https://en.wikipedia.org/wiki/Coefficient_of_determination), and the correlation between target and prediction can be visualized with the **plot_correlation** function.
 
 ~~~python
 >>> f, ax = plt.subplots()
@@ -49,30 +57,54 @@ Some usefull metric can easily be evaluated/displayed.
 >>> x_val, y_val = val_data
 >>> ml.plot_correlation(model(x_val), y_val, ax=ax, label="validation")
 >>> x_test, y_test = test_data
->>> ml.plot_correlation(model(x_test), y_test, ax=ax, label="testing")
->>> ax.set_title(f"R²={ml.R2(model(x_test), y_test):.3g}")
+>>> ml.plot_correlation(model(x_test), y_test, ax=ax, label="testing", color="C3")
+>>> R2 = ml.R2(model(x_test), y_test)
+>>> ax.set_title(f"R²={R2:.3g}")
 >>> plt.show()
 ~~~
 
 ![pairplot](images/boston_housing_pairplot.png)
 
-All the models can be be saved to the disk in json format with the **save** method.
-A model saved on the disk can then be loaded back with the **load** class method.
+
+For a classifier model you can evaluate the [**accuracy**](https://en.wikipedia.org/wiki/Accuracy_and_precision#In_binary_classification), and display the confusion matrix.
 
 ~~~python
->>> import numpy as np
->>> model.save("./model.json")
->>> y1 = model(x)
->>> model = nn.DenseRegressor.load("./model.json")
->>> y2 = model(x)
->>> print(np.allclose(y1 - y2))
+>>> ml.datasets.iris("./")
+>>> df = pd.read_csv("./iris.csv")
+>>> x, y = df[[c for c in df.columns if c != "variety"]], df["variety"]
+>>> inputs, classes = x.columns(), y.unique()
+>>> hidden_layers = [{"channels": 5},
+>>>                  {"channels": 5},
+>>>                  {"channels": 5}]
+>>> model = nn.DenseClassifier(inputs, classes,
+>>>                            hidden_layers=hidden_layers, >>>                            activation="elu")
+>>> data, test_data = ml.split((x, y), frac=0.2)
+>>> train_data, val_data = ml.split(data, frac=0.1)
+>>> model.train(train_data, val_data, n_epochs=1000, patience=100)
+>>> f, ax = plt.subplots()
+>>> x_test, y_test = test_data
+>>> ml.plot_confusion_matrix(model(x), y, ax=ax)
+>>> acc = ml.accuracy(y_pred, y)*100
+>>> ax.set_title(f"Accuracy: {acc:.2f}%")
+>>> plt.tight_layout()
+>>> plt.show()
 ~~~
 
-The model state can be dumped as a dictionnary through the **dump** property. A copy of the model can be loaded with the 
+![confusion matrix](images/iris_confusion_matrix.png)
+
+All the models can be dumped as a dictionnary through the **dump** property. A copy of the model can be loaded with the **from_dump** class method.
 
 ~~~python
 >>> dump = model.dump
 >>> model = nn.DenseRegressor.from_dump(dump)
+~~~
+
+The models can also be be saved directly to the disk in json format with the **save** method.
+A model saved on the disk can then be loaded back with the **load** class method.
+
+~~~python
+>>> model.save("./model.json")
+>>> model = nn.DenseRegressor.load("./model.json")
 ~~~
 
 ## Implemented models
@@ -89,6 +121,19 @@ The neural network models all share some common attributes:
 * The **L1**/**L2** attribute is the L1/L2 penalization factor used during training.
 * The **residuals** attribute is a dict containing the training and validation loss.
 
+The **train** method is used to train the neural networks model. The prototype of the method is: 
+
+~~~python
+def train(self, training_data: Union[tuple, Callable],
+          validation_data: Union[tuple, Callable, None] = None,
+          n_epochs: int = 1000,
+          patience: int = 100,
+          verbose: bool = True,
+          L_minibatchs: Union[int, None] = None):
+~~~
+
+The parameter **training_data**, which must be a tuple of (x, y) or (x, y, weight) for weighted observations. The types of x/y/weights depends on the model types. It can also be a function that yields the data. This is usefull if the data don't fit all at once in the memory, in which case the 
+
 The history of the loss can be plotted using the **plot_residuals** method.
 
 ~~~python
@@ -101,8 +146,6 @@ The history of the loss can be plotted using the **plot_residuals** method.
 ![residuals](images/boston_housing_residuals.png)
 
 The black line represents the epoch for which the validation loss was the lowest. At each epoch the state of the model is saved if the validation loss has improved. The training stops when the model trained for **n_epochs**, or when the validation loss has not improved for **patience** epochs. After what the last saved state is loaded.
-
-The **train** method is used to train the neural networks model. It can be called several times and will restart from where it stopped. The **train** methods takes one argument: **training_data**, which must be a tuple of (x, y) or (x, y, weight) for weighted observations. The types of x/y/weights depends on the model types.
 
 1. **DenseRegressor**
 

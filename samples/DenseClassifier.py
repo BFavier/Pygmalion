@@ -27,7 +27,7 @@ hidden_layers = [{"channels": 5},
 model = nn.DenseClassifier(inputs, classes, hidden_layers=hidden_layers,
                            activation="elu")
 train_data, val_data = ml.split(data, frac=0.1)
-model.train(train_data, val_data, n_epochs=2000)
+model.train(train_data, val_data, n_epochs=1000)
 
 # Plot results
 model.plot_residuals()
