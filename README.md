@@ -1,11 +1,7 @@
-# Pygmalion
-
 Pygmalion in the greek mythologie is a sculptor that fell in love with one of his creations.
-In the myth, Aphrodite gives life to Galatea, the sculpture he fell in love with.
+In the myth, Aphrodite gives life to Galatea, the sculpture he fell in love with. This package is a machine learning library. It contains all the tools you need to give a mind of their own to inanimate objects.
 
-This package is a machine learning library. It contains all the tools you need to give a mind of their own to inanimate computers.
-
-## installing pygmalion
+# installing pygmalion
 
 pygmalion can be installed through pip.
 
@@ -13,11 +9,11 @@ pygmalion can be installed through pip.
 pip install pygmalion
 ~~~
 
-## Fast prototyping with pygmalion
+# Fast prototyping of models with pygmalion
 
 Architectures for several common machine learning tasks (regression, image classification, ...) are implemented in this package.
 
-The inputs and outputs of the model are common python object (such as numpy array and pandas dataframes) so that the learning curve is not too steep.
+The inputs and outputs of the models are common python objects (such as numpy array and pandas dataframes) so there are very few new things you need to learn to use this package.
 
 In this part we are going to see how to load a dataset, train a model, and display some metrics. As a first step you can import the following packages.
 
@@ -25,6 +21,7 @@ In this part we are going to see how to load a dataset, train a model, and displ
 >>> import pygmalion as ml
 >>> import pygmalion.neural_networks as nn
 >>> import pandas as pd
+>>> import numpy as np
 >>> import matplotlib.pyplot as plt
 ~~~
 
@@ -107,19 +104,27 @@ A model saved on the disk can then be loaded back with the **load** class method
 >>> model = nn.DenseRegressor.load("./model.json")
 ~~~
 
-## Implemented models
+# Implemented models
 
-### Neural networks
+## Neural networks
 
 The neural network models all share some common attributes:
 
-* The **module** attribute is the underlying pytorch Module object.
-* The **GPU** attribute is a boolean defining if the model must be evaluated on CPU or GPU.
-* The **norm_update_factor** attribute is the factor used to update the batch normalization running mean and variance.
+* The **GPU** attribute is a boolean defining if the model must be trained/evaluated on GPU. This is only avilable with a CUDA capable GPU. This can massively speed up training/evaluation speed on big models (image analysis, ...).
 * The **learning_rate** attribute is the learning rate used during training.
 * The **optimization_method** attributes is the string name of the torch.optim optimizer used during training.
 * The **L1**/**L2** attribute is the L1/L2 penalization factor used during training.
-* The **residuals** attribute is a dict containing the training and validation loss.
+* The **residuals** attribute is a dict containing the training and validation loss history.
+* The **norm_update_factor** attribute is the factor used to update the batch normalization running mean and variance. The default value is mostly always ok, unless you do a lot of batchs/minibatchs where it might benefit to getting reduced.
+
+The classifier neural networks have an additional attribute:
+
+* The **class_weights** parameters is a list of float weighting each class in the loss function. The order is the same as the **self.classes** attribute
+
+All these attributes are key word arguments of the constructors, and can also be accessed/modified as an attribute of the model after creation.
+
+The neural networks are implemented in pytorch under the hood.
+The underlying pytorch Module and Optimizer can be accessed as the **model** and **optimizer** attributes of the model.
 
 The **train** method is used to train the neural networks model. The prototype of the method is: 
 
@@ -132,7 +137,17 @@ def train(self, training_data: Union[tuple, Callable],
           L_minibatchs: Union[int, None] = None):
 ~~~
 
-The parameter **training_data**, which must be a tuple of (x, y) or (x, y, weight) for weighted observations. The types of x/y/weights depends on the model types. It can also be a function that yields the data. This is usefull if the data don't fit all at once in the memory, in which case the 
+* The parameter **training_data** must be a tuple of (x, y, [weight]). The weight is optional. The types of x/y/weights depends on the model types. Training_data can also be a function that yields by batch all the (x, y, [weights]) tuples of an epoch. The weights of the model are updated at the end of the epoch. This is usefull if the training data doesn't fit all at once in the memory. Reading from the disk/writting to the GPU memory is slow, avoid using batchs if you can.
+
+* The parameter **validation_data** is similar to **training_data**. This is the data on which the loss is evaluated, but not back propagated (the model doesn't learn from it). It is used for early stopping: the training stops if the validation loss doesn't improve anymore (to prevent overfitting). This parameter is optional, so that you can verify that your model is able to overfit before trying to train it with early stopping.
+
+* The parameter **n_epochs** is the maximum number of epochs the model performs. Althought the user can still interupt the training early on by pressing ctrl+c (the raised exception is handled and the training simply stops).
+
+* The **patience** parameter is the number of epoch without improvement of the validation loss after which the early stopping triggers.
+
+* The **verbose** parameter describes whether ther train/validation loss shoudl be printed at eahc epoch.
+
+* If the **L_minibatchs** parameter is not None, training is performed with mini-batching. And the maximum size of the minibatchs is **L_minibatchs** observations. Minibatchs are essential to train big models on limited memory. The model retains all the intermediate results as it needs them to propagate back the gradient. These intermediate results often occupy much more memory than the inputs/targets. You can save memory by performing minibatchs: the model is evaluated on subsets of the training data at once. Minibatchs slows down training and should not be used if there is enough memory to evaluate the model on the whole epoch at once. Using minibatchs is faster than batchs because the data is not loaded back and forth between disk/RAM/VRAM. Althought the two can be used together if the training data alone doesn't fit in memory. You can then be faster by using bigger batchs with severals minibatchs than batching alone.
 
 The history of the loss can be plotted using the **plot_residuals** method.
 
@@ -145,22 +160,54 @@ The history of the loss can be plotted using the **plot_residuals** method.
 
 ![residuals](images/boston_housing_residuals.png)
 
-The black line represents the epoch for which the validation loss was the lowest. At each epoch the state of the model is saved if the validation loss has improved. The training stops when the model trained for **n_epochs**, or when the validation loss has not improved for **patience** epochs. After what the last saved state is loaded.
+The black line represents the epoch for which the validation loss was the lowest. At each epoch the state of the model is checkpointed if the validation loss has improved. And at the end of the training the last best state is loaded back.
 
-1. **DenseRegressor**
+If you restart training by calling **train** a second time, it will starts back from the black line. Model dumped to a dict or saved to the disk are saved with the weights, the optimizer internal parameters, and the gradient. So you can restart your training from where you stopped it without jumps in the loss.
+
+### **DenseRegressor**
 
 A dense regressor (or multi layer perceptron regressor) predicts a scalar value given an input of several variables.
-This implementation takes in input a dataframe of numerical observations, and predict a numpy array of the same length.
+This implementation takes in input **x** a pandas.DataFrame of numerical observations, and predict a, **y** numpy.ndarray of floats of the same length. The optional **weights** are numpy.ndarray of floats.
 
-It is implemented as a sucession of hidden **Activated0d** layers (linear weighting/non linear activation/batch normalization) and a final linear weighting.
+It is implemented as a sucession of hidden **Activated0d** layers (linear weighting/non linear activation/batch normalization) and a final linear weighting to reduces the number of features to one scalar prediction.
 
-2. **DenseClassifier**
+The args and kwargs passed to the underlying pytorch Module are:
 
-A dense classifier is a 
+~~~python
+def __init__(self, inputs: List[str],
+             hidden_layers: List[dict],
+             activation: str = "relu",
+             stacked: bool = False,
+             dropout: Union[float, None] = None)
+~~~
 
-3. **ImageClassifier**
+* The **inputs** argument is a list of str, the name of the columns to use as inputs in dataframes
+* The **hidden_layers** argument is a list of dict
 
-4. **SemanticSegmenter**
+Here below an example of model architecture:
+
+~~~python
+>>> x = pd.DataFrame(np.random.uniform(size=(1000, 4)), 
+>>>                  columns=["A", "B", "C", "D"])
+>>> y = x["A"] - 10*x["B"]**2 + np.maximum(x["C"], x["D"])
+>>> hidden_layers = [{"channels": 4, "stacked": True},
+>>>                  {"channels": 8, "stacked": True, "dropout": 0.2},
+>>>                  {"channels": 16, "dropout": 0.5}]
+>>> model = nn.DenseRegressor(x.columns, hidden_layers, learning_rate=1.0E-3, GPU=False)
+>>> model.train((x, y), n_epcohs=1000, patience=100)
+>>> ml.plot_correlation(model(x), y)
+~~~
+
+### **DenseClassifier**
+
+A dense classifier (or multi layer perceptron classifier) predicts a scalar value given an input of several variables.
+This implementation takes in input **x** a pandas.DataFrame of numerical observations, and predict a, **y** numpy.ndarray of floats of the same length. The optional **weights** are numpy.ndarray of floats.
+
+It is implemented as a sucession of hidden **Activated0d** layers (linear weighting/non linear activation/batch normalization) and a final linear weighting to reduces the number of features to one scalar prediction.
+
+### **ImageClassifier**
+
+### **SemanticSegmenter**
 
 
 
