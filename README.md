@@ -106,6 +106,8 @@ A model saved on the disk can then be loaded back with the **load** class method
 
 # Implemented models
 
+For examples of model training see the **samples** folder in the [github page](https://github.com/BFavier/Pygmalion).
+
 ## Neural networks
 
 The neural network models all share some common attributes:
