@@ -42,10 +42,9 @@ class Decoder(torch.nn.Module):
         dense_layers : list of [dict / list of dict]
             the kwargs for the Dense layer for each
         upsampling_factors : list of [int / tuple of int]
-            the window size of the pooling layers
-            can be omited if pooling_type is None
+            The upsampling factor of each layer
         upsampling_method : one of {"nearest", "interpolate"}
-            The type of pooling to perform
+            The method used to unpool
         padded : bool
             default value for "padded" in the 'dense_layers' kwargs
         stacked : bool
