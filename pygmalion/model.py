@@ -9,7 +9,7 @@ class Model:
     @classmethod
     def load(cls, file: str) -> object:
         """
-        Load a model from the disk
+        Load a model from the disk (must be a .json or .h5)
 
         Parameters
         ----------
@@ -17,11 +17,27 @@ class Model:
             path of the file to read
         """
         file = pathlib.Path(file)
+        suffix = file.suffix.lower()
         if not file.is_file():
             raise FileNotFoundError("The file '{file}' does not exist")
-        with open(file) as json_file:
-            dump = json.load(json_file)
+        if suffix == ".json":
+            with open(file) as json_file:
+                dump = json.load(json_file)
+        elif suffix == ".h5":
+            f = h5py.File(file, "r")
+            dump = cls._load_h5(f)
+        else:
+            raise ValueError("The file must be '.json' or '.h5' file, "
+                             f"but got a '{suffix}'")
         return cls.from_dump(dump)
+
+    @classmethod
+    def from_dump(cls, dump: dict) -> object:
+        """
+        Return an object from a dump
+        """
+        raise NotImplementedError("Not implemented for class "
+                                  f"'{cls.__name__}'")
 
     def save(self, file: str, overwrite: bool = False):
         """
@@ -46,40 +62,77 @@ class Model:
             with open(file, "w") as json_file:
                 json.dump(self.dump, json_file)
         elif suffix == ".h5":
-            f = h5py.File(file, "w")
-            self._populate_h5(f, self.dump)
+            f = h5py.File(file, "w", track_order=True)
+            self._save_h5(f, self.dump)
         else:
             raise ValueError("The model must be saved as a '.json' "
                              f"or '.h5' file, but got '{suffix}'")
 
-    def _populate(self, group: h5py.Group, obj: object):
+    @property
+    def dump(self) -> object:
+        """Returns a dictionnary representation of the model"""
+        raise NotImplementedError("Not implemented for class "
+                                  f"'{type(self).__name__}'")
+
+    @classmethod
+    def _save_h5(cls, group: h5py.Group, obj: object):
         """
         Recursively populate an hdf5 file with the object
 
         Parameters
         ----------
         group : h5py.Group
-            an hdf5 group
-
-        h5file
+            An hdf5 group (or the opened file)
+        obj : object
+            The python object to store in the group
         """
         if isinstance(obj, dict):
-            group.attrs["type": "dict"]
+            group.attrs["type"] = "dict"
             for key, value in obj.items():
                 g = group.create_group(key, track_order=True)
-                self._populate(g, value)
+                cls._save_h5(g, value)
         elif isinstance(obj, list):
             try:  # Try converting to numpy array
                 arr = np.array(obj, dtype=float)
-            except ValueError:  # must be saved as a list
-                group.attrs["type": "list"]
+            except BaseException:  # must be saved as a list
+                group.attrs["type"] = "list"
                 for i, value in enumerate(obj):
                     g = group.create_group(f"{i}")
-                    self._populate(g, value)
+                    cls._save_h5(g, value)
             else:  # save the numpy array as a dataset
-                group.attrs["type": "binary"]
+                group.attrs["type"] = "binary"
                 group["data"] = arr
-        elif any(isinstance(obj, t) for t in [float, int]):
-            pass
+        elif any(isinstance(obj, t) for t in [float, int, bool]):
+            group.attrs["type"] = "binary"
+            group["data"] = obj
+        elif obj is None:
+            group.attrs["type"] = "None"
         else:
             ValueError(f"Unsupported data type of '{key}': {type(obj)}")
+
+    @classmethod
+    def _load_h5(cls, group: h5py.Group) -> object:
+        """
+        Recursively load the content of an hdf5 file into a python object.
+
+        Parameters
+        ----------
+        group : h5py.Group
+            An hdf5 group (or the opened file)
+
+        Returns
+        -------
+        object
+            The python object
+        """
+        group_type = group.attrs["type"]
+        if group_type == "dict":
+            return {name: cls._load_h5(group[name]) for name in group}
+        elif group_type == "list":
+            return [cls._load_h5(group[name]) for name in group]
+        elif group_type == "None":
+            return None
+        elif group_type == "binary":
+            return group["data"][...].tolist()
+        else:
+            raise ValueError(f"Unknown group type '{group_type}'")
