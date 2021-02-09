@@ -15,6 +15,7 @@ class SemanticSegmenterModule(torch.nn.Module):
     def from_dump(cls, dump):
         assert cls.__name__ == dump["type"]
         obj = cls.__new__(cls)
+        torch.nn.Module.__init__(obj)
         obj.colors = dump["colors"]
         obj.classes = dump["classes"]
         obj.input_norm = BatchNorm2d.from_dump(dump["input norm"])

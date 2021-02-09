@@ -1,7 +1,7 @@
 Pygmalion in the greek mythologie is a sculptor that fell in love with one of his creations.
 In the myth, Aphrodite gives life to Galatea, the sculpture he fell in love with. This package is a machine learning library. It contains all the tools you need to give a mind of their own to inanimate objects.
 
-# installing pygmalion
+# Installing pygmalion
 
 pygmalion can be installed through pip.
 
@@ -216,7 +216,7 @@ The only addition is the **classes** argument, which is a list of the unique str
 
 ### **ImageClassifier**
 
-An ImageClassifier predicts a str class given as input an image. Here below the predictions of a model trained on the fashion-MNIST dataset. You can see at the 2nd row 3rd column, it missclassified a very square pullover as a hand bag.
+An ImageClassifier predicts a str class given as input an image. Here below the predictions of a model trained on the fashion-MNIST dataset. You can see at the 2nd row 3rd column, it missclassified pullover as a hand bag.
 
 ![fashion-MNIST predictions](images/Fashion_MNIST_illustration.png)
 

@@ -13,7 +13,11 @@ class UNet(torch.nn.Module):
     @classmethod
     def from_dump(cls, dump: dict) -> object:
         cls = globals()[dump["type"]]
-        return cls.from_dump(dump)
+        obj = cls.__new__(cls)
+        torch.nn.Module.__init__(obj)
+        obj.encoder = cls.EncoderNd.from_dump(dump["encoder"])
+        obj.decoder = cls.DecoderNd.from_dump(dump["decoder"])
+        return obj
 
     def __init__(self, in_channels: int,
                  downsampling: List[Union[dict, List[dict]]],

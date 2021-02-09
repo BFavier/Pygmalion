@@ -10,7 +10,7 @@ class Dense(torch.nn.Module):
 
     @classmethod
     def from_dump(cls, dump: dict) -> object:
-        assert cls.__name__ == dump["type"]
+        cls = globals()[dump["type"]]
         obj = cls.__new__(cls)
         torch.nn.Module.__init__(obj)
         obj.layers = torch.nn.ModuleList()

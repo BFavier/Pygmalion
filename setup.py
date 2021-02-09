@@ -14,11 +14,12 @@ setuptools.setup(
     long_description=long_description,
     long_description_content_type="text/markdown",
     install_requires=[
-        "pandas>=0.25",
+        "pandas>=1.0",
         "numpy>=1.18",
-        "torch>=1.2",
+        "torch>=1.6",
         "requests>=2.25",
-        "matplotlib>=3.2"
+        "matplotlib>=3.2",
+        "h5py>=3.1"
     ],
     python_requires='>=3.6',
     url="https://github.com/BFavier/Pygmalion",

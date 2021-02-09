@@ -1,7 +1,6 @@
 import torch
 import pandas as pd
 import numpy as np
-import torch.nn.functional as F
 from typing import List, Union
 from .layers import BatchNorm1d, Linear, Dense0d
 from .conversions import dataframe_to_tensor, classes_to_tensor, \
@@ -16,6 +15,7 @@ class DenseClassifierModule(torch.nn.Module):
     def from_dump(cls, dump):
         assert cls.__name__ == dump["type"]
         obj = cls.__new__(cls)
+        torch.nn.Module.__init__(obj)
         obj.inputs = dump["inputs"]
         obj.classes = dump["classes"]
         obj.input_norm = BatchNorm1d.from_dump(dump["input norm"])
@@ -68,7 +68,7 @@ class DenseClassifierModule(torch.nn.Module):
                        ) -> tuple:
         x = dataframe_to_tensor(X, self.inputs, self.device)
         y = None if Y is None else classes_to_tensor(Y, self.classes,
-                                                        self.device)
+                                                     self.device)
         w = None if weights is None else floats_to_tensor(weights, self.device)
         return x, y, w
 

@@ -19,6 +19,7 @@ class BatchNorm:
         obj.momentum = dump["momentum"]
         obj.affine = dump["affine"]
         obj.eps = dump["eps"]
+        obj.track_running_stats = dump["track running stats"]
         obj.running_mean = torch.tensor(dump["running mean"],
                                         dtype=torch.float)
         obj.running_var = torch.tensor(dump["running var"],
@@ -38,6 +39,7 @@ class BatchNorm:
                 "num features": self.num_features,
                 "running mean": self.running_mean.tolist(),
                 "running var": self.running_var.tolist(),
+                "track running stats": self.track_running_stats,
                 "momentum": self.momentum,
                 "eps": self.eps,
                 "affine": self.affine,
