@@ -18,16 +18,6 @@ class Encoder(torch.nn.Module):
             obj.stages.append(Downsampling.from_dump(d))
         return obj
 
-    @classmethod
-    def from_layers(cls, layers: List[object]):
-        obj = cls.__new__(cls)
-        torch.nn.Module.__init__(obj)
-        obj.stages = torch.nn.ModuleList()
-        for layer in layers:
-            assert isinstance(layer, cls.DownsamplingNd)
-            obj.stages.append(layer)
-        return obj
-
     def __init__(self, in_channels: int,
                  dense_layers: List[Union[dict, List[dict]]],
                  pooling_windows: List[Union[int, Tuple[int, int]]],

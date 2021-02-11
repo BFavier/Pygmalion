@@ -60,7 +60,7 @@ For a regressor model, the available metrics are [**MSE**](https://en.wikipedia.
 >>> plt.show()
 ~~~
 
-![pairplot](images/boston_housing_pairplot.png)
+![pairplot](https://raw.githubusercontent.com/BFavier/Pygmalion/main/images/boston_housing_pairplot.png)
 
 
 For a classifier model you can evaluate the [**accuracy**](https://en.wikipedia.org/wiki/Accuracy_and_precision#In_binary_classification), and display the confusion matrix.
@@ -87,7 +87,7 @@ For a classifier model you can evaluate the [**accuracy**](https://en.wikipedia.
 >>> plt.show()
 ~~~
 
-![confusion matrix](images/iris_confusion_matrix.png)
+![confusion matrix](https://raw.githubusercontent.com/BFavier/Pygmalion/main/images/iris_confusion_matrix.png)
 
 All the models can be dumped as a dictionnary through the **dump** property. A copy of the model can be loaded with the **from_dump** class method.
 
@@ -160,7 +160,7 @@ The history of the loss can be plotted using the **plot_residuals** method.
 >>> plt.show()
 ~~~
 
-![residuals](images/boston_housing_residuals.png)
+![residuals](https://raw.githubusercontent.com/BFavier/Pygmalion/main/images/boston_housing_residuals.png)
 
 The black line represents the epoch for which the validation loss was the lowest. At each epoch the state of the model is checkpointed if the validation loss has improved. And at the end of the training the last best state is loaded back.
 
@@ -218,7 +218,7 @@ The only addition is the **classes** argument, which is a list of the unique str
 
 An ImageClassifier predicts a str class given as input an image. Here below the predictions of a model trained on the fashion-MNIST dataset. You can see at the 2nd row 3rd column, it missclassified pullover as a hand bag.
 
-![fashion-MNIST predictions](images/Fashion_MNIST_illustration.png)
+![fashion-MNIST predictions](https://raw.githubusercontent.com/BFavier/Pygmalion/main/images/Fashion_MNIST_illustration.png)
 
 It is implemented as a Convolutional Neural Network similar to LeNet.
 

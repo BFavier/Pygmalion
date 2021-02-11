@@ -18,19 +18,10 @@ class Decoder(torch.nn.Module):
             obj.stages.append(Upsampling.from_dump(d))
         return obj
 
-    @classmethod
-    def from_layers(cls, layers: List[object]):
-        obj = cls.__new__(cls)
-        torch.nn.Module.__init__(obj)
-        obj.stages = torch.nn.ModuleList()
-        for layer in layers:
-            assert isinstance(layer, cls.UpsamplingNd)
-            obj.stages.append(layer)
-        return obj
-
     def __init__(self, in_channels: int,
                  dense_layers: List[Union[dict, List[dict]]],
                  upsampling_factors: List[Union[int, Tuple[int, int]]],
+                 stacked_channels: Union[None, List[int]] = None,
                  upsampling_method: str = "nearest",
                  padded: bool = True,
                  stacked: bool = False,
@@ -43,6 +34,10 @@ class Decoder(torch.nn.Module):
             the kwargs for the Dense layer for each
         upsampling_factors : list of [int / tuple of int]
             The upsampling factor of each layer
+        stacked_channels : None or list of int
+            The 'stacked_channel' parameter for each upsampling layer
+            Used for UNet architectures.
+            If None, equivalent to a list full of 0
         upsampling_method : one of {"nearest", "interpolate"}
             The method used to unpool
         padded : bool
@@ -55,12 +50,17 @@ class Decoder(torch.nn.Module):
             default value for "dropout" in the 'dense_layers' kwargs
         """
         assert len(dense_layers) == len(upsampling_factors)
+        if stacked_channels is None:
+            stacked_channels = [0]*len(dense_layers)
+        else:
+            assert len(dense_layers) == len(stacked_channels)
         super().__init__()
         self.stages = torch.nn.ModuleList()
-        for dense_layer, factor in zip(dense_layers, upsampling_factors):
-            stage = self.UpsamplingNd(in_channels, dense_layer,
-                                      upsampling_factor=factor,
+        for d, f, s in zip(dense_layers, upsampling_factors, stacked_channels):
+            stage = self.UpsamplingNd(in_channels, d,
+                                      upsampling_factor=f,
                                       upsampling_method=upsampling_method,
+                                      stacked_channels=s,
                                       padded=padded,
                                       stacked=stacked,
                                       activation=activation,
@@ -84,12 +84,12 @@ class Decoder(torch.nn.Module):
         return shape_out
 
     def in_channels(self, out_channels: int) -> int:
-        for stage in self.stage[::-1]:
+        for stage in self.stages[::-1]:
             out_channels = stage.in_channels(out_channels)
         return out_channels
 
     def out_channels(self, in_channels: int) -> int:
-        for stage in self.stage:
+        for stage in self.stages:
             in_channels = stage.out_channels(in_channels)
         return in_channels
 

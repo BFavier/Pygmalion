@@ -1,15 +1,15 @@
 import torch
 import numpy as np
 from typing import Union, List, Tuple
-from .layers import Linear, BatchNorm2d
-from .layers import Encoder2d, Pooling2d, Dense0d
+from .layers import Conv2d, BatchNorm2d
+from .layers import Encoder2d, Dense2d
 from .conversions import floats_to_tensor, tensor_to_index
 from .conversions import classes_to_tensor, images_to_tensor
 from .neural_network_classifier import NeuralNetworkClassifier
 from .loss_functions import cross_entropy
 
 
-class ImageClassifierModule(torch.nn.Module):
+class ObjectDetectorModule(torch.nn.Module):
 
     @classmethod
     def from_dump(cls, dump):
@@ -19,9 +19,8 @@ class ImageClassifierModule(torch.nn.Module):
         obj.classes = dump["classes"]
         obj.input_norm = BatchNorm2d.from_dump(dump["input norm"])
         obj.encoder = Encoder2d.from_dump(dump["encoder"])
-        obj.final_pool = Pooling2d.from_dump(dump["final pool"])
-        obj.dense = Dense0d.from_dump(dump["dense"])
-        obj.output = Linear.from_dump(dump["output"])
+        obj.dense = Dense2d.from_dump(dump["dense"])
+        obj.output = Conv2d.from_dump(dump["output"])
         return obj
 
     def __init__(self, in_channels: int,
@@ -47,7 +46,7 @@ class ImageClassifierModule(torch.nn.Module):
             the pooling window of all downsampling layers
             (excepted the last one which is an overall pool)
         dense : list of dict
-            the kwargs for the 'Activated0d' of the final 'Dense0d' layer
+            the kwargs for the 'Activated2d' of the final 'Dense2d' layer
         pooling_type : one of {'max', 'avg'}
             the type of pooling
         padded : bool
@@ -70,10 +69,10 @@ class ImageClassifierModule(torch.nn.Module):
                                  stacked=stacked,
                                  dropout=dropout)
         in_channels = self.encoder.out_channels(in_channels)
-        self.dense = Dense0d(in_channels, dense, activation=activation,
+        self.dense = Dense2d(in_channels, dense, activation=activation,
                              stacked=stacked, dropout=dropout)
         in_channels = self.dense.out_channels(in_channels)
-        self.output = Linear(in_channels, len(classes))
+        self.output = Conv2d(in_channels, len(classes), kernel_size=(1, 1))
 
     def forward(self, X: torch.Tensor):
         X = self.input_norm(X)
@@ -110,9 +109,9 @@ class ImageClassifierModule(torch.nn.Module):
                 "output": self.output.dump}
 
 
-class ImageClassifier(NeuralNetworkClassifier):
+class ObjectDetector(NeuralNetworkClassifier):
 
-    ModuleType = ImageClassifierModule
+    ModuleType = ObjectDetectorModule
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)

@@ -55,7 +55,7 @@ model.train(train_data, val_data, n_epochs=500, L_minibatchs=5)
 # f.tight_layout()
 
 # Plot results
-for x, y_t in zip(x_test, y_test):
+for x, y_t in zip(x_test[:5], y_test[:5]):
     y_p = model([x])[0]
     f, axes = plt.subplots(figsize=[15, 5], ncols=3)
     for im, ax, title in zip([x, y_p, y_t], axes,

@@ -21,6 +21,7 @@ class Upsampling(torch.nn.Module):
                  dense_layer: Union[List[dict], dict],
                  upsampling_factor: Union[int, Tuple[int, int]],
                  upsampling_method: str = "nearest",
+                 stacked_channels: int = 0,
                  **kwargs):
         """
         Parameters
@@ -33,21 +34,28 @@ class Upsampling(torch.nn.Module):
             the upsampling factor
         upsampling_method : one of {'nearest', 'interpolate'}
             the method used to unpool
+        stacked_channels : int
+            The number of channels of the Xstack argument
+            of the 'forward' method
         **kwargs
             additional kwargs passed to DenseNd
         """
         super().__init__()
         unpooling = self.UnpoolingNd(factor=upsampling_factor,
                                      method=upsampling_method)
-        dense = self.DenseNd(in_channels, dense_layer, **kwargs)
+        dense = self.DenseNd(in_channels+stacked_channels,
+                             dense_layer, **kwargs)
         self.unpooling = unpooling
+        self.stacked_channels = stacked_channels
         self.dense = dense
 
     def forward(self, X: torch.tensor,
                 Xstack: Union[torch.Tensor, None] = None) -> torch.Tensor:
         """
-        Upsample X, optionnaly concatenate Xstack to it,
-        then apply a dense layer.
+        Upsample X then apply a dense layer.
+
+        Optionnaly concatenate Xstack to X after uopsampling,
+        and before the dense layer
 
         Parameters:
         -----------
@@ -76,10 +84,10 @@ class Upsampling(torch.nn.Module):
         return self.dense.shape_out(self.pooling.shape_out(shape_in))
 
     def in_channels(self, out_channels: int) -> int:
-        return self.dense.in_channels(out_channels)
+        return self.dense.in_channels(out_channels) - self.stacked_channels
 
     def out_channels(self, in_channels: int) -> int:
-        return self.dense.out_channels(in_channels)
+        return self.dense.out_channels(in_channels+self.stacked_channels)
 
     def concat(self, X1: torch.Tensor, X2: torch.Tensor) -> torch.Tensor:
         """
@@ -96,6 +104,7 @@ class Upsampling(torch.nn.Module):
     @property
     def dump(self) -> dict:
         return {"type": type(self).__name__,
+                "stacked channels": self.stacked_channels,
                 "unpooling": self.unpooling.dump,
                 "dense": self.dense.dump}
 
