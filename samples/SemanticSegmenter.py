@@ -19,8 +19,8 @@ mean = sum([w for w in class_weights.values()])
 class_weights = {k: w/mean for k, w in class_weights.items()}
 with open(data_path / "classes.json", "r") as file:
     classes = json.load(file)
-x_train = np.load(data_path / "train_images.npy")[:300]
-y_train = np.load(data_path / "train_segmented.npy")[:300]
+x = np.load(data_path / "train_images.npy")[:300]
+y = np.load(data_path / "train_segmented.npy")[:300]
 x_test = np.load(data_path / "test_images.npy")[:100]
 y_test = np.load(data_path / "test_segmented.npy")[:100]
 
@@ -40,9 +40,9 @@ model = nn.SemanticSegmenter(3, classes,
                              activation="tanh",
                              GPU=True,
                              class_weights=class_weights,
-                             learning_rate=1.0E-2)
+                             learning_rate=1.0E-3)
 # print(model.module.shapes)
-train_data, val_data = ml.split((x_train, y_train), frac=0.2)
+train_data, val_data = ml.split((x, y), frac=0.2)
 model.train(train_data, val_data, n_epochs=500, L_minibatchs=5)
 
 # Plot metrics
@@ -55,7 +55,8 @@ model.train(train_data, val_data, n_epochs=500, L_minibatchs=5)
 # f.tight_layout()
 
 # Plot results
-for x, y_t in zip(x_test[:5], y_test[:5]):
+x_train, y_train = train_data
+for x, y_t in zip(x_train[:5], y_train[:5]):
     y_p = model([x])[0]
     f, axes = plt.subplots(figsize=[15, 5], ncols=3)
     for im, ax, title in zip([x, y_p, y_t], axes,
