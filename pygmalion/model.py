@@ -92,16 +92,15 @@ class Model:
                 g = group.create_group(key, track_order=True)
                 cls._save_h5(g, value)
         elif isinstance(obj, list):
-            try:  # Try converting to numpy array
-                arr = np.array(obj, dtype=float)
-            except BaseException:  # must be saved as a list
+            arr = np.array(obj)
+            if np.issubdtype(arr.dtype, np.number):
+                group.attrs["type"] = "binary"
+                group["data"] = arr
+            else:
                 group.attrs["type"] = "list"
                 for i, value in enumerate(obj):
                     g = group.create_group(f"{i}")
                     cls._save_h5(g, value)
-            else:  # save the numpy array as a dataset
-                group.attrs["type"] = "binary"
-                group["data"] = arr
         elif isinstance(obj, str):
             group.attrs["type"] = "str"
             group.attrs["data"] = obj

@@ -79,13 +79,14 @@ class _Convolution(Weighting):
         obj = cls.__new__(cls)
         torch.nn.Module.__init__(obj)
         obj.padding_mode = "zeros"
-        obj.padding = 0
-        obj.dilation = 1
+        obj.padding = (0,)
+        obj.dilation = (1,)
+        obj.output_padding = (0,)
         obj.groups = 1
         obj.in_channels = dump["in channels"]
         obj.out_channels = dump["out channels"]
-        obj.kernel_size = dump["kernel size"]
-        obj.stride = dump["stride"]
+        obj.kernel_size = tuple(dump["kernel size"])
+        obj.stride = tuple(dump["stride"])
         obj.weight = torch.nn.Parameter(
                         torch.tensor(dump["weight"], dtype=torch.float))
         if dump["bias"] is None:
