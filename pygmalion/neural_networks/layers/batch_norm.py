@@ -16,19 +16,28 @@ class BatchNorm:
         cls = globals()[dump["type"]]
         obj = cls.__new__(cls)
         torch.nn.Module.__init__(obj)
+        obj.num_features = dump["num"]
         obj.momentum = dump["momentum"]
         obj.affine = dump["affine"]
         obj.eps = dump["eps"]
         obj.track_running_stats = dump["track running stats"]
-        obj.running_mean = torch.tensor(dump["running mean"],
-                                        dtype=torch.float)
-        obj.running_var = torch.tensor(dump["running var"],
-                                       dtype=torch.float)
+        obj.register_buffer("num_batches_tracked",
+                            torch.tensor(dump["num batches tracked"],
+                                         dtype=torch.long))
+        obj.register_buffer("running_mean",
+                            torch.tensor(dump["running mean"],
+                                         dtype=torch.float))
+        obj.register_buffer("running_var",
+                            torch.tensor(dump["running var"],
+                                         dtype=torch.float))
         if obj.affine:
             obj.weight = torch.nn.Parameter(torch.tensor(dump["weight"],
                                                          dtype=torch.float))
             obj.bias = torch.nn.Parameter(torch.tensor(dump["bias"],
                                                        dtype=torch.float))
+        else:
+            obj.weight = None
+            obj.bias = None
         return obj
 
     @property
@@ -40,6 +49,7 @@ class BatchNorm:
                 "running mean": self.running_mean.tolist(),
                 "running var": self.running_var.tolist(),
                 "track running stats": self.track_running_stats,
+                "num batches tracked": self.num_batches_tracked,
                 "momentum": self.momentum,
                 "eps": self.eps,
                 "affine": self.affine,

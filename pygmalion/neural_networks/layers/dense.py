@@ -16,6 +16,7 @@ class Dense(torch.nn.Module):
         obj.layers = torch.nn.ModuleList()
         for layer in dump["layers"]:
             obj.layers.append(Activated.from_dump(layer))
+        return obj
 
     def __init__(self, in_channels: int,
                  layers: Union[dict, List[dict]],

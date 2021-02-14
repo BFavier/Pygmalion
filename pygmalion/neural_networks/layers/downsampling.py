@@ -16,6 +16,7 @@ class Downsampling(torch.nn.Module):
         torch.nn.Module.__init__(obj)
         obj.dense = Dense.from_dump(dump["dense"])
         obj.pooling = Pooling.from_dump(dump["pooling"])
+        return obj
 
     def __init__(self, in_channels: int,
                  dense_layer: Union[List[dict], dict],

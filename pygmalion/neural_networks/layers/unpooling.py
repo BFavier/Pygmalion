@@ -15,6 +15,7 @@ class Unpooling(torch.nn.Module):
         obj = cls.__new__(cls)
         torch.nn.Module.__init__(obj)
         obj.factor = tuple(dump["factor"])
+        obj.method = dump["method"]
         return obj
 
     def __init__(self, factor: Union[int, Tuple[int]],

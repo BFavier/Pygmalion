@@ -17,6 +17,7 @@ class Dropout(torch.nn.Module):
         obj = cls.__new__(cls)
         torch.nn.Module.__init__(obj)
         obj.p = dump["p"]
+        return obj
 
     @property
     def dump(self):

@@ -139,3 +139,20 @@ def cityscapes(directory: str):
             "https://drive.google.com/file/d/13DzRX1yUlDW8oXNiWEa-Bu02_myttlem/view?usp=sharing",
             "https://drive.google.com/file/d/1BmhXfQraa37rwsnvcub0x-FjPhir6RsJ/view?usp=sharing"]
     _downloads(directory, "cityscapes", file_names, urls)
+
+
+def aquarium(directory: str):
+    """downloads the 'roboflow' aquarium adatset in the given directory"""
+    file_names = ["test_bounding_boxes.json",
+                  "test_images.npy",
+                  "train_bounding_boxes.json",
+                  "train_images.npy",
+                  "val_bounding_boxes.json",
+                  "val_images.npy"]
+    urls = ["https://drive.google.com/file/d/1GZ8xYMGhiyAufb6iCOZi_Y44aq80iTQj/view?usp=sharing",
+            "https://drive.google.com/file/d/1eFLyp48QHEbkwSxwLT-hFIzFCyvgFQm5/view?usp=sharing",
+            "https://drive.google.com/file/d/1hkE8J2NwCUmF55qgdmUSR3U3CTsd2di8/view?usp=sharing",
+            "https://drive.google.com/file/d/1RuqoyX2ZQN4AjuVo12tEyweS7zlkTpXY/view?usp=sharing",
+            "https://drive.google.com/file/d/1cKefoCsgQv7DUSrmF_Mg7pItwzOTSQMN/view?usp=sharing",
+            "https://drive.google.com/file/d/1xTXiFWKt23d6JYvSoOVtY6EPAE4ZHiju/view?usp=sharing"]
+    _downloads(directory, "aquarium", file_names, urls)

@@ -14,8 +14,10 @@ class Upsampling(torch.nn.Module):
     def from_dump(cls, dump: dict) -> object:
         obj = cls.__new__(cls)
         torch.nn.Module.__init__(obj)
+        obj.stacked_channels = dump["stacked channels"]
         obj.unpooling = Unpooling.from_dump(dump["unpooling"])
         obj.dense = Dense.from_dump(dump["dense"])
+        return obj
 
     def __init__(self, in_channels: int,
                  dense_layer: Union[List[dict], dict],

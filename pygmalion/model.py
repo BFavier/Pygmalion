@@ -56,7 +56,7 @@ class Model:
         if not path.is_dir():
             raise ValueError(f"The directory '{path}' does not exist")
         if not(overwrite) and file.exists():
-            raise FileExistsError("The file '{file}' already exists,"
+            raise FileExistsError(f"The file '{file}' already exists,"
                                   " set 'overwrite=True' to overwrite.")
         if suffix == ".json":
             with open(file, "w") as json_file:
@@ -102,13 +102,16 @@ class Model:
             else:  # save the numpy array as a dataset
                 group.attrs["type"] = "binary"
                 group["data"] = arr
+        elif isinstance(obj, str):
+            group.attrs["type"] = "str"
+            group.attrs["data"] = obj
         elif any(isinstance(obj, t) for t in [float, int, bool]):
-            group.attrs["type"] = "binary"
-            group["data"] = obj
+            group.attrs["type"] = "scalar"
+            group.attrs["data"] = obj
         elif obj is None:
             group.attrs["type"] = "None"
         else:
-            ValueError(f"Unsupported data type of '{key}': {type(obj)}")
+            raise ValueError(f"Unsupported data type: {type(obj)}")
 
     @classmethod
     def _load_h5(cls, group: h5py.Group) -> object:
@@ -130,6 +133,8 @@ class Model:
             return {name: cls._load_h5(group[name]) for name in group}
         elif group_type == "list":
             return [cls._load_h5(group[name]) for name in group]
+        elif group_type == "scalar" or group_type == "str":
+            return group.attrs["data"]
         elif group_type == "None":
             return None
         elif group_type == "binary":

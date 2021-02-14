@@ -77,7 +77,11 @@ class _Convolution(Weighting):
         """returns a '_Convolution' layer from a dump"""
         assert dump["type"] == cls.__name__
         obj = cls.__new__(cls)
-        torch.nn.Module__init__(obj)
+        torch.nn.Module.__init__(obj)
+        obj.padding_mode = "zeros"
+        obj.padding = 0
+        obj.dilation = 1
+        obj.groups = 1
         obj.in_channels = dump["in channels"]
         obj.out_channels = dump["out channels"]
         obj.kernel_size = dump["kernel size"]

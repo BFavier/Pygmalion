@@ -74,7 +74,8 @@ For a classifier model you can evaluate the [**accuracy**](https://en.wikipedia.
 >>>                  {"channels": 5},
 >>>                  {"channels": 5}]
 >>> model = nn.DenseClassifier(inputs, classes,
->>>                            hidden_layers=hidden_layers, >>>                            activation="elu")
+>>>                            hidden_layers=hidden_layers,
+>>>                            activation="elu")
 >>> data, test_data = ml.split((x, y), frac=0.2)
 >>> train_data, val_data = ml.split(data, frac=0.1)
 >>> model.train(train_data, val_data, n_epochs=1000, patience=100)

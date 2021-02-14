@@ -6,7 +6,7 @@ from .layers import UNet2d
 from .conversions import floats_to_tensor, tensor_to_index
 from .conversions import segmented_to_tensor, images_to_tensor
 from .neural_network_classifier import NeuralNetworkClassifier
-from .loss_functions import soft_dice_loss, cross_entropy
+from .loss_functions import soft_dice_loss
 
 
 class SemanticSegmenterModule(torch.nn.Module):
@@ -19,7 +19,7 @@ class SemanticSegmenterModule(torch.nn.Module):
         obj.colors = dump["colors"]
         obj.classes = dump["classes"]
         obj.input_norm = BatchNorm2d.from_dump(dump["input norm"])
-        obj.UNet = UNet2d.from_dump(dump["U-net"])
+        obj.u_net = UNet2d.from_dump(dump["u-net"])
         obj.output = Conv2d.from_dump(dump["output"])
         return obj
 
@@ -91,18 +91,16 @@ class SemanticSegmenterModule(torch.nn.Module):
 
     def loss(self, y_pred: torch.Tensor, y_target: torch.Tensor,
              weights: Union[torch.Tensor, None]):
-        # return cross_entropy(y_pred, y_target, weights=weights,
-        #                      class_weights=self.class_weights)
         return soft_dice_loss(y_pred, y_target, weights=weights,
                               class_weights=self.class_weights)
 
     @property
     def dump(self):
         return {"type": type(self).__name__,
-                "classes": self.classes,
-                "colors": self.colors,
+                "classes": list(self.classes),
+                "colors": list(self.colors),
                 "input norm": self.input_norm.dump,
-                "U-net": self.u_net.dump,
+                "u-net": self.u_net.dump,
                 "output": self.output.dump}
 
 
