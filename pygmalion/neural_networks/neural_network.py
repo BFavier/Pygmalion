@@ -248,7 +248,7 @@ class NeuralNetwork(Model):
         elif isinstance(self.GPU, int):
             return torch.device(f"cuda:{self.GPU}")
         elif isinstance(self.GPU, list):
-            return torch.device(f"cuda:{self.GPU[0]}")
+            return torch.device("cpu")
 
     @property
     def learning_rate(self) -> float:
