@@ -1,14 +1,19 @@
 # -*- coding: utf-8 -*-
 import setuptools
-from pygmalion.info import __version__, __author__
+
+with open("pygmalion/info.py", "r") as fh:
+    lines = fh.readlines()
+    key_values = [line.rstrip().replace("\"", "").split(" = ")
+                  for line in lines]
+    infos = {key: value for key, value in key_values}
 
 with open("README.md", "r") as fh:
     long_description = fh.read()
 
 setuptools.setup(
     name="pygmalion",
-    version=__version__,
-    author=__author__,
+    version=infos["__version__"],
+    author=infos["__author__"],
     author_email="benoitfamillefavier@gmail.com",
     description="A machine learning package",
     long_description=long_description,
