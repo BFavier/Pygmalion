@@ -207,6 +207,13 @@ def plot_confusion_matrix(*args, ax: Union[None, matplotlib.axes.Axes] = None,
 
 
 def GPU_info():
+    """
+    Returns the list of GPUs, with for eahc of them:
+        * their name
+        * their VRAM capacity in GB
+        * their current memory usage (in %)
+        * their peak memory usage since last call (in %)
+    """
     infos = []
     for i in range(torch.cuda.device_count()):
         props = torch.cuda.get_device_properties(i)
@@ -217,7 +224,7 @@ def GPU_info():
         infos.append([name, f"{max_memory/1.0E9:.1f} GB",
                       f"{memory_usage*100:.2f}%",
                       f"{max_memory_usage*100:.2f}%"])
-        torch.cuda.reset_peak_memory_stats()
+        torch.cuda.reset_peak_memory_stats(i)
     df = pd.DataFrame(data=infos, columns=["name", "memory", "usage",
                                            "peak"])
     df.index.name = 'ID'
