@@ -81,25 +81,6 @@ class ImageClassifierModule(torch.nn.Module):
         X = self.dense(X)
         return self.output(X)
 
-    def data_to_tensor(self, X: np.ndarray,
-                       Y: Union[None, List[str]],
-                       weights: Union[None, List[float]] = None
-                       ) -> tuple:
-        x = images_to_tensor(X, self.device)
-        y = None if Y is None else classes_to_tensor(Y, self.classes,
-                                                     self.device)
-        w = None if weights is None else floats_to_tensor(weights, self.device)
-        return x, y, w
-
-    def tensor_to_y(self, tensor: torch.Tensor) -> np.ndarray:
-        indexes = tensor_to_index(tensor)
-        return [self.classes[i] for i in indexes]
-
-    def loss(self, y_pred: torch.Tensor, y_target: torch.Tensor,
-             weights: Union[torch.Tensor, None]):
-        return cross_entropy(y_pred, y_target, weights=weights,
-                             class_weights=self.class_weights)
-
     @property
     def dump(self):
         return {"type": type(self).__name__,
@@ -116,3 +97,20 @@ class ImageClassifier(NeuralNetworkClassifier):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+
+    def _loss_function(self, y_pred: torch.Tensor, y_target: torch.Tensor,
+                       weights: Union[None, torch.Tensor] = None):
+        return cross_entropy(y_pred, y_target, weights, self.class_weights)
+
+    def _data_to_tensor(self, X: np.ndarray,
+                        Y: Union[None, List[str]],
+                        weights: Union[None, List[float]] = None) -> tuple:
+        x = images_to_tensor(X, self.device)
+        y = None if Y is None else classes_to_tensor(Y, self.classes,
+                                                     self.device)
+        w = None if weights is None else floats_to_tensor(weights, self.device)
+        return x, y, w
+
+    def _tensor_to_y(self, tensor: torch.Tensor) -> np.ndarray:
+        indexes = tensor_to_index(tensor)
+        return [self.classes[i] for i in indexes]

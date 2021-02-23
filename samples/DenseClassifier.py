@@ -21,13 +21,13 @@ classes = y.unique()
 data, test_data = ml.split((x, y), frac=0.2)
 
 # Create and train the model
-hidden_layers = [{"channels": 5},
-                 {"channels": 5},
-                 {"channels": 5}]
+hidden_layers = [{"channels": 8},
+                 {"channels": 6},
+                 {"channels": 4}]
 model = nn.DenseClassifier(inputs, classes, hidden_layers=hidden_layers,
-                           activation="elu")
+                           activation="elu", learning_rate=1.0E-3)
 train_data, val_data = ml.split(data, frac=0.1)
-model.train(train_data, val_data, n_epochs=1000)
+model.train(train_data, val_data, n_epochs=3000, patience=200)
 
 # Plot results
 model.plot_residuals()

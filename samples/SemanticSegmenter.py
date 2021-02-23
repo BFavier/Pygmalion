@@ -19,10 +19,10 @@ mean = sum([w for w in class_weights.values()])
 class_weights = {k: w/mean for k, w in class_weights.items()}
 with open(data_path / "classes.json", "r") as file:
     classes = json.load(file)
-x = np.load(data_path / "train_images.npy")[:300]
-y = np.load(data_path / "train_segmented.npy")[:300]
-x_test = np.load(data_path / "test_images.npy")[:100]
-y_test = np.load(data_path / "test_segmented.npy")[:100]
+x = np.load(data_path / "train_images.npy")[:100]
+y = np.load(data_path / "train_segmented.npy")[:100]
+x_test = np.load(data_path / "test_images.npy")[:50]
+y_test = np.load(data_path / "test_segmented.npy")[:50]
 
 # Create and train the model
 downward = [{"window": (3, 3), "channels": 4},
@@ -38,7 +38,7 @@ model = nn.SemanticSegmenter(3, classes,
                              upsampling=upward,
                              upsampling_method="nearest",
                              activation="tanh",
-                             GPU=True,
+                             GPU=0,
                              class_weights=class_weights,
                              learning_rate=1.0E-3)
 # print(model.module.shapes)
@@ -66,6 +66,6 @@ for x, y_t in zip(x_train[:5], y_train[:5]):
         ax.set_xticks([])
         ax.set_yticks([])
     f.tight_layout()
-    plt.show()
+plt.show()
 
 IPython.embed()

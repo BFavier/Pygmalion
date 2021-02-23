@@ -4,8 +4,8 @@ from typing import Union
 
 
 def RMSE(y_pred: torch.Tensor, y_target: torch.Tensor,
-         target_norm: torch.nn.Module,
-         weights: Union[None, torch.Tensor] = None) -> torch.Tensor:
+         weights: Union[None, torch.Tensor] = None,
+         target_norm: torch.nn.Module = None) -> torch.Tensor:
     """
     Returns the Root Mean Squared Error of the model.
     Each observation be optionnaly weighted
@@ -18,13 +18,13 @@ def RMSE(y_pred: torch.Tensor, y_target: torch.Tensor,
     y_target : torch.Tensor
         A Tensor of float of shape [N_observations]
         The target values to be predicted by the model
-    target_norm : torch.nn.Module
-        A BatchNormNd module applied to the y_target
-        before calculating the loss
     weights : None or torch.Tensor
         If None all observations are equally weighted
         Otherwise the squared error of each observation
         is multiplied by the given factor
+    target_norm : torch.nn.Module
+        A BatchNormNd module applied to the y_target
+        before calculating the loss
 
     Returns
     -------

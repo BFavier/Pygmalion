@@ -75,25 +75,6 @@ class SemanticSegmenterModule(torch.nn.Module):
         X = self.u_net(X)
         return self.output(X)
 
-    def data_to_tensor(self, X: Iterable[np.ndarray],
-                       Y: Union[None, List[str]],
-                       weights: Union[None, List[float]] = None
-                       ) -> tuple:
-        x = images_to_tensor(X, self.device)
-        y = None if Y is None else segmented_to_tensor(Y, self.colors,
-                                                       self.device)
-        w = None if weights is None else floats_to_tensor(weights, self.device)
-        return x, y, w
-
-    def tensor_to_y(self, tensor: torch.Tensor) -> np.ndarray:
-        indexes = tensor_to_index(tensor)
-        return np.array(self.colors)[indexes]
-
-    def loss(self, y_pred: torch.Tensor, y_target: torch.Tensor,
-             weights: Union[torch.Tensor, None]):
-        return soft_dice_loss(y_pred, y_target, weights=weights,
-                              class_weights=self.class_weights)
-
     @property
     def dump(self):
         return {"type": type(self).__name__,
@@ -110,3 +91,20 @@ class SemanticSegmenter(NeuralNetworkClassifier):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+
+    def _loss_function(self, y_pred: torch.Tensor, y_target: torch.Tensor,
+                       weights: Union[None, torch.Tensor] = None):
+        return soft_dice_loss(y_pred, y_target, weights, self.class_weights)
+
+    def _data_to_tensor(self, X: Iterable[np.ndarray],
+                        Y: Union[None, List[str]],
+                        weights: Union[None, List[float]] = None) -> tuple:
+        x = images_to_tensor(X, self.device)
+        y = None if Y is None else segmented_to_tensor(Y, self.module.colors,
+                                                       self.device)
+        w = None if weights is None else floats_to_tensor(weights, self.device)
+        return x, y, w
+
+    def _tensor_to_y(self, tensor: torch.Tensor) -> np.ndarray:
+        indexes = tensor_to_index(tensor)
+        return np.array(self.module.colors)[indexes]

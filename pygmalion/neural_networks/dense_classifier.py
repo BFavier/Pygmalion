@@ -62,24 +62,6 @@ class DenseClassifierModule(torch.nn.Module):
         x = self.dense(x)
         return self.output(x)
 
-    def data_to_tensor(self, X: pd.DataFrame,
-                       Y: Union[None, List[str]],
-                       weights: Union[None, List[float]] = None
-                       ) -> tuple:
-        x = dataframe_to_tensor(X, self.inputs, self.device)
-        y = None if Y is None else classes_to_tensor(Y, self.classes,
-                                                     self.device)
-        w = None if weights is None else floats_to_tensor(weights, self.device)
-        return x, y, w
-
-    def tensor_to_y(self, tensor: torch.Tensor) -> np.ndarray:
-        return tensor_to_classes(tensor, self.classes)
-
-    def loss(self, y_pred: torch.Tensor, y_target: torch.Tensor,
-             weights: Union[None, torch.Tensor]) -> torch.Tensor:
-        return cross_entropy(y_pred, y_target, weights=weights,
-                             class_weights=self.class_weights)
-
     @property
     def dump(self):
         return {"type": type(self).__name__,
@@ -96,3 +78,19 @@ class DenseClassifier(NeuralNetworkClassifier):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+
+    def _loss_function(self, y_pred: torch.Tensor, y_target: torch.Tensor,
+                       weights: Union[None, torch.Tensor] = None):
+        return cross_entropy(y_pred, y_target, weights, self.class_weights)
+
+    def _data_to_tensor(self, X: pd.DataFrame,
+                        Y: Union[None, List[str]],
+                        weights: Union[None, List[float]] = None) -> tuple:
+        x = dataframe_to_tensor(X, self.module.inputs, self.device)
+        y = None if Y is None else classes_to_tensor(Y, self.classes,
+                                                     self.device)
+        w = None if weights is None else floats_to_tensor(weights, self.device)
+        return x, y, w
+
+    def _tensor_to_y(self, tensor: torch.Tensor) -> np.ndarray:
+        return tensor_to_classes(tensor, self.classes)

@@ -1,6 +1,8 @@
 import math
 import torch
+import warnings
 import matplotlib.pyplot as plt
+import torch.nn.parallel as parallel
 from typing import Union, Callable, List
 from ..model import Model
 
@@ -32,10 +34,11 @@ class NeuralNetwork(Model):
         return obj
 
     def __init__(self, *args,
-                 GPU: bool = False,
+                 GPU: Union[None, int, List[int]] = None,
                  learning_rate: float = 1.0E-3,
                  norm_update_factor: Union[float, None] = 0.1,
                  optimization_method: str = "Adam",
+                 shuffle: bool = True,
                  L1: Union[float, None] = None,
                  L2: Union[float, None] = None,
                  **kwargs):
@@ -44,8 +47,9 @@ class NeuralNetwork(Model):
         ----------
         *args : tuple
             The args passed to the constructor of 'self.module'
-        GPU : bool
-            If True, calculation on GPU is enabled
+        GPU : None or int or list of int
+            The indice of the GPU to evaluate the model on
+            Set None to evaluate on cpu
         learning_rate : float
             The learning rate of the model
         norm_update_factor : float or None
@@ -102,9 +106,14 @@ class NeuralNetwork(Model):
         self.module.train()
         # Converts training/validation data to tensors
         if not callable(training_data):
-            training_data = self.module.data_to_tensor(*training_data)
+            training_data = self._data_to_tensor(*training_data)
         if not callable(validation_data) and validation_data is not None:
-            validation_data = self.module.data_to_tensor(*validation_data)
+            validation_data = self._data_to_tensor(*validation_data)
+        # Wrap the module if training on multi GPU
+        if isinstance(self.GPU, list):
+            module = parallel.DataParallel(self.module, device_ids=self.GPU)
+        else:
+            module = self.module
         # Initializing
         if self.residuals["best epoch"] is None:
             best_loss = float("inf")
@@ -117,9 +126,10 @@ class NeuralNetwork(Model):
                 self.residuals[v] = self.residuals[v][:i+1]
         best_state = self._get_state()
         # trains the model, stops if the user press 'ctrl+c'
-        self._training_loop(training_data, validation_data, n_epochs,
-                            patience, verbose, L_minibatchs, best_epoch,
-                            best_loss, best_state)
+        self._training_loop(module,
+                            training_data, validation_data, n_epochs,
+                            patience, verbose, L_minibatchs,
+                            best_epoch, best_loss, best_state)
 
     def plot_residuals(self, ax=None, log: bool = True):
         """
@@ -150,6 +160,15 @@ class NeuralNetwork(Model):
         ax.legend()
         f.tight_layout()
 
+    def _loss_function(self, y_pred: torch.Tensor, y_target: torch.Tensor,
+                       weights: Union[None, torch.Tensor] = None
+                       ) -> torch.Tensor:
+        """
+        Place holder for the method that calculates the loss function
+        """
+        raise NotImplementedError(f"'_loss_function' not implemented for "
+                                  f"model '{type(self)}'")
+
     def __call__(self, X):
         """
         Returns the model's evaluation on the given input
@@ -169,42 +188,67 @@ class NeuralNetwork(Model):
             see 'help(self.module)'
         """
         self.module.eval()
-        x, _, _ = self.module.data_to_tensor(X, None, None)
+        x, _, _ = self._data_to_tensor(X, None, None)
         y = self.module(x)
-        return self.module.tensor_to_y(y)
+        return self._tensor_to_y(y)
 
     @property
     def GPU(self) -> bool:
         """
-        Returns whether the model is evaluated/trained on GPU
+        Returns the GPU(s) the model is evaluated on
 
         Returns
         -------
-        bool :
-            whether the GPU mode is enabled
+        None or int or list of int :
+            The GPU the model is evaluated on
         """
-        return self._GPU
+        return list(self._GPU) if isinstance(self._GPU, list) else self._GPU
 
     @GPU.setter
-    def GPU(self, enable: bool):
+    def GPU(self, value: Union[None, int, List[int]]):
         """
-        Set whether the model should be evaluated/trained on GPU.
-        This is only available with a CUDA capable GPU.
+        Set the GPU(s) the model is evaluated on
 
-        Returns
-        -------
-        bool :
-            whether the GPU mode is enabled
+        Parameters
+        ----------
+        value : int, or list of int, or None
+            The index of the GPU to use to evaluate the model
+            Set to None for evaluating on CPU
+            Set to a list of int to evaluate on multi GPUs
         """
-        if enable and not(torch.cuda.is_available()):
-            raise RuntimeError("CUDA is not available on this computer, \
-                                can't train on GPU")
-        self._GPU = enable
-        if enable:
-            self.module.device = torch.device("cuda:0")
-        else:
-            self.module.device = torch.device("cpu")
-        self.module.to(self.module.device)
+        assert (value is None) or (type(value) in [int, list])
+        # If CUDA is not available falls back to using CPU
+        if (value is not None) and not(torch.cuda.is_available()):
+            warnings.warn("CUDA is not available on this computer, "
+                          "falling back to evaluating on CPU")
+            value = None
+        # Check that GPU indices are valid
+        if value is not None:
+            devices = value if isinstance(value, list) else [value]
+            for device in devices:
+                assert isinstance(device, int)
+                if device >= torch.cuda.device_count():
+                    gpus = list(range(torch.cuda.device_count()))
+                    raise ValueError(f"GPU must be one of {gpus}")
+        # Remove duplicates GPU indices
+        if isinstance(value, list):
+            value = list(set(value))
+        # If a single element in list, convert list to single int
+        if isinstance(value, list) and len(value) == 1:
+            value = value[0]
+        # Set the GPU
+        self._GPU = value
+        self.module.to(self.device)
+
+    @property
+    def device(self) -> torch.device:
+        """Return the torch device the model/data are loaded on"""
+        if self.GPU is None:
+            return torch.device("cpu")
+        elif isinstance(self.GPU, int):
+            return torch.device(f"cuda:{self.GPU}")
+        elif isinstance(self.GPU, list):
+            return torch.device(f"cuda:{self.GPU[0]}")
 
     @property
     def learning_rate(self) -> float:
@@ -315,6 +359,20 @@ class NeuralNetwork(Model):
                 "module": self.module.dump,
                 "gradient": self._get_state()["grad"]}
 
+    def _data_to_tensor(self, X, Y, weights=None) -> tuple:
+        """
+        Place holder for the method that converts input data to torch tensor
+        """
+        raise NotImplementedError(f"'_data_to_tensor' not implemented for "
+                                  f"model '{type(self)}'")
+
+    def _tensor_to_y(self, tensor: torch.Tensor) -> object:
+        """
+        Place holder for the method that converts torch tensor to model output
+        """
+        raise NotImplementedError(f"'_tensor_to_y' not implemented for "
+                                  f"model '{type(self)}'")
+
     def _get_state(self) -> tuple:
         """
         Returns a snapshot of the model's state
@@ -344,7 +402,7 @@ class NeuralNetwork(Model):
             The state of the model
         """
         if "params" in state.keys():
-            params = {k: torch.tensor(t, device=self.module.device)
+            params = {k: torch.tensor(t, device=self.device)
                       for k, t in state["params"].items()}
             self.module.load_state_dict(params)
         if "grad" in state.keys():
@@ -352,12 +410,13 @@ class NeuralNetwork(Model):
             for key in params.keys():
                 t = state["grad"][key]
                 if t is not None:
-                    t = torch.tensor(t, device=self.module.device)
+                    t = torch.tensor(t, device=self.device)
                 params[key].grad = t
         if "optim" in state.keys():
             self.optimizer.load_state_dict(state["optim"])
 
-    def _training_loop(self, training_data: tuple,
+    def _training_loop(self, module: torch.nn.Module,
+                       training_data: tuple,
                        validation_data: Union[tuple, None],
                        n_epochs: int,
                        patience: int,
@@ -386,6 +445,8 @@ class NeuralNetwork(Model):
 
         Parameters:
         -----------
+        module : torch.nn.Module
+            the module of the model
         training_data : tuple or Callable
             The data provided to 'self._batch'
         validation_data : tuple or Callbale or None
@@ -411,10 +472,12 @@ class NeuralNetwork(Model):
             for epoch in range(best_epoch+1, best_epoch+n_epochs+1):
                 self.optimizer.step()
                 self.optimizer.zero_grad()
-                training_loss = self._batch(training_data, L_minibatchs,
+                training_loss = self._batch(module,
+                                            training_data, L_minibatchs,
                                             train=True)
                 if validation_data is not None:
-                    validation_loss = self._batch(validation_data,
+                    validation_loss = self._batch(module,
+                                                  validation_data,
                                                   L_minibatchs,
                                                   train=False)
                     if validation_loss < best_loss:
@@ -452,14 +515,16 @@ class NeuralNetwork(Model):
             # Save the best epoch
             self.residuals["best epoch"] = best_epoch
 
-    def _batch(self, data: Union[tuple, Callable],
-               *args, **kwargs) -> float:
+    def _batch(self, module: torch.nn.Module,
+               data: Union[tuple, Callable], *args, **kwargs) -> float:
         """
         Process the data by batch (or in one go),
         and returns the average loss.
 
         Parameters
         ----------
+        module : torch.nn.Module
+            module of the model
         data : tuple or Callable
             The (X, Y, weights) to evaluate the loss on,
             or a function that yields them by batch.
@@ -475,17 +540,22 @@ class NeuralNetwork(Model):
             The loss function averaged over the batchs
         """
         if not callable(data):
-            return self._minibatch(data, *args, **kwargs)
+            return self._minibatch(module, data,
+                                   *args, **kwargs)
         else:
             losses = []
             for batch_data in data():
                 loss = self._minibatch(
-                    self.module.data_to_tensor(*batch_data),
+                    module,
+                    self._data_to_tensor(*batch_data),
                     *args, **kwargs)
                 losses.append(loss)
+            if len(losses) == 0:
+                raise ValueError("The batch iterator returned no batches")
             return sum(losses)/len(losses)
 
-    def _minibatch(self, batch_data: tuple,
+    def _minibatch(self, module: torch.nn.Module,
+                   batch_data: tuple,
                    L_minibatchs: Union[int, None],
                    train: bool = False) -> float:
         """
@@ -494,6 +564,8 @@ class NeuralNetwork(Model):
 
         Parameters
         ----------
+        module : torch.nn.Module
+            module of the model
         batch_data : tuple
             The (X, Y, weights) to evaluate the loss on.
             'X' and 'Y' are tensors, 'weights' is a list of float or None.
@@ -509,25 +581,47 @@ class NeuralNetwork(Model):
             The loss function averaged over the minibatchs
         """
         if L_minibatchs is None:
-            return self._eval_loss(*batch_data, train=train)
+            return self._eval_loss(module,
+                                   *batch_data, train=train)
         else:
-            X, Y, weights = batch_data
+            X, Y, weights = self._shuffle(batch_data)
             L_minibatchs = min(max(1, L_minibatchs), len(X))
             n = math.ceil(len(X)/L_minibatchs)
             bounds = [int(i*len(X)/n) for i in range(n+1)]
-            losses = [self._eval_loss(X[start:end], Y[start:end],
-                                      None if weights is None
-                                      else weights[start:end], train=train)
-                      for (start, end) in zip(bounds[:-1], bounds[1:])]
+            losses = []
+            for (start, end) in zip(bounds[:-1], bounds[1:]):
+                x = X[start:end]
+                y = Y[start:end]
+                w = None if weights is None else weights[start:end]
+                losses.append(self._eval_loss(module,
+                                              x, y, w, train=train))
             return sum(losses)/len(losses)
-            # losses = []
-            # for (start, end) in zip(bounds[:-1], bounds[1:]):
-            #     x = X[start:end]
-            #     y = Y[start:end]
-            #     w = None if weights is None else weights[start:end]
-            #     losses.append(self._eval_loss(x, y, w, train=train))
 
-    def _eval_loss(self, x: torch.Tensor, y: torch.Tensor,
+    def _shuffle(self, batch_data):
+        """
+        Shuffle the data of a batch.
+        This is usefull before performing minibatching on it.
+
+        Parameters
+        ----------
+        batch_data : tuple
+            The (X, Y, weights) to evaluate the loss on.
+            'X' and 'Y' are tensors, 'weights' is a list of float or None.
+
+        Returns
+        -------
+        shuffle_batch : tuple
+            The tuple of (X, Y, weights) shuffled
+        """
+        X, Y, weights = batch_data
+        p = torch.randperm(len(X))
+        X = X[p]
+        Y = Y[p]
+        weights = weights[p] if weights is not None else None
+        return (X, Y, weights)
+
+    def _eval_loss(self, module: torch.nn.Module,
+                   x: torch.Tensor, y: torch.Tensor,
                    w: Union[List[float], None] = None,
                    train: bool = False) -> torch.Tensor:
         """
@@ -539,6 +633,8 @@ class NeuralNetwork(Model):
 
         Parameters
         ----------
+        module : torch.nn.Module
+            module to evaluate
         x : torch.Tensor
             observations
         y : torch.Tensor
@@ -554,17 +650,18 @@ class NeuralNetwork(Model):
             scalar tensor of the evaluated loss
         """
         if train:
-            loss = self.module.loss(self.module(x), y, w)
+            loss = self._loss_function(module(x), y, w)
             loss = self._regularization(loss)
             loss.backward()
         else:
             with torch.no_grad():
                 self.module.eval()
-                loss = self.module.loss(self.module(x), y, w)
-                loss = self._regularization(loss)
+                loss = self._loss_function(module(x), y, weights=w)
                 self.module.train()
+                loss = self._regularization(loss)
+        loss = float(loss)
         torch.cuda.empty_cache()
-        return float(loss)
+        return loss
 
     def _regularization(self, loss: torch.Tensor) -> torch.Tensor:
         """

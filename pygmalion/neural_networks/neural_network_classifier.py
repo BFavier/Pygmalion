@@ -72,18 +72,18 @@ class NeuralNetworkClassifier(NeuralNetwork):
 
     @property
     def class_weights(self):
-        if self.module.class_weights is None:
+        if self._class_weights is None:
             return None
         else:
-            return self.module.class_weights.tolist()
+            return self._class_weights.tolist()
 
     @class_weights.setter
     def class_weights(self, other: Iterable[float]):
         if other is not None:
             assert len(other) == len(self.classes)
             other = torch.tensor(other, dtype=torch.float,
-                                 device=self.module.device)
-        self.module.class_weights = other
+                                 device=self.device)
+        self._class_weights = other
 
     @property
     def classes(self):

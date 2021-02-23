@@ -59,28 +59,6 @@ class DenseRegressorModule(torch.nn.Module):
         x = self.dense(x)
         return self.output(x)
 
-    def data_to_tensor(self, X: Union[pd.DataFrame, Iterable],
-                       Y: Union[None, np.ndarray],
-                       weights: Union[None, List[float]] = None
-                       ) -> tuple:
-        if isinstance(X, pd.DataFrame):
-            x = dataframe_to_tensor(X, self.inputs, self.device)
-        else:
-            x = floats_to_tensor(X, self.device)
-        y = None if Y is None else floats_to_tensor(Y, self.device).view(-1, 1)
-        if weights is None:
-            w = None
-        else:
-            w = floats_to_tensor(weights, self.device).view(-1, 1)
-        return x, y, w
-
-    def tensor_to_y(self, tensor: torch.Tensor) -> np.ndarray:
-        return tensor_to_floats(self.target_norm.undo(tensor).view(-1))
-
-    def loss(self, y_pred: torch.Tensor, y_target: torch.Tensor,
-             weights: Union[None, torch.Tensor]) -> torch.Tensor:
-        return RMSE(y_pred, y_target, self.target_norm, weights=weights)
-
     @property
     def dump(self):
         return {"type": type(self).__name__,
@@ -94,6 +72,29 @@ class DenseRegressorModule(torch.nn.Module):
 class DenseRegressor(NeuralNetwork):
 
     ModuleType = DenseRegressorModule
+    loss_function = RMSE
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+
+    def _loss_function(self, y_pred: torch.Tensor, y_target: torch.Tensor,
+                       weights: Union[None, torch.Tensor] = None):
+        return RMSE(y_pred, y_target, weights,
+                    target_norm=self.module.target_norm)
+
+    def _data_to_tensor(self, X: Union[pd.DataFrame, Iterable],
+                        Y: Union[None, np.ndarray],
+                        weights: Union[None, List[float]] = None) -> tuple:
+        if isinstance(X, pd.DataFrame):
+            x = dataframe_to_tensor(X, self.module.inputs, self.device)
+        else:
+            x = floats_to_tensor(X, self.device)
+        y = None if Y is None else floats_to_tensor(Y, self.device).view(-1, 1)
+        if weights is None:
+            w = None
+        else:
+            w = floats_to_tensor(weights, self.device).view(-1, 1)
+        return x, y, w
+
+    def _tensor_to_y(self, tensor: torch.Tensor) -> np.ndarray:
+        return tensor_to_floats(self.module.target_norm.undo(tensor).view(-1))
