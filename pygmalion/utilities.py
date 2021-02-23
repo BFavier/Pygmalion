@@ -217,8 +217,9 @@ def GPU_info():
         infos.append([name, f"{max_memory/1.0E9:.1f} GB",
                       f"{memory_usage*100:.2f}%",
                       f"{max_memory_usage*100:.2f}%"])
-    df = pd.DataFrame(data=infos, columns=["name", "memory", "memory use",
-                                           "peak memory use"])
+        torch.cuda.reset_peak_memory_stats()
+    df = pd.DataFrame(data=infos, columns=["name", "memory", "usage",
+                                           "peak"])
     df.index.name = 'ID'
     return df
 
