@@ -1,3 +1,4 @@
+import torch
 import numpy as np
 import pandas as pd
 import matplotlib
@@ -205,6 +206,23 @@ def plot_confusion_matrix(*args, ax: Union[None, matplotlib.axes.Axes] = None,
                         color=color)
 
 
+def GPU_info():
+    infos = []
+    for i in range(torch.cuda.device_count()):
+        props = torch.cuda.get_device_properties(i)
+        name = props.name
+        max_memory = props.total_memory
+        memory_usage = torch.cuda.memory_reserved(i) / max_memory
+        max_memory_usage = torch.cuda.max_memory_reserved(i) / max_memory
+        infos.append([name, f"{max_memory/1.0E9:.1f} GB",
+                      f"{memory_usage*100:.2f}%",
+                      f"{max_memory_usage*100:.2f}%"])
+    df = pd.DataFrame(data=infos, columns=["name", "memory", "memory use",
+                                           "peak memory use"])
+    df.index.name = 'ID'
+    return df
+
+
 def _index(data: Any, at: np.ndarray):
     """Indexes an input data. Method depends on it's type"""
     if data is None:
@@ -217,3 +235,8 @@ def _index(data: Any, at: np.ndarray):
         return [data[i] for i in at]
     else:
         raise RuntimeError(f"'{type(data)}' can't be indexed")
+
+
+if __name__ == "__main__":
+    import IPython
+    IPython.embed()
