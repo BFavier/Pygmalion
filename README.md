@@ -259,6 +259,6 @@ The args and kwargs passed to the underlying pytorch Module are:
 
 ### **SemanticSegmenter**
 
-![fashion-MNIST predictions](https://raw.githubusercontent.com/BFavier/Pygmalion/main/images/segmented_cityscape.png)
+![segmented_cityscapes](https://raw.githubusercontent.com/BFavier/Pygmalion/main/images/segmented_cityscape.png)
 
 
