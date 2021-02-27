@@ -50,7 +50,6 @@ class ObjectDetectorModule(torch.nn.Module):
             the kwargs for the 'Activated2d' layers for all 'downsampling'
         pooling : list of [int / tuple of int]
             the pooling window of all downsampling layers
-            (excepted the last one which is an overall pool)
         dense : list of dict
             the kwargs for the 'Activated2d' of the final 'Dense2d' layer
         pooling_type : one of {'max', 'avg'}
@@ -65,11 +64,11 @@ class ObjectDetectorModule(torch.nn.Module):
             the default value for the 'dropout' key of the kwargs
         """
         super().__init__()
-        assert len(pooling) == len(downsampling) - 1
+        assert len(pooling) == len(downsampling)
         self.boxes_per_cell = boxes_per_cell
         self.classes = list(classes)
         self.input_norm = BatchNorm2d(in_channels)
-        self.encoder = Encoder2d(in_channels, downsampling, pooling+[(1, 1)],
+        self.encoder = Encoder2d(in_channels, downsampling, pooling,
                                  pooling_type=pooling_type,
                                  padded=padded,
                                  activation=activation,
@@ -147,6 +146,9 @@ class ObjectDetector(NeuralNetworkClassifier):
 
     def _data_to_tensor(self, X: np.ndarray,
                         Y: Union[None, List[dict]]) -> tuple:
+        """
+        Converts input data to tensors
+        """
         x = images_to_tensor(X, self.device)
         if Y is not None:
             res = bounding_boxes_to_tensor(Y, tuple(X.shape[1:3]),
@@ -161,7 +163,11 @@ class ObjectDetector(NeuralNetworkClassifier):
         return x, y, w
 
     def _tensor_to_y(self, tensors: Tuple[torch.Tensor]) -> List[dict]:
+        """
+
+        """
         boxe_size, object_proba, class_proba = [t.detach().cpu().numpy()
                                                 for t in tensors]
-        ops.nms()
-        raise NotImplementedError("Not implemented yet, Finish me plz")
+        indexes = np.argmax(object_pred, ax=1)
+        # ops.nms()
+        # raise NotImplementedError("Not implemented yet, Finish me plz")

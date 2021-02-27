@@ -41,7 +41,7 @@ down = [{"window": (3, 3), "channels": 4},
         {"window": (3, 3), "channels": 16},
         {"window": (3, 3), "channels": 16},
         {"window": (3, 3), "channels": 16}]
-pooling = [(2, 2), (2, 2), (2, 2), (2, 2), (2, 2)]
+pooling = [(2, 2), (2, 2), (2, 2), (2, 2), (2, 2), (2, 2)]
 dense = [{"window": (3, 3), "channels": 16},
          {"window": (3, 3), "channels": 32},
          {"window": (3, 3), "channels": 64}]
