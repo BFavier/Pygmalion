@@ -49,7 +49,7 @@ def _download(directory: str, file_name: str, url: str):
                 if n_bytes < 10**(3*(j+1)):
                     break
             progress = n_bytes / 10**(3*j)
-            print(f"\r{file_name}: {progress:.2g} {unit}"+" "*10,
+            print(f"\r{file_name}: {progress:.1f} {unit}"+" "*10,
                   end="", flush=True)
     print()
 
@@ -143,13 +143,15 @@ def cityscapes(directory: str):
 
 def aquarium(directory: str):
     """downloads the 'roboflow' aquarium adatset in the given directory"""
-    file_names = ["test_bounding_boxes.json",
+    file_names = ["class_fractions.json",
+                  "test_bounding_boxes.json",
                   "test_images.npy",
                   "train_bounding_boxes.json",
                   "train_images.npy",
                   "val_bounding_boxes.json",
                   "val_images.npy"]
-    urls = ["https://drive.google.com/file/d/1GZ8xYMGhiyAufb6iCOZi_Y44aq80iTQj/view?usp=sharing",
+    urls = ["https://drive.google.com/file/d/1IHKPYSciPV6T20-dtJn3BR_jpMFAAtZ3/view?usp=sharing",
+            "https://drive.google.com/file/d/1GZ8xYMGhiyAufb6iCOZi_Y44aq80iTQj/view?usp=sharing",
             "https://drive.google.com/file/d/1eFLyp48QHEbkwSxwLT-hFIzFCyvgFQm5/view?usp=sharing",
             "https://drive.google.com/file/d/1hkE8J2NwCUmF55qgdmUSR3U3CTsd2di8/view?usp=sharing",
             "https://drive.google.com/file/d/1RuqoyX2ZQN4AjuVo12tEyweS7zlkTpXY/view?usp=sharing",

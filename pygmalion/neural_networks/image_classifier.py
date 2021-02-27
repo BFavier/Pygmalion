@@ -39,7 +39,7 @@ class ImageClassifierModule(torch.nn.Module):
         ----------
         in_channels : int
             the number of channels in the input images
-        class : list of str
+        classes : list of str
             the unique classes the model can predict
         convolutions : list of [dict / list of dict]
             the kwargs for the 'Activated2d' layers for all 'downsampling'
@@ -100,7 +100,8 @@ class ImageClassifier(NeuralNetworkClassifier):
 
     def _loss_function(self, y_pred: torch.Tensor, y_target: torch.Tensor,
                        weights: Union[None, torch.Tensor] = None):
-        return cross_entropy(y_pred, y_target, weights, self.class_weights)
+        return cross_entropy(y_pred, y_target, weights,
+                             self.module.class_weights)
 
     def _data_to_tensor(self, X: np.ndarray,
                         Y: Union[None, List[str]],

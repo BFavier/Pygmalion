@@ -27,22 +27,16 @@ class Padding:
                 "value": self.value}
 
     def shape_out(self, shape_in: list) -> list:
-        c = shape_in[0]
-        dims = shape_in[1:]
         before = self.padding[0::2]
         after = self.padding[1::2]
-        dims = [b+d+a for d, b, a in
-                zip(dims, before, after)]
-        return [c] + dims
+        return [b+d+a for d, b, a in
+                zip(shape_in, before, after)]
 
     def shape_in(self, shape_out: list) -> list:
-        c = shape_out[0]
-        dims = shape_out[1:]
         before = self.padding[0::2]
         after = self.padding[1::2]
-        dims = [-b+d-a for d, b, a in
-                zip(dims, before, after)]
-        return [c] + dims
+        return [-b+d-a for d, b, a in
+                zip(shape_out, before, after)]
 
 
 class Padding1d(torch.nn.ConstantPad1d, Padding):

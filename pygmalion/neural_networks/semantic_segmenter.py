@@ -94,7 +94,8 @@ class SemanticSegmenter(NeuralNetworkClassifier):
 
     def _loss_function(self, y_pred: torch.Tensor, y_target: torch.Tensor,
                        weights: Union[None, torch.Tensor] = None):
-        return soft_dice_loss(y_pred, y_target, weights, self.class_weights)
+        return soft_dice_loss(y_pred, y_target, weights,
+                              self.module.class_weights)
 
     def _data_to_tensor(self, X: Iterable[np.ndarray],
                         Y: Union[None, List[str]],

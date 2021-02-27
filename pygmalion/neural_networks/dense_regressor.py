@@ -72,7 +72,6 @@ class DenseRegressorModule(torch.nn.Module):
 class DenseRegressor(NeuralNetwork):
 
     ModuleType = DenseRegressorModule
-    loss_function = RMSE
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)

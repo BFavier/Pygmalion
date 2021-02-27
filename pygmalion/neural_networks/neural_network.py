@@ -3,7 +3,7 @@ import torch
 import warnings
 import matplotlib.pyplot as plt
 import torch.nn.parallel as parallel
-from typing import Union, Callable, List
+from typing import Union, Callable, List, Tuple
 from ..model import Model
 
 
@@ -48,7 +48,6 @@ class NeuralNetwork(Model):
         obj.learning_rate = dump["learning rate"]
         obj.L1 = dump["L1"]
         obj.L2 = dump["L2"]
-        obj._set_state({"grad": dump["gradient"]})
         return obj
 
     def __init__(self, *args,
@@ -141,6 +140,8 @@ class NeuralNetwork(Model):
             best_epoch = self.residuals["best epoch"]
             i = self.residuals["epochs"].index(best_epoch)
             best_loss = self.residuals["validation loss"][i]
+            if best_loss is None:
+                best_loss = float("inf")
             for v in ["validation loss", "training loss", "epochs"]:
                 self.residuals[v] = self.residuals[v][:i+1]
         best_state = self._get_state()
@@ -207,7 +208,7 @@ class NeuralNetwork(Model):
             see 'help(self.module)'
         """
         self.module.eval()
-        x, _, _ = self._data_to_tensor(X, None, None)
+        x, _, _ = self._data_to_tensor(X, None)
         y = self.module(x)
         return self._tensor_to_y(y)
 
@@ -248,7 +249,11 @@ class NeuralNetwork(Model):
                 assert isinstance(device, int)
                 if device >= torch.cuda.device_count():
                     gpus = list(range(torch.cuda.device_count()))
-                    raise ValueError(f"GPU must be one of {gpus}")
+                    warnings.warn(f"GPU {device} is not in the list of "
+                                  f"available GPUs: {gpus}. "
+                                  "Falling back to evaluating on CPU")
+                    value = None
+                    break
         # Remove duplicates GPU indices
         if isinstance(value, list):
             value = list(set(value))
@@ -375,8 +380,7 @@ class NeuralNetwork(Model):
                 "L1": self.L1,
                 "L2": self.L2,
                 "residuals": self.residuals,
-                "module": self.module.dump,
-                "gradient": self._get_state()["grad"]}
+                "module": self.module.dump}
 
     def _data_to_tensor(self, X, Y, weights=None) -> tuple:
         """
@@ -604,40 +608,91 @@ class NeuralNetwork(Model):
                                    *batch_data, train=train)
         else:
             X, Y, weights = self._shuffle(batch_data)
-            L_minibatchs = min(max(1, L_minibatchs), len(X))
-            n = math.ceil(len(X)/L_minibatchs)
-            bounds = [int(i*len(X)/n) for i in range(n+1)]
+            N = self._len(X)
+            if N == 0:
+                raise ValueError("Encountered batch of 0 observations")
+            L_minibatchs = min(max(1, L_minibatchs), N)
+            n = math.ceil(N/L_minibatchs)
+            bounds = [int(i*N/n) for i in range(n+1)]
             losses = []
             for (start, end) in zip(bounds[:-1], bounds[1:]):
-                x = X[start:end]
-                y = Y[start:end]
-                w = None if weights is None else weights[start:end]
+                x = self._index(X, start=start, end=end)
+                y = self._index(Y, start=start, end=end)
+                w = self._index(weights, start=start, end=end)
                 losses.append(self._eval_loss(loss_module,
                                               x, y, w, train=train))
             return sum(losses)/len(losses)
 
-    def _shuffle(self, batch_data):
+    def _shuffle(self, batch_data: Tuple[torch.Tensor]):
         """
         Shuffle the data of a batch.
         This is usefull before performing minibatching on it.
 
         Parameters
         ----------
-        batch_data : tuple
+        batch_data : tuple or tensors
             The (X, Y, weights) to evaluate the loss on.
-            'X' and 'Y' are tensors, 'weights' is a list of float or None.
+            'X' and 'Y' are tensors, 'weights' is a tensor or None.
 
         Returns
         -------
-        shuffle_batch : tuple
+        shuffle_batch : tuple of tensors
             The tuple of (X, Y, weights) shuffled
         """
         X, Y, weights = batch_data
-        p = torch.randperm(len(X))
-        X = X[p]
-        Y = Y[p]
-        weights = weights[p] if weights is not None else None
+        p = torch.randperm(self._len(X))
+        X = self._index(X, at=p)
+        Y = self._index(Y, at=p)
+        weights = self._index(weights, at=p)
         return (X, Y, weights)
+
+    def _index(self, variable: Union[torch.Tensor, None, tuple],
+               at=None, start=None, end=None, step=None):
+        """
+        Index/slice the given observations of the variable (X, Y, or weight).
+        Usefull to handle various types of 'variable' that need to be indexed
+        differently.
+
+        Parameters
+        ----------
+        variable : tuple of tensor, tensor, or None
+            the variable to split/index
+        at : None, or int, or list of int
+            The observation indexes
+            If None the variable is sliced
+        start : None, or int
+            The start of the slice
+        end : None, or int
+            The end of the slice
+        step : None, or int
+            The step of the slicing
+
+        Returns
+        -------
+        object :
+            the indexed/sliced variable
+        """
+        if isinstance(variable, tuple):
+            return tuple([self._index(v, at=at, start=start, end=end,
+                                      step=step)
+                          for v in variable])
+        elif variable is None:
+            return None
+        elif at is not None:
+            return variable[at]
+        else:
+            return variable[slice(start, end, step)]
+
+    def _len(self, variable: Union[torch.Tensor, tuple]) -> int:
+        """
+        Returns the number of observations in the variable (X, Y, or weight).
+        Usefull to handle various types of 'variable' that need to be indexed
+        differently.
+        """
+        if isinstance(variable, tuple):
+            return len(variable[0])
+        else:
+            return len(variable)
 
     def _eval_loss(self, loss_module: torch.nn.Module,
                    x: torch.Tensor, y: torch.Tensor,

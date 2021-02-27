@@ -39,7 +39,6 @@ model = nn.SemanticSegmenter(3, classes,
                              upsampling_method="nearest",
                              activation="tanh",
                              GPU=0,
-                             class_weights=class_weights,
                              learning_rate=1.0E-3)
 # print(model.module.shapes)
 train_data, val_data = ml.split((x, y), frac=0.2)

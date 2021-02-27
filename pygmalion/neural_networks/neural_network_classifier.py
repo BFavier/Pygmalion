@@ -1,8 +1,7 @@
 import torch
 import numpy as np
-import pandas as pd
 from typing import Iterable
-from .conversions import tensor_to_index, tensor_to_probabilities
+from .conversions import tensor_to_index
 from .neural_network import NeuralNetwork
 
 
@@ -50,32 +49,12 @@ class NeuralNetworkClassifier(NeuralNetwork):
         x, _, _ = self.module.data_to_tensor(X, None, None)
         return tensor_to_index(self.module(x))
 
-    def probability(self, X) -> pd.DataFrame:
-        """
-        Return the category probabilities for each observations
-
-        Parameters
-        ----------
-        X : Any
-            The input X of the model.
-            it's type depend on the neural network type.
-            see 'help(self.module)'
-
-        Returns
-        -------
-        pd.DataFrame :
-            DataFrame of category probabilities
-            where each column corresponds to a category
-        """
-        x, _, _ = self.module.data_to_tensor(X, None, None)
-        return tensor_to_probabilities(self.module(x), self.classes)
-
     @property
     def class_weights(self):
         if self._class_weights is None:
             return None
         else:
-            return self._class_weights.tolist()
+            return self.module.class_weights.tolist()
 
     @class_weights.setter
     def class_weights(self, other: Iterable[float]):
@@ -83,7 +62,7 @@ class NeuralNetworkClassifier(NeuralNetwork):
             assert len(other) == len(self.classes)
             other = torch.tensor(other, dtype=torch.float,
                                  device=self.device)
-        self._class_weights = other
+        self.module.class_weights = other
 
     @property
     def classes(self):

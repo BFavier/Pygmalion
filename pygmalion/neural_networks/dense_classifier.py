@@ -3,8 +3,9 @@ import pandas as pd
 import numpy as np
 from typing import List, Union
 from .layers import BatchNorm1d, Linear, Dense0d
-from .conversions import dataframe_to_tensor, classes_to_tensor, \
-                         floats_to_tensor, tensor_to_classes
+from .conversions import dataframe_to_tensor, classes_to_tensor
+from .conversions import floats_to_tensor, tensor_to_classes
+from .conversions import tensor_to_probabilities
 from .neural_network_classifier import NeuralNetworkClassifier
 from .loss_functions import cross_entropy
 
@@ -79,9 +80,30 @@ class DenseClassifier(NeuralNetworkClassifier):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
+    def probability(self, X) -> pd.DataFrame:
+        """
+        Return the class probabilities for each observation
+
+        Parameters
+        ----------
+        X : Any
+            The input X of the model.
+            it's type depend on the neural network type.
+            see 'help(self.module)'
+
+        Returns
+        -------
+        pd.DataFrame :
+            DataFrame of class probabilities
+            where each column corresponds to a class
+        """
+        x, _, _ = self.module.data_to_tensor(X, None, None)
+        return tensor_to_probabilities(self.module(x), self.classes)
+
     def _loss_function(self, y_pred: torch.Tensor, y_target: torch.Tensor,
                        weights: Union[None, torch.Tensor] = None):
-        return cross_entropy(y_pred, y_target, weights, self.class_weights)
+        return cross_entropy(y_pred, y_target, weights,
+                             self.module.class_weights)
 
     def _data_to_tensor(self, X: pd.DataFrame,
                         Y: Union[None, List[str]],

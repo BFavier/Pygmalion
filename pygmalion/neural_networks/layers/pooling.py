@@ -44,7 +44,7 @@ class Pooling(torch.nn.Module):
 
     def shape_in(self, shape_out: Union[list, int]) -> list:
         if self.pooling_window is None:
-            return []
+            return [1, 1]
         return [(d-1)*w + w for d, w in
                 zip(shape_out, self.pooling_window)]
 
