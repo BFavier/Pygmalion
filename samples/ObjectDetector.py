@@ -54,10 +54,13 @@ model = nn.ObjectDetector(in_channels, classes,
                           GPU=0,
                           learning_rate=1.0E-3,
                           class_weights=class_weights)
-model.train(train_data, n_epochs=300, L_minibatchs=1000)
+model.train(train_data, n_epochs=1000, L_minibatchs=None)
 
-model.plot_residuals()
-ml.plot_bounding_boxes(x_train[0], model([x_train[0]])[0])
+# model.plot_residuals()
+f, ax = plt.subplots()
+ax.imshow(x_train[0])
+# ml.plot_bounding_boxes(y_train[0], ax)
+ml.plot_bounding_boxes(model([x_train[0]])[0], ax)
 plt.show()
 
 IPython.embed()

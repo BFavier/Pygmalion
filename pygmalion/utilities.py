@@ -232,16 +232,14 @@ def GPU_info():
     return df
 
 
-def plot_bounding_boxes(image: np.ndarray, bboxes: dict,
-                        ax: Union[None, matplotlib.axes.Axes] = None,
-                        class_colors: dict = {}, color: str = "r"):
+def plot_bounding_boxes(bboxes: dict, ax: matplotlib.axes.Axes,
+                        class_colors: dict = {}, color: str = "r",
+                        label_class: bool = True):
     """
     plot the image with given bounding boxes
 
     Parameters
     ----------
-    image : np.ndarray
-        The image the bounding boxes are associated with
     bounding_boxes : dict
         A dict containing the following keys:
         * x1, y1, x2, y2 : list of int
@@ -250,16 +248,14 @@ def plot_bounding_boxes(image: np.ndarray, bboxes: dict,
             The name of the class predicted for eahc bboxe
         * [confidence : list of float]
             The optional confidence of the bounding boxe
-    ax : matplotlib.axes.Axes or None
-        The matplotlib axes to draw on, or None if a new figure must be created
+    ax : matplotlib.axes.Axes
+        The matplotlib axes to draw on
     class_colors : dict
-        a dictionary of {class: color} for the color of the boxes
+        A dictionary of {class: color} for the color of the boxes
+        Can be any color format supported by matplotlib
     color : str or list
         the default color for classes that are not present in class_colors
     """
-    if ax is None:
-        _, ax = plt.subplots()
-    ax.imshow(image)
     coords = zip(bboxes["x1"], bboxes["y1"], bboxes["x2"], bboxes["y2"])
     for i, (x1, y1, x2, y2) in enumerate(coords):
         boxe_class = bboxes["class"][i]
@@ -269,8 +265,8 @@ def plot_bounding_boxes(image: np.ndarray, bboxes: dict,
         rect = patches.Rectangle((xinf, yinf), w, h,
                                  linewidth=1, edgecolor=boxe_color,
                                  facecolor='none')
-        ax.text(xinf, yinf, boxe_class,
-                bbox=dict(fill=False, edgecolor=boxe_color, linewidth=1))
+        if label_class:
+            ax.text(xinf, yinf-1, boxe_class, color=boxe_color)
         ax.add_patch(rect)
     ax.set_xticks([])
     ax.set_yticks([])
