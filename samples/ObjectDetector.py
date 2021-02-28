@@ -50,16 +50,17 @@ model = nn.ObjectDetector(in_channels, classes,
                           downsampling=down,
                           pooling=pooling,
                           dense=dense,
-                          activation="leaky_relu",
+                          activation="elu",
                           GPU=0,
                           learning_rate=1.0E-3,
                           class_weights=class_weights)
+
 model.train(train_data, n_epochs=1000, L_minibatchs=None)
 
-# model.plot_residuals()
+model.plot_residuals()
 f, ax = plt.subplots()
 ax.imshow(x_train[0])
-# ml.plot_bounding_boxes(y_train[0], ax)
+ml.plot_bounding_boxes(y_train[0], ax, color="k", label_class=False)
 ml.plot_bounding_boxes(model([x_train[0]])[0], ax)
 plt.show()
 

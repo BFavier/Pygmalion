@@ -232,9 +232,38 @@ def tensor_to_bounding_boxes(tensors: Tuple[torch.Tensor],
 
     Parameters
     ----------
+    tensors : tuple of tensors
+        A tuple of ('boxe_size', 'object_proba', 'class_proba') tensors, with:
+        * 'boxe_size' : torch.Tensor
+            A tensor of shape (N, B, 4, H, W) of (x, y, w, h) boxe coordinates
+            - x/y is the center of the boxe in relative cell coordinate
+              (between 0 and 1)
+            - h/w is the height/width of the boxe divided by the grid cell size
+        * 'object_proba' : torch.Tensor
+            A tensor of shape (N, B, H, W) of probability of object presence
+        * 'class_proba' : torch.Tensor
+            A tensor of shape (N, B, C, H, W) of class probabilities of the
+            detected objects
+        where N is the number of images, B the number of bounding boxes
+        predicted per cell of the anchor grid, C the number of classes,
+        H/W the height/width of the anchor grid.
+    cell_size : tuple of int
+        The (height, width) of a cell in the anchor grid
+    classes : list of str
+        The list of unique classes
+
 
     Returns
     -------
+    list of dict:
+        the bounding boxes of each image as a dictionnary of keys:
+        - x1, y1, x2, y2 : list of int
+            coordinates of the corners of each bounding boxe
+        - class : list of str
+            the class of each detected object
+        - confidence : list of float
+            the confidence of presence of an object of given class
+            (probability from 0 to 1)
     """
     boxe_size, object_proba, class_proba = [t.detach().cpu() for t in tensors]
     N, B, H, W = object_proba.shape
@@ -242,12 +271,12 @@ def tensor_to_bounding_boxes(tensors: Tuple[torch.Tensor],
     # Converting boxes coordinates from (x, y, h, w) to (x1, y1, x2, y2)
     steps = [torch.tensor([i*dl for i in range(L)], dtype=torch.float)
              for dl, L in zip([h, w], [H, W])]
-    grid_x, grid_y = torch.meshgrid(*steps)
+    grid_y, grid_x = torch.meshgrid(*steps)
     x1 = (boxe_size[:, :, 0, ...] - 0.5*boxe_size[:, :, 2, ...])*w + grid_x
     y1 = (boxe_size[:, :, 1, ...] - 0.5*boxe_size[:, :, 3, ...])*h + grid_y
     x2 = (boxe_size[:, :, 0, ...] + 0.5*boxe_size[:, :, 2, ...])*w + grid_x
     y2 = (boxe_size[:, :, 1, ...] + 0.5*boxe_size[:, :, 3, ...])*h + grid_y
-    boxes = torch.cat([x1, y1, x2, y2], dim=-1).view(N, -1, 4)
+    boxes = torch.stack([x1, y1, x2, y2], dim=-1).view(N, -1, 4)
     # Getting the class index and confidence of each bounding boxe found
     class_proba = torch.softmax(class_proba, dim=2)
     class_proba, class_index = torch.max(class_proba, dim=2)
@@ -261,10 +290,14 @@ def tensor_to_bounding_boxes(tensors: Tuple[torch.Tensor],
     kept = [ops.batched_nms(boxes[i, mask[i]], confidence[i, mask[i]],
                             class_index[i, mask[i]], 0.5) for i in range(N)]
     # returning the list of boxes found
-    res = [{"x1": [int(round(x.item())) for k in kept for x in boxes[i, k, 0]],
-            "y1": [int(round(y.item())) for k in kept for y in boxes[i, k, 1]],
-            "x2": [int(round(x.item())) for k in kept for x in boxes[i, k, 2]],
-            "y2": [int(round(y.item())) for k in kept for y in boxes[i, k, 3]],
+    res = [{"x1": [int(round(x.item())) for k in kept
+                   for x in boxes[i, mask[i]][k, 0]],
+            "y1": [int(round(y.item())) for k in kept
+                   for y in boxes[i, mask[i]][k, 1]],
+            "x2": [int(round(x.item())) for k in kept
+                   for x in boxes[i, mask[i]][k, 2]],
+            "y2": [int(round(y.item())) for k in kept
+                   for y in boxes[i, mask[i]][k, 3]],
             "class": [classes[c] for k in kept for c in class_index[i, k]],
             "confidence": [c.item() for k in kept for c in confidence[i, k]]}
            for i in range(N)]
