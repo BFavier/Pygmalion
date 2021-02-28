@@ -83,16 +83,19 @@ class DenseRegressor(NeuralNetwork):
 
     def _data_to_tensor(self, X: Union[pd.DataFrame, Iterable],
                         Y: Union[None, np.ndarray],
-                        weights: Union[None, List[float]] = None) -> tuple:
+                        weights: Union[None, List[float]] = None,
+                        device: torch.device = torch.device("cpu"),
+                        pinned: bool = False) -> tuple:
         if isinstance(X, pd.DataFrame):
-            x = dataframe_to_tensor(X, self.module.inputs, self.device)
+            x = dataframe_to_tensor(X, self.module.inputs, device, pinned)
         else:
-            x = floats_to_tensor(X, self.device)
-        y = None if Y is None else floats_to_tensor(Y, self.device).view(-1, 1)
+            x = floats_to_tensor(X, device, pinned)
+        y = None if Y is None else floats_to_tensor(Y, device,
+                                                    pinned).view(-1, 1)
         if weights is None:
             w = None
         else:
-            w = floats_to_tensor(weights, self.device).view(-1, 1)
+            w = floats_to_tensor(weights, device, pinned).view(-1, 1)
         return x, y, w
 
     def _tensor_to_y(self, tensor: torch.Tensor) -> np.ndarray:

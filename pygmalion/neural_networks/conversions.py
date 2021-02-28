@@ -1,15 +1,20 @@
 import torch
+import torchvision.ops as ops
 import pandas as pd
 import numpy as np
 from typing import List, Iterable, Union, Tuple
 
 
-def floats_to_tensor(arr: Iterable, device: torch.device) -> torch.Tensor:
+def floats_to_tensor(arr: Iterable, device: torch.device,
+                     pinned: bool) -> torch.Tensor:
     """converts an array of numerical values to a tensor of floats"""
     if isinstance(arr, pd.Series):
         arr = arr.to_numpy()
-    return torch.tensor(arr, dtype=torch.float, device=device,
-                        requires_grad=False)
+    t = torch.tensor(arr, dtype=torch.float, device=device,
+                     requires_grad=False)
+    if pinned:
+        t = t.pin_memory()
+    return t
 
 
 def tensor_to_floats(tensor: torch.Tensor) -> np.ndarray:
@@ -18,12 +23,16 @@ def tensor_to_floats(tensor: torch.Tensor) -> np.ndarray:
     return tensor.detach().cpu().numpy().astype(np.float64)
 
 
-def longs_to_tensor(arr: Iterable, device: torch.device) -> torch.Tensor:
+def longs_to_tensor(arr: Iterable, device: torch.device,
+                    pinned: bool) -> torch.Tensor:
     """converts an array of numerical values to a tensor of longs"""
     if isinstance(arr, pd.Series):
         arr = arr.to_numpy()
-    return torch.tensor(arr, dtype=torch.long, device=device,
-                        requires_grad=False)
+    t = torch.tensor(arr, dtype=torch.long, device=device,
+                     requires_grad=False)
+    if pinned:
+        t = t.pin_memory()
+    return t
 
 
 def tensor_to_longs(tensor: torch.Tensor) -> list:
@@ -33,7 +42,7 @@ def tensor_to_longs(tensor: torch.Tensor) -> list:
 
 
 def images_to_tensor(images: Iterable[np.ndarray],
-                     device: torch.device) -> torch.Tensor:
+                     device: torch.device, pinned: bool) -> torch.Tensor:
     """Converts a list of images to a tensor"""
     if not isinstance(images, np.ndarray):
         images = np.array(images)
@@ -43,7 +52,7 @@ def images_to_tensor(images: Iterable[np.ndarray],
         images = np.expand_dims(images, 1)
     else:
         images = np.moveaxis(images, -1, 1)
-    return floats_to_tensor(images, device)
+    return floats_to_tensor(images, device, pinned)
 
 
 def tensor_to_images(tensor: torch.Tensor,
@@ -77,14 +86,15 @@ def tensor_to_index(tensor: torch.tensor) -> np.ndarray:
 
 def classes_to_tensor(input: Iterable[str],
                       classes: List[str],
-                      device: torch.device) -> torch.Tensor:
+                      device: torch.device,  pinned: bool) -> torch.Tensor:
     """
     converts a list of classes to tensor
     'classes' must be a list of unique possible classes.
     The tensor contains for each input the index of the category.
     """
     assert isinstance(classes, list)
-    return longs_to_tensor([classes.index(i) for i in input], device=device)
+    return longs_to_tensor([classes.index(i) for i in input],
+                           device, pinned)
 
 
 def tensor_to_classes(tensor: torch.Tensor,
@@ -96,11 +106,11 @@ def tensor_to_classes(tensor: torch.Tensor,
 
 def dataframe_to_tensor(df: pd.DataFrame,
                         x: List[str],
-                        device: torch.device) -> torch.Tensor:
+                        device: torch.device, pinned: bool) -> torch.Tensor:
     """Converts a dataframe of numerical values to tensor"""
     assert all(np.issubdtype(df[var].dtype, np.number) for var in x)
     arr = df[x].to_numpy(dtype=np.float32)
-    return floats_to_tensor(arr, device=device)
+    return floats_to_tensor(arr, device, pinned)
 
 
 def tensor_to_probabilities(tensor: torch.Tensor,
@@ -114,7 +124,7 @@ def tensor_to_probabilities(tensor: torch.Tensor,
 
 
 def segmented_to_tensor(images: np.ndarray, colors: Iterable,
-                        device: torch.device) -> torch.Tensor:
+                        device: torch.device, pinned: bool) -> torch.Tensor:
     """
     Converts a segmented image to a tensor of long
     """
@@ -129,12 +139,12 @@ def segmented_to_tensor(images: np.ndarray, colors: Iterable,
     masks = np.array([np.all(images == c, axis=3) for c in colors])
     if not masks.any(axis=0).all():
         raise RuntimeError("Found color associated to no class")
-    return longs_to_tensor(np.argmax(masks, axis=0), device=device)
+    return longs_to_tensor(np.argmax(masks, axis=0), device, pinned)
 
 
 def bounding_boxes_to_tensor(bboxes: List[dict], image_size: Tuple[int, int],
                              cell_size: Tuple[int, int], classes: List[str],
-                             device: torch.device
+                             device: torch.device, pinned: bool
                              ) -> Tuple[torch.Tensor]:
     """
     Converts a list of bounding boxes to 4 tensors
@@ -201,7 +211,61 @@ def bounding_boxes_to_tensor(bboxes: List[dict], image_size: Tuple[int, int],
     boxe_size = torch.tensor(boxe_size, dtype=torch.float, device=device)
     object_mask = torch.tensor(object_mask, dtype=torch.float, device=device)
     class_index = torch.tensor(class_index, dtype=torch.long, device=device)
+    if pinned:
+        boxe_size = boxe_size.pin_memory()
+        object_mask = object_mask.pin_memory()
+        class_index = class_index.pin_memory()
     if cell_weights is not None:
         cell_weights = torch.tensor(cell_weights, dtype=torch.float,
                                     device=device)
+        if pinned:
+            cell_weights = cell_weights.pin_memory()
     return boxe_size, object_mask, class_index, cell_weights
+
+
+def tensor_to_bounding_boxes(tensors: Tuple[torch.Tensor],
+                             cell_size: Tuple[int, int],
+                             classes: List[str]) -> List[dict]:
+    """
+    Converts the (boxe_size, object_proba, class_proba) tensors
+    to a bounding boxes dict for each image.
+
+    Parameters
+    ----------
+
+    Returns
+    -------
+    """
+    boxe_size, object_proba, class_proba = [t.detach().cpu() for t in tensors]
+    N, B, H, W = object_proba.shape
+    h, w = cell_size
+    # Converting boxes coordinates from (x, y, h, w) to (x1, y1, x2, y2)
+    steps = [torch.tensor([i*dl for i in range(L)], dtype=torch.float)
+             for dl, L in zip([h, w], [H, W])]
+    grid_x, grid_y = torch.meshgrid(*steps)
+    x1 = (boxe_size[:, :, 0, ...] - 0.5*boxe_size[:, :, 2, ...])*w + grid_x
+    y1 = (boxe_size[:, :, 1, ...] - 0.5*boxe_size[:, :, 3, ...])*h + grid_y
+    x2 = (boxe_size[:, :, 0, ...] + 0.5*boxe_size[:, :, 2, ...])*w + grid_x
+    y2 = (boxe_size[:, :, 1, ...] + 0.5*boxe_size[:, :, 3, ...])*h + grid_y
+    boxes = torch.cat([x1, y1, x2, y2], dim=-1).view(N, -1, 4)
+    # Getting the class index and confidence of each bounding boxe found
+    class_proba = torch.softmax(class_proba, dim=2)
+    class_proba, class_index = torch.max(class_proba, dim=2)
+    class_proba = class_proba.view(N, -1)
+    class_index = class_index.view(N, -1)
+    object_proba = object_proba.view(N, -1)
+    confidence = object_proba * class_proba
+    # filtering boxes with confidence too low
+    mask = (confidence >= 0.5)
+    # Performing non max suppression
+    kept = [ops.batched_nms(boxes[i, mask[i]], confidence[i, mask[i]],
+                            class_index[i, mask[i]], 0.5) for i in range(N)]
+    # returning the list of boxes found
+    res = [{"x1": [int(round(x.item())) for k in kept for x in boxes[i, k, 0]],
+            "y1": [int(round(y.item())) for k in kept for y in boxes[i, k, 1]],
+            "x2": [int(round(x.item())) for k in kept for x in boxes[i, k, 2]],
+            "y2": [int(round(y.item())) for k in kept for y in boxes[i, k, 3]],
+            "class": [classes[c] for k in kept for c in class_index[i, k]],
+            "confidence": [c.item() for k in kept for c in confidence[i, k]]}
+           for i in range(N)]
+    return res

@@ -51,11 +51,13 @@ model = nn.ObjectDetector(in_channels, classes,
                           pooling=pooling,
                           dense=dense,
                           activation="leaky_relu",
-                          GPU=None,
+                          GPU=0,
                           learning_rate=1.0E-3,
                           class_weights=class_weights)
-# model.train(train_data, val_data, n_epochs=300, L_minibatchs=1000)
+model.train(train_data, n_epochs=300, L_minibatchs=1000)
 
-model(x_val[::2])
+model.plot_residuals()
+ml.plot_bounding_boxes(x_train[0], model([x_train[0]])[0])
+plt.show()
 
 IPython.embed()

@@ -107,11 +107,14 @@ class DenseClassifier(NeuralNetworkClassifier):
 
     def _data_to_tensor(self, X: pd.DataFrame,
                         Y: Union[None, List[str]],
-                        weights: Union[None, List[float]] = None) -> tuple:
-        x = dataframe_to_tensor(X, self.module.inputs, self.device)
+                        weights: Union[None, List[float]] = None,
+                        device: torch.device = torch.device("cpu"),
+                        pinned: bool = False) -> tuple:
+        x = dataframe_to_tensor(X, self.module.inputs, device, pinned)
         y = None if Y is None else classes_to_tensor(Y, self.classes,
-                                                     self.device)
-        w = None if weights is None else floats_to_tensor(weights, self.device)
+                                                     device, pinned)
+        w = None if weights is None else floats_to_tensor(weights, device,
+                                                          pinned)
         return x, y, w
 
     def _tensor_to_y(self, tensor: torch.Tensor) -> np.ndarray:

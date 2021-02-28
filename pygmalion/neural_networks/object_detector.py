@@ -1,11 +1,11 @@
 import torch
 import torch.nn.functional as F
-import torchvision.ops as ops
 import numpy as np
 from typing import Union, List, Tuple
 from .layers import Conv2d, BatchNorm2d
 from .layers import Encoder2d, Dense2d
 from .conversions import bounding_boxes_to_tensor, images_to_tensor
+from .conversions import tensor_to_bounding_boxes
 from .neural_network_classifier import NeuralNetworkClassifier
 from .loss_functions import object_detector_loss
 
@@ -145,15 +145,19 @@ class ObjectDetector(NeuralNetworkClassifier):
                                     self.module.class_weights)
 
     def _data_to_tensor(self, X: np.ndarray,
-                        Y: Union[None, List[dict]]) -> tuple:
-        """
-        Converts input data to tensors
-        """
-        x = images_to_tensor(X, self.device)
+                        Y: Union[None, List[dict]],
+                        weights: None = None,
+                        device: torch.device = torch.device("cpu"),
+                        pinned: bool = False) -> tuple:
+        if weights is not None:
+            raise ValueError("The weight of each observation must be passed in"
+                             " the dictionary of bounding boxes, not as a"
+                             " separate list")
+        x = images_to_tensor(X, device, pinned)
         if Y is not None:
             res = bounding_boxes_to_tensor(Y, tuple(X.shape[1:3]),
                                            self.module.cell_size,
-                                           self.module.classes, self.device)
+                                           self.module.classes, device, pinned)
             boxe_size, object_mask, class_index, cell_weights = res
             y = boxe_size, object_mask, class_index
             w = cell_weights
@@ -163,11 +167,5 @@ class ObjectDetector(NeuralNetworkClassifier):
         return x, y, w
 
     def _tensor_to_y(self, tensors: Tuple[torch.Tensor]) -> List[dict]:
-        """
-
-        """
-        boxe_size, object_proba, class_proba = [t.detach().cpu().numpy()
-                                                for t in tensors]
-        indexes = np.argmax(object_pred, ax=1)
-        # ops.nms()
-        # raise NotImplementedError("Not implemented yet, Finish me plz")
+        return tensor_to_bounding_boxes(tensors, self.module.cell_size,
+                                        self.module.classes)

@@ -3,6 +3,7 @@ import numpy as np
 import pandas as pd
 import matplotlib
 import matplotlib.pyplot as plt
+import matplotlib.patches as patches
 from typing import Any, Tuple, Iterable, List, Union
 
 
@@ -229,6 +230,50 @@ def GPU_info():
                                            "peak"])
     df.index.name = 'ID'
     return df
+
+
+def plot_bounding_boxes(image: np.ndarray, bboxes: dict,
+                        ax: Union[None, matplotlib.axes.Axes] = None,
+                        class_colors: dict = {}, color: str = "r"):
+    """
+    plot the image with given bounding boxes
+
+    Parameters
+    ----------
+    image : np.ndarray
+        The image the bounding boxes are associated with
+    bounding_boxes : dict
+        A dict containing the following keys:
+        * x1, y1, x2, y2 : list of int
+            The coordinates in pixel of each bboxe corner
+        * class : list of str
+            The name of the class predicted for eahc bboxe
+        * [confidence : list of float]
+            The optional confidence of the bounding boxe
+    ax : matplotlib.axes.Axes or None
+        The matplotlib axes to draw on, or None if a new figure must be created
+    class_colors : dict
+        a dictionary of {class: color} for the color of the boxes
+    color : str or list
+        the default color for classes that are not present in class_colors
+    """
+    if ax is None:
+        _, ax = plt.subplots()
+    ax.imshow(image)
+    coords = zip(bboxes["x1"], bboxes["y1"], bboxes["x2"], bboxes["y2"])
+    for i, (x1, y1, x2, y2) in enumerate(coords):
+        boxe_class = bboxes["class"][i]
+        boxe_color = class_colors.get(boxe_class, color)
+        xinf, yinf = min(x1, x2), min(y1, y2)
+        w, h = abs(x2-x1), abs(y2-y1)
+        rect = patches.Rectangle((xinf, yinf), w, h,
+                                 linewidth=1, edgecolor=boxe_color,
+                                 facecolor='none')
+        ax.text(xinf, yinf, boxe_class,
+                bbox=dict(fill=False, edgecolor=boxe_color, linewidth=1))
+        ax.add_patch(rect)
+    ax.set_xticks([])
+    ax.set_yticks([])
 
 
 def _index(data: Any, at: np.ndarray):
