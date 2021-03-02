@@ -113,9 +113,9 @@ For examples of model training see the **samples** folder in the [github page](h
 
 The neural network models all share some common attributes:
 
-* The **GPU** attribute is a boolean defining if the model must be trained/evaluated on GPU. This is only avilable with a CUDA capable GPU. This can massively speed up training/evaluation speed on big models (image analysis, ...).
+* The **GPU** attribute is either None to train on CPU, an integer between 0 and the number of available CUDA compatible GPUs to train on a single GPU, or a list of integers to train on multiples GPU.
 * The **learning_rate** attribute is the learning rate used during training.
-* The **optimization_method** attributes is the string name of the torch.optim optimizer used during training.
+* The **optimization_method** attributes is the string name of the torch.optim optimizer used during training ("Adam", "SGD", ...).
 * The **L1**/**L2** attribute is the L1/L2 penalization factor used during training.
 * The **residuals** attribute is a dict containing the training and validation loss history.
 * The **norm_update_factor** attribute is the factor used to update the batch normalization running mean and variance. The default value is mostly always ok, unless you do a lot of batchs/minibatchs where it might benefit to getting reduced.
@@ -150,7 +150,7 @@ def train(self, training_data: Union[tuple, Callable],
 
 * The **verbose** parameter describes whether ther train/validation loss shoudl be printed at eahc epoch.
 
-* If the **batchs_length** parameter is not None, the data are shuffled and cut in batches of at most **batchs_length** observations at each epoch. This is necessary to entrain big models on limited GPU memory.
+* If the **batchs_length** parameter is not None, the data are shuffled and cut in batches of at most **batchs_length** observations at each epoch. This is necessary to train big models on limited GPU memory.
 
 The history of the loss can be plotted using the **plot_residuals** method.
 
@@ -217,7 +217,7 @@ The only addition is the **classes** argument, which is a list of the unique str
 
 ### **ImageClassifier**
 
-An ImageClassifier predicts a str class given as input an image. Here below the predictions of a model trained on the fashion-MNIST dataset. You can see at the 2nd row 3rd column, it missclassified pullover as a hand bag.
+An ImageClassifier predicts a str class given as input an image. Here below the predictions of a model trained on the fashion-MNIST dataset.
 
 ![fashion-MNIST predictions](https://raw.githubusercontent.com/BFavier/Pygmalion/main/images/Fashion_MNIST_illustration.png)
 
@@ -259,6 +259,37 @@ The args and kwargs passed to the underlying pytorch Module are:
 
 ### **SemanticSegmenter**
 
-![segmented_cityscapes](https://raw.githubusercontent.com/BFavier/Pygmalion/main/images/segmented_cityscape.png)
+A SemanticSegmenter predicts a class for each pixel of the input image. Here below the predictions of a model trained on the cityscape dataset.
+
+![segmented_cityscapes](https://raw.githubusercontent.com/BFavier/Pygmalion/main/images/segmented_cityscape_2.png)
+
+It is implemented as a Convolutional Neural Network similar to U-Net. It is a succession of convolutions/pooling followed by a succession of upsampling/convolutions, leading to a convergent/divergent feature map structure. The feature map before each downsampling stage is concatenated to the upsampling of the same size to preserve features.
 
 
+~~~python
+>>> def __init__(self, in_channels: int,
+>>>                  colors: Dict[str, Union[int, List[int]]],
+>>>                  downsampling: List[Union[dict, List[dict]]],
+>>>                  pooling: List[Tuple[int, int]],
+>>>                  upsampling: List[Union[dict, List[dict]]],
+>>>                  pooling_type: str = "max",
+>>>                  upsampling_method: str = "nearest",
+>>>                  activation: str = "relu",
+>>>                  stacked: bool = False,
+>>>                  dropout: Union[float, None] = None):
+~~~
+
+* The **in_channels** argument is the number of channels in the input images (1 for grayscale, 3 for RGB, 4 for RGBA, ...)
+* The **colors** argument is id dictionary of {class: color}. Each color can be an int (0 to 255) for grayscale prediction, or a list of several int for color predictions (3 for RGB, 4 for RGBA, ...).
+* The **downsampling** argument is similar to the ImageClassifier's **convolutions** argument.
+* The **pooling** argument is similar to the ImageClassifier's **pooling** argument. There must be as much pooling layers as there are downsampling layers.
+* The **upsampling** argument is a list convolutions similar to the downsampling argument. There must be as much upsampling layers as there are downsampling layers.
+* The **pooling_type** argument is the type of pooling performed. It must be one of {"max", "avg"} for max pooling and average pooling.
+* The **upsampling_method** argument is the type of upsampling performed. It must be one of {"nearest", "interpolate"}.
+* The **activation** argument is a default value for the **activation** kwargs of the convolution layers
+* The **stacked** argument is a default value for the **stacked** kwargs of the convolution layers
+* The **dropout** argument is a default value for the **dropout** kwargs of the convolution layers
+
+### **ObjectDetector**
+
+An object detector is a model that takes in input an image and outputs a variable number of bounding boxes, and class of objects detected.
