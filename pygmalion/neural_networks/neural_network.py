@@ -97,7 +97,7 @@ class NeuralNetwork(Model):
               n_epochs: int = 1000,
               patience: int = 100,
               verbose: bool = True,
-              L_minibatchs: Union[int, None] = None):
+              batchs_length: Union[int, None] = None):
         """
         Trains a neural network model.
 
@@ -116,13 +116,13 @@ class NeuralNetwork(Model):
             The number of epochs before early stopping
         verbose : bool
             If True the loss are displayed at each epoch
-        L_minibatchs : int or None
-            Maximum size of the minibatch
-            Or None to process the full batch in one go
+        batchs_length : int or None
+            Maximum size of the batchs
+            Or None to process the full data in one go
         """
         self.module.train()
         # Converts training/validation data to tensors
-        device = self.device if L_minibatchs is None else torch.device("cpu")
+        device = self.device if batchs_length is None else torch.device("cpu")
         pinned = (self.device != device)
         training_data = self._data_to_tensor(*training_data, device=device,
                                              pinned=pinned)
@@ -152,7 +152,7 @@ class NeuralNetwork(Model):
         # trains the model, stops if the user press 'ctrl+c'
         self._training_loop(loss_module,
                             training_data, validation_data, n_epochs,
-                            patience, verbose, L_minibatchs,
+                            patience, verbose, batchs_length,
                             best_epoch, best_loss, best_state)
 
     def plot_residuals(self, ax=None, log: bool = True):
@@ -448,7 +448,7 @@ class NeuralNetwork(Model):
                        n_epochs: int,
                        patience: int,
                        verbose: bool,
-                       L_minibatchs: Union[int, None],
+                       batchs_length: Union[int, None],
                        best_epoch: int,
                        best_loss: float,
                        best_state: tuple):
@@ -485,7 +485,7 @@ class NeuralNetwork(Model):
             before early stoping
         verbose : bool
             If True prints models info while training
-        L_minibatchs : int or None
+        batchs_length : int or None
             The maximum number of items in a minibatchs
             or None to not to use minibatchs
         best_epoch : int
@@ -500,12 +500,12 @@ class NeuralNetwork(Model):
                 self.optimizer.step()
                 self.optimizer.zero_grad()
                 training_loss = self._batch_loss(loss_module,
-                                                 training_data, L_minibatchs,
+                                                 training_data, batchs_length,
                                                  train=True)
                 if validation_data is not None:
                     validation_loss = self._batch_loss(loss_module,
                                                        validation_data,
-                                                       L_minibatchs,
+                                                       batchs_length,
                                                        train=False)
                     if validation_loss < best_loss:
                         best_epoch = epoch
@@ -544,12 +544,12 @@ class NeuralNetwork(Model):
 
     def _batch_loss(self, loss_module: torch.nn.Module,
                     data: Union[tuple, Callable],
-                    L_minibatchs: Union[int, None],
+                    batchs_length: Union[int, None],
                     train: bool) -> float:
         """
         Compute the loss on the given data, processing it by batchs of maximum
-        size 'L_minibatchs'.
-        If 'L_minibatchs' is None, process in one batch.
+        size 'batchs_length'.
+        If 'batchs_length' is None, process in one batch.
 
         Parameters
         ----------
@@ -570,14 +570,14 @@ class NeuralNetwork(Model):
         float :
             The loss function averaged over the batchs
         """
-        if L_minibatchs is None:
+        if batchs_length is None:
             return self._eval_loss(loss_module,
                                    *data, train)
         else:
             X, Y, weights = self._shuffle(data)
             N = self._len(X)
-            L_minibatchs = min(max(1, L_minibatchs), N)
-            n = math.ceil(N/L_minibatchs)
+            batchs_length = min(max(1, batchs_length), N)
+            n = math.ceil(N/batchs_length)
             bounds = [int(i*N/n) for i in range(n+1)]
             losses = []
             for (start, end) in zip(bounds[:-1], bounds[1:]):

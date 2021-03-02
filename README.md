@@ -137,10 +137,10 @@ def train(self, training_data: Union[tuple, Callable],
           n_epochs: int = 1000,
           patience: int = 100,
           verbose: bool = True,
-          L_minibatchs: Union[int, None] = None):
+          batchs_length: Union[int, None] = None):
 ~~~
 
-* The parameter **training_data** must be a tuple of (x, y, [weight]). The weight is optional. The types of x/y/weights depends on the model types. Training_data can also be a function that yields by batch all the (x, y, [weights]) tuples of an epoch. The weights of the model are updated at the end of the epoch. This is usefull if the training data doesn't fit all at once in the memory. Reading from the disk/writting to the GPU memory is slow, avoid using batchs if you can.
+* The parameter **training_data** must be a tuple of (x, y, [weight]). The weight is optional. The types of x/y/weights depends on the model types.
 
 * The parameter **validation_data** is similar to **training_data**. This is the data on which the loss is evaluated, but not back propagated (the model doesn't learn from it). It is used for early stopping: the training stops if the validation loss doesn't improve anymore (to prevent overfitting). This parameter is optional, so that you can verify that your model is able to overfit before trying to train it with early stopping.
 
@@ -150,7 +150,7 @@ def train(self, training_data: Union[tuple, Callable],
 
 * The **verbose** parameter describes whether ther train/validation loss shoudl be printed at eahc epoch.
 
-* If the **L_minibatchs** parameter is not None, training is performed with mini-batching. And the maximum size of the minibatchs is **L_minibatchs** observations. Minibatchs are essential to train big models on limited memory. The model retains all the intermediate results as it needs them to propagate back the gradient. These intermediate results often occupy much more memory than the inputs/targets. You can save memory by performing minibatchs: the model is evaluated on subsets of the training data at once. Minibatchs slows down training and should not be used if there is enough memory to evaluate the model on the whole epoch at once. Using minibatchs is faster than batchs because the data is not loaded back and forth between disk/RAM/VRAM. Althought the two can be used together if the training data alone doesn't fit in memory. You can then be faster by using bigger batchs with severals minibatchs than batching alone.
+* If the **batchs_length** parameter is not None, the data are shuffled and cut in batches of at most **batchs_length** observations at each epoch. This is necessary to entrain big models on limited GPU memory.
 
 The history of the loss can be plotted using the **plot_residuals** method.
 

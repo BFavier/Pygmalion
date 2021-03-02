@@ -42,7 +42,7 @@ model = nn.SemanticSegmenter(3, classes,
                              learning_rate=1.0E-3)
 # print(model.module.shapes)
 train_data, val_data = ml.split((x, y), frac=0.2)
-model.train(train_data, val_data, n_epochs=500, L_minibatchs=5)
+model.train(train_data, val_data, n_epochs=500, batchs_length=5)
 
 # Plot metrics
 # model.plot_residuals()

@@ -27,8 +27,8 @@ class_weights = {k: 1/(f+1.0E-8) for k, f in class_fractions.items()}
 mean = sum([w for w in class_weights.values()])
 class_weights = {k: w/mean for k, w in class_weights.items()}
 
-train_data = (x_train[:1], y_train[:1])
-val_data = (x_val[:2], y_val[:2])
+train_data = (x_train, y_train)
+val_data = (x_val, y_val)
 classes = [k for k in class_weights.keys()]
 boxes_per_cell = 3
 in_channels = 3
@@ -41,20 +41,19 @@ down = [{"window": (3, 3), "channels": 4},
         {"window": (3, 3), "channels": 16},
         {"window": (3, 3), "channels": 16}]
 pooling = [(2, 2), (2, 2), (2, 2), (2, 2), (2, 2), (2, 2)]
-dense = [{"window": (3, 3), "channels": 16},
-         {"window": (3, 3), "channels": 32},
+dense = [{"window": (3, 3), "channels": 32},
          {"window": (3, 3), "channels": 64}]
 model = nn.ObjectDetector(in_channels, classes,
                           boxes_per_cell,
                           downsampling=down,
                           pooling=pooling,
                           dense=dense,
-                          activation="relu",
+                          activation="elu",
                           GPU=0,
-                          learning_rate=1.0E-4,
+                          learning_rate=1.0E-3,
                           class_weights=class_weights)
 
-model.train(train_data, n_epochs=1000, L_minibatchs=None)
+model.train(train_data, n_epochs=1000, batchs_length=5)
 
 model.plot_residuals()
 
