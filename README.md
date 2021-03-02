@@ -292,4 +292,8 @@ It is implemented as a Convolutional Neural Network similar to U-Net. It is a su
 
 ### **ObjectDetector**
 
-An object detector is a model that takes in input an image and outputs a variable number of bounding boxes, and class of objects detected.
+An object detector is a model that takes in input an image, and outputs a variable number of bounding boxes with the class of each object detected. Here below an object detector trained on the aquarium dataset of Roboflow.
+
+![object_detector_aquarium](https://raw.githubusercontent.com/BFavier/Pygmalion/main/images/aquarium_detection.png)
+
+
