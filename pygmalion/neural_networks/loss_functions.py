@@ -171,17 +171,19 @@ def object_detector_loss(y_pred: torch.Tensor, y_target: Tuple[torch.Tensor],
     class_pred = torch.gather(class_pred, 1,
                               indexes.expand((-1, n, -1, -1)).unsqueeze(1)
                               ).squeeze(1)
-    # Calculating the different parts of the loss function
+    # Calculating the loss part linked to bounding boxe position/size
     weights = object_target if weights is None else object_target*weights
     boxe_loss = MSE(boxe_pred, boxe_target,
                     weights=weights.unsqueeze(1).expand(-1, 4, -1, -1),
                     target_norm=target_norm)
+    # Calculate the loss part linked to object presence
     frac = object_target.sum()/len(object_target.view(-1))
-    bce_class_weight = torch.stack([1-frac, frac])*2
+    bce_class_weight = torch.stack([frac, 1-frac])*2
     bce_weight = bce_class_weight[object_target.view(-1).long()
                                   ].view_as(object_target)
     object_loss = F.binary_cross_entropy(object_pred, object_target,
                                          weight=bce_weight)
+    # Calculate the loss part linked to detected class
     class_loss = cross_entropy(class_pred, class_target,
                                weights=weights, class_weights=class_weights)
-    return 5 * boxe_loss + object_loss + class_loss
+    return boxe_loss + object_loss + class_loss

@@ -266,7 +266,11 @@ def plot_bounding_boxes(bboxes: dict, ax: matplotlib.axes.Axes,
                                  linewidth=1, edgecolor=boxe_color,
                                  facecolor='none')
         if label_class:
-            ax.text(xinf, yinf-1, boxe_class, color=boxe_color)
+            s = boxe_class
+            confidence = bboxes.get("confidence", None)
+            if confidence is not None:
+                s += f": {confidence[i]*100:.1f}%"
+            ax.text(xinf, yinf-1, s, color=boxe_color)
         ax.add_patch(rect)
     ax.set_xticks([])
     ax.set_yticks([])

@@ -27,9 +27,8 @@ class_weights = {k: 1/(f+1.0E-8) for k, f in class_fractions.items()}
 mean = sum([w for w in class_weights.values()])
 class_weights = {k: w/mean for k, w in class_weights.items()}
 
-
-train_data = (x_train[::100], y_train[::100])
-val_data = (x_val[::100], y_val[::100])
+train_data = (x_train[:1], y_train[:1])
+val_data = (x_val[:2], y_val[:2])
 classes = [k for k in class_weights.keys()]
 boxes_per_cell = 3
 in_channels = 3
@@ -50,18 +49,20 @@ model = nn.ObjectDetector(in_channels, classes,
                           downsampling=down,
                           pooling=pooling,
                           dense=dense,
-                          activation="elu",
+                          activation="relu",
                           GPU=0,
-                          learning_rate=1.0E-3,
+                          learning_rate=1.0E-4,
                           class_weights=class_weights)
 
 model.train(train_data, n_epochs=1000, L_minibatchs=None)
 
 model.plot_residuals()
-f, ax = plt.subplots()
-ax.imshow(x_train[0])
-ml.plot_bounding_boxes(y_train[0], ax, color="k", label_class=False)
-ml.plot_bounding_boxes(model([x_train[0]])[0], ax)
-plt.show()
+
+for x, y in zip(x_train[:5], y_train[:5]):
+    f, ax = plt.subplots()
+    ax.imshow(x)
+    ml.plot_bounding_boxes(y, ax, color="k", label_class=False)
+    ml.plot_bounding_boxes(model([x])[0], ax)
+    plt.show()
 
 IPython.embed()
