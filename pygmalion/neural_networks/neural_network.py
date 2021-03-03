@@ -17,12 +17,12 @@ class LossModule(torch.nn.Module):
 
     def __init__(self, model: 'NeuralNetwork'):
         super().__init__()
-        self.model = model
+        self.module = model.module
+        self.loss = model._loss_function
 
     def forward(self, x, y_target, weights=None):
-        model = self.model
-        module = model.module
-        return model._loss_function(module(x), y_target, weights=weights)
+        y_pred = self.module(x)
+        return self.loss(y_pred, y_target, weights=weights).unsqueeze(0)
 
 
 class NeuralNetwork(Model):
@@ -698,12 +698,12 @@ class NeuralNetwork(Model):
         y = self._to(y, device)
         w = self._to(w, device)
         if train:
-            loss = loss_module(x, y, w)
+            loss = loss_module(x, y, w).mean()
             loss = self._regularization(loss)
             loss.backward()
         else:
             with torch.no_grad():
-                self.module.eval()
+                self.module.eval().mean()
                 loss = loss_module(x, y, weights=w)
                 self.module.train()
                 loss = self._regularization(loss)
