@@ -137,7 +137,7 @@ def train(self, training_data: Union[tuple, Callable],
           n_epochs: int = 1000,
           patience: int = 100,
           verbose: bool = True,
-          batchs_length: Union[int, None] = None):
+          batch_length: Union[int, None] = None):
 ~~~
 
 * The parameter **training_data** must be a tuple of (x, y, [weight]). The weight is optional. The types of x/y/weights depends on the model types.
@@ -150,7 +150,7 @@ def train(self, training_data: Union[tuple, Callable],
 
 * The **verbose** parameter describes whether ther train/validation loss shoudl be printed at eahc epoch.
 
-* If the **batchs_length** parameter is not None, the data are shuffled and cut in batches of at most **batchs_length** observations at each epoch. This is necessary to train big models on limited GPU memory.
+* If the **batch_length** parameter is not None, the data are shuffled and cut in batches of at most **batch_length** observations at each epoch. This is necessary to train big models on limited GPU memory.
 
 The history of the loss can be plotted using the **plot_residuals** method.
 

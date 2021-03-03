@@ -38,7 +38,7 @@ model = nn.ImageClassifier(in_channels, classes,
                            learning_rate=1.0E-2)
 # print(model.module.shapes)
 train_data, val_data = ml.split((x_train, y_train), frac=0.2)
-model.train(train_data, val_data, n_epochs=300, batchs_length=1000)
+model.train(train_data, val_data, n_epochs=300, batch_length=1000)
 
 # Plot results
 model.plot_residuals()
