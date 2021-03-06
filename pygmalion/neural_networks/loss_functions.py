@@ -189,4 +189,4 @@ def object_detector_loss(y_pred: torch.Tensor, y_target: Tuple[torch.Tensor],
     # scaling factor to account for number of boxes per image
     scale = object_target.view(-1).shape[0] / (object_target.sum() + 1.0E-5)
     # Returning the final loss
-    return (boxe_loss + object_loss + class_loss)*scale
+    return (boxe_loss*scale + object_loss + class_loss*scale)
