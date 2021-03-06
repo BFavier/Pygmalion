@@ -70,7 +70,9 @@ class BatchNorm:
         torch.Tensor :
             The un-normalized tensor
         """
-        return X*(self.running_var+self.eps)**0.5 + self.running_mean
+        X = torch.transpose(X, 1, -1)
+        Y = X*(self.running_var+self.eps)**0.5 + self.running_mean
+        return torch.transpose(Y, -1, 1)
 
 
 class BatchNorm1d(torch.nn.BatchNorm1d, BatchNorm):
