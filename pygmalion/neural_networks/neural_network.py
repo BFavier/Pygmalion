@@ -703,8 +703,8 @@ class NeuralNetwork(Model):
             loss.backward()
         else:
             with torch.no_grad():
-                self.module.eval().mean()
-                loss = loss_module(x, y, weights=w)
+                self.module.eval()
+                loss = loss_module(x, y, weights=w).mean()
                 self.module.train()
                 loss = self._regularization(loss)
         loss = float(loss)
