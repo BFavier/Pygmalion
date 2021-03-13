@@ -63,6 +63,11 @@ class DenseClassifierModule(torch.nn.Module):
         x = self.dense(x)
         return self.output(x)
 
+    def loss(self, y_pred: torch.Tensor, y_target: torch.Tensor,
+             weights: Union[None, torch.Tensor] = None):
+        return cross_entropy(y_pred, y_target, weights,
+                             self.class_weights)
+
     @property
     def dump(self):
         return {"type": type(self).__name__,
@@ -100,21 +105,14 @@ class DenseClassifier(NeuralNetworkClassifier):
         x, _, _ = self.module.data_to_tensor(X, None, None)
         return tensor_to_probabilities(self.module(x), self.classes)
 
-    def _loss_function(self, y_pred: torch.Tensor, y_target: torch.Tensor,
-                       weights: Union[None, torch.Tensor] = None):
-        return cross_entropy(y_pred, y_target, weights,
-                             self.module.class_weights)
-
     def _data_to_tensor(self, X: pd.DataFrame,
                         Y: Union[None, List[str]],
                         weights: Union[None, List[float]] = None,
-                        device: torch.device = torch.device("cpu"),
-                        pinned: bool = False) -> tuple:
-        x = dataframe_to_tensor(X, self.module.inputs, device, pinned)
+                        device: torch.device = torch.device("cpu")) -> tuple:
+        x = dataframe_to_tensor(X, self.module.inputs, device)
         y = None if Y is None else classes_to_tensor(Y, self.classes,
-                                                     device, pinned)
-        w = None if weights is None else floats_to_tensor(weights, device,
-                                                          pinned)
+                                                     device)
+        w = None if weights is None else floats_to_tensor(weights, device)
         return x, y, w
 
     def _tensor_to_y(self, tensor: torch.Tensor) -> np.ndarray:

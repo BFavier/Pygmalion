@@ -158,35 +158,40 @@ def object_detector_loss(y_pred: torch.Tensor, y_target: Tuple[torch.Tensor],
     torch.Tensor :
         a scalar tensor representing the loss function
     """
-    boxe_pred, object_pred, class_pred = y_pred
-    boxe_target, object_target, class_target = y_target
-    # select the bounding boxe with highest confidence in each cell
-    object_pred, indexes = torch.max(object_pred, dim=1)
-    # index the highest confidence boxe with some indexing black magic
-    indexes = indexes.unsqueeze(1)
-    boxe_pred = torch.gather(boxe_pred, 1,
-                             indexes.expand((-1, 4, -1, -1)).unsqueeze(1)
-                             ).squeeze(1)
-    _, _, n, _, _ = class_pred.shape
-    class_pred = torch.gather(class_pred, 1,
-                              indexes.expand((-1, n, -1, -1)).unsqueeze(1)
-                              ).squeeze(1)
+    coords_pred, size_pred, object_pred, class_pred = y_pred
+    coords_target, size_target, object_mask, class_target = y_target
+    _, n, _, _ = class_pred.shape
     # Calculating the loss part linked to bounding boxe position/size
-    weights = object_target if weights is None else object_target*weights
-    boxe_loss = MSE(boxe_pred, boxe_target,
-                    weights=weights.unsqueeze(1).expand(-1, 4, -1, -1),
-                    target_norm=target_norm)
+    index = object_mask.unsqueeze(0).expand(2, -1, -1, -1)
+    coords_pred = torch.transpose(coords_pred, 0, 1)[index].view(2, -1)
+    coords_target = torch.transpose(coords_target, 0, 1)[index].view(2, -1)
+    coords_loss = (coords_pred - coords_target)**2
+    size_pred = torch.transpose(size_pred, 0, 1)[index].view(2, -1)
+    size_target = torch.transpose(size_target, 0, 1)[index].view(2, -1)
+    if target_norm is not None:
+        size_target = target_norm(size_target.unsqueeze(0)).squeeze(0)
+    size_loss = (size_pred - size_target)**2
+    if weights is not None:
+        coords_loss = coords_loss * weights[object_mask]
+        size_loss = size_loss * weights[object_mask]
+    coords_loss = coords_loss.mean()
+    size_loss = size_loss.mean()
     # Calculate the loss part linked to object presence
-    frac = object_target.sum()/len(object_target.view(-1))
-    bce_class_weight = torch.stack([frac, 1-frac])*2
-    bce_weight = bce_class_weight[object_target.view(-1).long()
-                                  ].view_as(object_target)
-    object_loss = F.binary_cross_entropy(object_pred, object_target,
-                                         weight=bce_weight)
+    object_loss = -torch.log(object_pred[object_mask] + 1.0E-5)
+    non_object_loss = -torch.log(1 - object_pred[~object_mask] + 1.0E-5)
+    if weights is not None:
+        object_loss = object_loss * weights[object_mask]
+        non_object_loss = non_object_loss * weights[~object_mask]
+    object_loss = object_loss.mean()
+    non_object_loss = non_object_loss.mean()
     # Calculate the loss part linked to detected class
-    class_loss = cross_entropy(class_pred, class_target,
-                               weights=weights, class_weights=class_weights)
-    # scaling factor to account for number of boxes per image
-    scale = object_target.view(-1).shape[0] / (object_target.sum() + 1.0E-5)
+    index = object_mask.unsqueeze(3).expand(-1, -1, -1, n)
+    class_pred = class_pred.permute(0, 2, 3, 1)[index].view(-1, n)
+    class_target = class_target[object_mask].view(-1)
+    class_loss = F.nll_loss(F.log_softmax(class_pred, dim=1), class_target,
+                            weight=class_weights, reduction="none")
+    if weights is not None:
+        class_loss = class_loss * weights[object_mask]
+    class_loss = class_loss.mean()
     # Returning the final loss
-    return (boxe_loss*scale + object_loss + class_loss*scale)
+    return coords_loss + size_loss + object_loss + non_object_loss + class_loss

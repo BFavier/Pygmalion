@@ -1,5 +1,4 @@
 import torch
-import torch.nn.functional as F
 import numpy as np
 from typing import Union, List, Tuple
 from .layers import Conv2d, BatchNorm2d
@@ -85,8 +84,10 @@ class ObjectDetectorModule(torch.nn.Module):
     def forward(self, X: torch.Tensor) -> Tuple[torch.Tensor]:
         """
         The output of this module is particular.
-        It returns the tensors (boxe_size, object_proba, class_proba)
-        * 'boxe_size' is the [x, y, width, height] of the predicted boxe
+        It returns the tensors
+        (boxe_coords, boxe_size, object_proba, class_proba)
+        * 'boxe_coords' is the [x, y] of the predicted boxes in the cell
+        * 'boxe_size' is the [width, height] of the predicted boxe
         * 'object_proba' is the probability that an object was found
         * 'class proba' is the probability to be of each class
         Each one is of shape (N, B, C, H, W) with
@@ -112,12 +113,34 @@ class ObjectDetectorModule(torch.nn.Module):
         X = self.output(X)
         N, C, H, W = X.shape
         X = X.view(N, self.boxes_per_cell, C//self.boxes_per_cell, H, W)
-        xy = torch.sigmoid(X[:, :, :2, ...])
-        wh = 1. + F.elu(X[:, :, 2:4, ...])
-        boxe_size = torch.cat([xy, wh], dim=2)
+        boxe_coords = torch.sigmoid(X[:, :, :2, ...])
+        boxe_size = X[:, :, 2:4, ...]
         object_proba = torch.sigmoid(X[:, :, 4, ...])
         class_proba = X[:, :, 5:, ...]
-        return boxe_size, object_proba, class_proba
+        return self._highest_confidence_boxe((boxe_coords, boxe_size,
+                                             object_proba, class_proba))
+
+    def loss(self, y_pred: Tuple[torch.Tensor],
+             y_target: Tuple[torch.Tensor],
+             weights: Union[None, torch.Tensor] = None):
+        return object_detector_loss(y_pred, y_target, weights,
+                                    self.class_weights)
+
+    def _highest_confidence_boxe(self, tensors: Tuple[torch.Tensor]):
+        """
+        Returns the predicted boxe with highest confidence for each anchor cell
+        """
+        boxe_coords, boxe_size, object_proba, class_proba = tensors
+        object_proba, indexes = torch.max(object_proba, dim=1)
+        indexes = indexes.unsqueeze(1)
+        boxes_index = indexes.expand((-1, 2, -1, -1)).unsqueeze(1)
+        boxe_coords = torch.gather(boxe_coords, 1, boxes_index).squeeze(1)
+        boxe_size = torch.gather(boxe_size, 1, boxes_index).squeeze(1)
+        _, _, n, _, _ = class_proba.shape
+        class_proba = torch.gather(class_proba, 1,
+                                   indexes.expand((-1, n, -1, -1)).unsqueeze(1)
+                                   ).squeeze(1)
+        return boxe_coords, boxe_size, object_proba, class_proba
 
     @property
     def dump(self):
@@ -138,28 +161,21 @@ class ObjectDetector(NeuralNetworkClassifier):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-    def _loss_function(self, y_pred: Tuple[torch.Tensor],
-                       y_target: Tuple[torch.Tensor],
-                       weights: Union[None, torch.Tensor] = None):
-        return object_detector_loss(y_pred, y_target, weights,
-                                    self.module.class_weights)
-
     def _data_to_tensor(self, X: np.ndarray,
                         Y: Union[None, List[dict]],
                         weights: None = None,
-                        device: torch.device = torch.device("cpu"),
-                        pinned: bool = False) -> tuple:
+                        device: torch.device = torch.device("cpu")) -> tuple:
         if weights is not None:
             raise ValueError("The weight of each observation must be passed in"
                              " the dictionary of bounding boxes, not as a"
                              " separate list")
-        x = images_to_tensor(X, device, pinned)
+        x = images_to_tensor(X, device)
         if Y is not None:
-            res = bounding_boxes_to_tensor(Y, tuple(X.shape[1:3]),
-                                           self.module.cell_size,
-                                           self.module.classes, device, pinned)
-            boxe_size, object_mask, class_index, cell_weights = res
-            y = boxe_size, object_mask, class_index
+            r = bounding_boxes_to_tensor(Y, tuple(X.shape[1:3]),
+                                         self.module.cell_size,
+                                         self.module.classes, device)
+            boxe_coords, boxe_size, object_mask, class_index, cell_weights = r
+            y = boxe_coords, boxe_size, object_mask, class_index
             w = cell_weights
         else:
             y = None

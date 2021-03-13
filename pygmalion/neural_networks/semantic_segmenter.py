@@ -75,6 +75,11 @@ class SemanticSegmenterModule(torch.nn.Module):
         X = self.u_net(X)
         return self.output(X)
 
+    def loss(self, y_pred: torch.Tensor, y_target: torch.Tensor,
+             weights: Union[None, torch.Tensor] = None):
+        return soft_dice_loss(y_pred, y_target, weights,
+                              self.class_weights)
+
     @property
     def dump(self):
         return {"type": type(self).__name__,
@@ -92,21 +97,14 @@ class SemanticSegmenter(NeuralNetworkClassifier):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-    def _loss_function(self, y_pred: torch.Tensor, y_target: torch.Tensor,
-                       weights: Union[None, torch.Tensor] = None):
-        return soft_dice_loss(y_pred, y_target, weights,
-                              self.module.class_weights)
-
     def _data_to_tensor(self, X: Iterable[np.ndarray],
                         Y: Union[None, List[str]],
                         weights: Union[None, List[float]] = None,
-                        device: torch.device = torch.device("cpu"),
-                        pinned: bool = False) -> tuple:
-        x = images_to_tensor(X, device, pinned)
+                        device: torch.device = torch.device("cpu")) -> tuple:
+        x = images_to_tensor(X, device)
         y = None if Y is None else segmented_to_tensor(Y, self.module.colors,
-                                                       device, pinned)
-        w = None if weights is None else floats_to_tensor(weights, device,
-                                                          pinned)
+                                                       device)
+        w = None if weights is None else floats_to_tensor(weights, device)
         return x, y, w
 
     def _tensor_to_y(self, tensor: torch.Tensor) -> np.ndarray:

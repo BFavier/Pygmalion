@@ -5,15 +5,12 @@ import numpy as np
 from typing import List, Iterable, Union, Tuple
 
 
-def floats_to_tensor(arr: Iterable, device: torch.device,
-                     pinned: bool) -> torch.Tensor:
+def floats_to_tensor(arr: Iterable, device: torch.device) -> torch.Tensor:
     """converts an array of numerical values to a tensor of floats"""
     if isinstance(arr, pd.Series):
         arr = arr.to_numpy()
     t = torch.tensor(arr, dtype=torch.float, device=device,
                      requires_grad=False)
-    if pinned:
-        t = t.pin_memory()
     return t
 
 
@@ -23,15 +20,12 @@ def tensor_to_floats(tensor: torch.Tensor) -> np.ndarray:
     return tensor.detach().cpu().numpy().astype(np.float64)
 
 
-def longs_to_tensor(arr: Iterable, device: torch.device,
-                    pinned: bool) -> torch.Tensor:
+def longs_to_tensor(arr: Iterable, device: torch.device) -> torch.Tensor:
     """converts an array of numerical values to a tensor of longs"""
     if isinstance(arr, pd.Series):
         arr = arr.to_numpy()
     t = torch.tensor(arr, dtype=torch.long, device=device,
                      requires_grad=False)
-    if pinned:
-        t = t.pin_memory()
     return t
 
 
@@ -42,7 +36,7 @@ def tensor_to_longs(tensor: torch.Tensor) -> list:
 
 
 def images_to_tensor(images: Iterable[np.ndarray],
-                     device: torch.device, pinned: bool) -> torch.Tensor:
+                     device: torch.device) -> torch.Tensor:
     """Converts a list of images to a tensor"""
     if not isinstance(images, np.ndarray):
         images = np.array(images)
@@ -52,7 +46,7 @@ def images_to_tensor(images: Iterable[np.ndarray],
         images = np.expand_dims(images, 1)
     else:
         images = np.moveaxis(images, -1, 1)
-    return floats_to_tensor(images, device, pinned)
+    return floats_to_tensor(images, device)
 
 
 def tensor_to_images(tensor: torch.Tensor,
@@ -86,7 +80,7 @@ def tensor_to_index(tensor: torch.tensor) -> np.ndarray:
 
 def classes_to_tensor(input: Iterable[str],
                       classes: List[str],
-                      device: torch.device,  pinned: bool) -> torch.Tensor:
+                      device: torch.device) -> torch.Tensor:
     """
     converts a list of classes to tensor
     'classes' must be a list of unique possible classes.
@@ -94,7 +88,7 @@ def classes_to_tensor(input: Iterable[str],
     """
     assert isinstance(classes, list)
     return longs_to_tensor([classes.index(i) for i in input],
-                           device, pinned)
+                           device)
 
 
 def tensor_to_classes(tensor: torch.Tensor,
@@ -106,11 +100,11 @@ def tensor_to_classes(tensor: torch.Tensor,
 
 def dataframe_to_tensor(df: pd.DataFrame,
                         x: List[str],
-                        device: torch.device, pinned: bool) -> torch.Tensor:
+                        device: torch.device) -> torch.Tensor:
     """Converts a dataframe of numerical values to tensor"""
     assert all(np.issubdtype(df[var].dtype, np.number) for var in x)
     arr = df[x].to_numpy(dtype=np.float32)
-    return floats_to_tensor(arr, device, pinned)
+    return floats_to_tensor(arr, device)
 
 
 def tensor_to_probabilities(tensor: torch.Tensor,
@@ -124,7 +118,7 @@ def tensor_to_probabilities(tensor: torch.Tensor,
 
 
 def segmented_to_tensor(images: np.ndarray, colors: Iterable,
-                        device: torch.device, pinned: bool) -> torch.Tensor:
+                        device: torch.device) -> torch.Tensor:
     """
     Converts a segmented image to a tensor of long
     """
@@ -139,19 +133,19 @@ def segmented_to_tensor(images: np.ndarray, colors: Iterable,
     masks = np.array([np.all(images == c, axis=3) for c in colors])
     if not masks.any(axis=0).all():
         raise RuntimeError("Found color associated to no class")
-    return longs_to_tensor(np.argmax(masks, axis=0), device, pinned)
+    return longs_to_tensor(np.argmax(masks, axis=0), device)
 
 
 def bounding_boxes_to_tensor(bboxes: List[dict], image_size: Tuple[int, int],
                              cell_size: Tuple[int, int], classes: List[str],
-                             device: torch.device, pinned: bool
-                             ) -> Tuple[torch.Tensor]:
+                             device: torch.device) -> Tuple[torch.Tensor]:
     """
-    Converts a list of bounding boxes to 4 tensors
+    Converts a list of bounding boxes to a tuple of tensors
     (multiple bounding boxes for each image)
-    * The 'boxe_size', a tensor of shape (N, 4, H, W) of (x, y, width, height)
+    * The 'boxe_coords', a tensor of shape (N, 2, H, W) of (x, y)
       of the bounding boxe falling in the given grid cell.
-      (0, 0, 0, 0) by default for empty cells
+    * The 'boxe_size', a tensor of shape (N, 2, H, W) of (width, height)
+      of the bounding boxe falling in the given grid cell.
     * The 'object_mask', a tensor of shape (N, H, W) which is True when there
       is an object in the grid cell and False otherwise
     * The 'class_index', a tensor of shape (N, H, W) of class indexes present
@@ -183,14 +177,15 @@ def bounding_boxes_to_tensor(bboxes: List[dict], image_size: Tuple[int, int],
     Return
     ------
     tuple of torch.Tensor :
-        the (boxe_size, object_mask, class_index, weights) tuple of tensors
+        (boxe_coords, boxe_size, object_mask, class_index, weights)
     """
     h_image, w_image = image_size
     h_cell, w_cell = cell_size
     h_grid, w_grid = h_image // h_cell, w_image // w_cell
-    object_mask = np.zeros((len(bboxes), h_grid, w_grid), dtype=np.float)
+    object_mask = np.zeros((len(bboxes), h_grid, w_grid), dtype=np.bool)
     class_index = np.zeros((len(bboxes), h_grid, w_grid), dtype=np.long)
-    boxe_size = np.zeros((len(bboxes), 4, h_grid, w_grid), dtype=np.float)
+    boxe_coords = np.zeros((len(bboxes), 2, h_grid, w_grid), dtype=np.float)
+    boxe_size = np.zeros((len(bboxes), 2, h_grid, w_grid), dtype=np.float)
     data = [(img, int(0.5*(y1+y2)/h_cell), int(0.5*(x1+x2)/w_cell),
              0.5*(y1+y2)/h_cell % 1, 0.5*(x1+x2)/w_cell % 1,
              abs(y1-y2)/h_cell, abs(x1-x2)/w_cell, classes.index(c))
@@ -198,8 +193,9 @@ def bounding_boxes_to_tensor(bboxes: List[dict], image_size: Tuple[int, int],
             for x1, x2, y1, y2, c
             in zip(bb["x1"], bb["x2"], bb["y1"], bb["y2"], bb["class"])]
     img, row, column, y, x, h, w, c = zip(*data)
-    object_mask[img, row, column] = 1
-    boxe_size[img, :, row, column] = list(zip(x, y, w, h))
+    object_mask[img, row, column] = True
+    boxe_coords[img, :, row, column] = list(zip(x, y))
+    boxe_size[img, :, row, column] = list(zip(w, h))
     class_index[img, row, column] = c
     weights = [bb.get("weights", None) for bb in bboxes]
     if not(None in weights):
@@ -208,19 +204,14 @@ def bounding_boxes_to_tensor(bboxes: List[dict], image_size: Tuple[int, int],
         cell_weights[img, row, column] = weights
     else:
         cell_weights = None
+    boxe_coords = torch.tensor(boxe_coords, dtype=torch.float, device=device)
     boxe_size = torch.tensor(boxe_size, dtype=torch.float, device=device)
-    object_mask = torch.tensor(object_mask, dtype=torch.float, device=device)
+    object_mask = torch.tensor(object_mask, dtype=torch.bool, device=device)
     class_index = torch.tensor(class_index, dtype=torch.long, device=device)
-    if pinned:
-        boxe_size = boxe_size.pin_memory()
-        object_mask = object_mask.pin_memory()
-        class_index = class_index.pin_memory()
     if cell_weights is not None:
         cell_weights = torch.tensor(cell_weights, dtype=torch.float,
                                     device=device)
-        if pinned:
-            cell_weights = cell_weights.pin_memory()
-    return boxe_size, object_mask, class_index, cell_weights
+    return boxe_coords, boxe_size, object_mask, class_index, cell_weights
 
 
 def tensor_to_bounding_boxes(tensors: Tuple[torch.Tensor],
@@ -233,12 +224,14 @@ def tensor_to_bounding_boxes(tensors: Tuple[torch.Tensor],
     Parameters
     ----------
     tensors : tuple of tensors
-        A tuple of ('boxe_size', 'object_proba', 'class_proba') tensors, with:
+        A tuple of ('boxe_coords', 'boxe_size', 'object_proba', 'class_proba')
+        * 'boxe_coords' : torch.Tensor
+            A tensor of shape (N, B, 2, H, W) of (x, y) boxe coordinates
+            x/y is the center of the boxe in relative cell coordinate
+            (between 0 and 1)
         * 'boxe_size' : torch.Tensor
-            A tensor of shape (N, B, 4, H, W) of (x, y, w, h) boxe coordinates
-            - x/y is the center of the boxe in relative cell coordinate
-              (between 0 and 1)
-            - h/w is the height/width of the boxe divided by the grid cell size
+            A tensor of shape (N, B, 4, H, W) of (w, h) boxe coordinates
+            h/w is the height/width of the boxe divided by the grid cell size
         * 'object_proba' : torch.Tensor
             A tensor of shape (N, B, H, W) of probability of object presence
         * 'class_proba' : torch.Tensor
@@ -265,27 +258,18 @@ def tensor_to_bounding_boxes(tensors: Tuple[torch.Tensor],
             the confidence of presence of an object of given class
             (probability from 0 to 1)
     """
-    boxe_size, object_proba, class_proba = [t.detach().cpu() for t in tensors]
-    N, B, H, W = object_proba.shape
+    cpu_tensors = [t.detach().cpu() for t in tensors]
+    boxe_coords, boxe_size, object_proba, class_proba = cpu_tensors
+    N, H, W = object_proba.shape
     h, w = cell_size
-    # Getting the predicted boxe with highest confidence for each anchor cell
-    object_proba, indexes = torch.max(object_proba, dim=1)
-    indexes = indexes.unsqueeze(1)
-    boxe_size = torch.gather(boxe_size, 1,
-                             indexes.expand((-1, 4, -1, -1)).unsqueeze(1)
-                             ).squeeze(1)
-    _, _, n, _, _ = class_proba.shape
-    class_proba = torch.gather(class_proba, 1,
-                               indexes.expand((-1, n, -1, -1)).unsqueeze(1)
-                               ).squeeze(1)
     # Converting boxes coordinates from (x, y, h, w) to (x1, y1, x2, y2)
     steps = [torch.tensor([i*dl for i in range(L)], dtype=torch.float)
              for dl, L in zip([h, w], [H, W])]
     grid_y, grid_x = torch.meshgrid(*steps)
-    x1 = (boxe_size[:, 0, ...] - 0.5*boxe_size[:, 2, ...])*w + grid_x
-    y1 = (boxe_size[:, 1, ...] - 0.5*boxe_size[:, 3, ...])*h + grid_y
-    x2 = (boxe_size[:, 0, ...] + 0.5*boxe_size[:, 2, ...])*w + grid_x
-    y2 = (boxe_size[:, 1, ...] + 0.5*boxe_size[:, 3, ...])*h + grid_y
+    x1 = (boxe_coords[:, 0, ...] - 0.5*boxe_size[:, 0, ...])*w + grid_x
+    y1 = (boxe_coords[:, 1, ...] - 0.5*boxe_size[:, 1, ...])*h + grid_y
+    x2 = (boxe_coords[:, 0, ...] + 0.5*boxe_size[:, 0, ...])*w + grid_x
+    y2 = (boxe_coords[:, 1, ...] + 0.5*boxe_size[:, 1, ...])*h + grid_y
     boxes = torch.stack([x1, y1, x2, y2], dim=-1).view(N, -1, 4)
     # Getting the class index and confidence of each bounding boxe found
     class_proba = torch.softmax(class_proba, dim=1)

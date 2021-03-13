@@ -59,6 +59,11 @@ class DenseRegressorModule(torch.nn.Module):
         x = self.dense(x)
         return self.output(x)
 
+    def loss(self, y_pred: torch.Tensor, y_target: torch.Tensor,
+             weights: Union[None, torch.Tensor] = None):
+        return RMSE(y_pred, y_target, weights,
+                    target_norm=self.target_norm)
+
     @property
     def dump(self):
         return {"type": type(self).__name__,
@@ -76,26 +81,19 @@ class DenseRegressor(NeuralNetwork):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-    def _loss_function(self, y_pred: torch.Tensor, y_target: torch.Tensor,
-                       weights: Union[None, torch.Tensor] = None):
-        return RMSE(y_pred, y_target, weights,
-                    target_norm=self.module.target_norm)
-
     def _data_to_tensor(self, X: Union[pd.DataFrame, Iterable],
                         Y: Union[None, np.ndarray],
                         weights: Union[None, List[float]] = None,
-                        device: torch.device = torch.device("cpu"),
-                        pinned: bool = False) -> tuple:
+                        device: torch.device = torch.device("cpu")) -> tuple:
         if isinstance(X, pd.DataFrame):
-            x = dataframe_to_tensor(X, self.module.inputs, device, pinned)
+            x = dataframe_to_tensor(X, self.module.inputs, device)
         else:
-            x = floats_to_tensor(X, device, pinned)
-        y = None if Y is None else floats_to_tensor(Y, device,
-                                                    pinned).view(-1, 1)
+            x = floats_to_tensor(X, device)
+        y = None if Y is None else floats_to_tensor(Y, device).view(-1, 1)
         if weights is None:
             w = None
         else:
-            w = floats_to_tensor(weights, device, pinned).view(-1, 1)
+            w = floats_to_tensor(weights, device).view(-1, 1)
         return x, y, w
 
     def _tensor_to_y(self, tensor: torch.Tensor) -> np.ndarray:

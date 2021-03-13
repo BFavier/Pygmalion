@@ -18,11 +18,10 @@ class LossModule(torch.nn.Module):
     def __init__(self, model: 'NeuralNetwork'):
         super().__init__()
         self.module = model.module
-        self.loss = model._loss_function
 
     def forward(self, x, y_target, weights=None):
         y_pred = self.module(x)
-        return self.loss(y_pred, y_target, weights=weights).unsqueeze(0)
+        return self.module.loss(y_pred, y_target, weights=weights).unsqueeze(0)
 
 
 class NeuralNetwork(Model):
@@ -123,13 +122,10 @@ class NeuralNetwork(Model):
         self.module.train()
         # Converts training/validation data to tensors
         device = self.device if batch_length is None else torch.device("cpu")
-        pinned = (self.device != device)
-        training_data = self._data_to_tensor(*training_data, device=device,
-                                             pinned=pinned)
+        training_data = self._data_to_tensor(*training_data, device=device)
         if validation_data is not None:
             validation_data = self._data_to_tensor(*validation_data,
-                                                   device=device,
-                                                   pinned=pinned)
+                                                   device=device)
         # Wrap the module if training on multi GPU
         if isinstance(self.GPU, list):
             loss_module = parallel.DataParallel(LossModule(self),
