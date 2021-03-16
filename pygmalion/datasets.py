@@ -157,7 +157,7 @@ def savannah(directory: str):
             "https://drive.google.com/file/d/1WF5A9xdgXoq092kI9w0dLZm1sTbSNFHE/view?usp=sharing",
             "https://drive.google.com/file/d/1ByMZlJ-_k6L8OnPjNXe97g_MGE9PkKlw/view?usp=sharing",
             "https://drive.google.com/file/d/1Sd5JO6oBmlzQzydoaAGWR_ZXxAXWqFKq/view?usp=sharing"]
-    _downloads(directory, "aquarium", file_names, urls)
+    _downloads(directory, "savannah", file_names, urls)
 
 
 def aquarium(directory: str):
