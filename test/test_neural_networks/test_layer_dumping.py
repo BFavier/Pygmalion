@@ -1,9 +1,6 @@
 import sys
 import torch
-import pandas as pd
-import numpy as np
 import pygmalion.neural_networks.layers as lay
-import pygmalion.neural_networks as nn
 
 rtol, atol = 1.0E-4, 0
 
@@ -12,9 +9,9 @@ def test_Activated():
     for cls, dim in [(lay.Activated0d, 0), (lay.Activated1d, 1),
                      (lay.Activated2d, 2)]:
         for padded in [True, False]:
-            for bias in [True, False]:
+            for activation in ["relu", "tanh", "leaky_relu", "elu"]:
                 for stacked in [True, False]:
-                    kwargs = {"bias": bias, "stacked": stacked}
+                    kwargs = {"activation": activation, "stacked": stacked}
                     if dim > 0:
                         kwargs["padded"] = padded
                     C_in, C_out = 5, 3
@@ -145,16 +142,60 @@ def test_UNet():
 def test_Unpooling():
     for cls, dim in [(lay.Unpooling1d, 1), (lay.Unpooling2d, 2)]:
         for method in ["nearest", "interpolate"]:
-            if window is not None:
-                window = window[:dim]
+            if dim == 1:
+                factor = 3
+            else:
+                factor = [2, 3]
             kwargs = dict()
             C = 5
             shape = [10, C] + [10]*dim
-            lay1 = cls(window, pooling_type, **kwargs)
+            lay1 = cls(factor, method, **kwargs)
             lay2 = cls.from_dump(lay1.dump)
             tensor = torch.rand(size=shape, dtype=torch.float)
             assert torch.allclose(lay1(tensor), lay2(tensor),
-                                    rtol=rtol, atol=atol)
+                                  rtol=rtol, atol=atol)
+
+
+def test_Upsampling():
+    for cls, dim in [(lay.Upsampling1d, 1), (lay.Upsampling2d, 2)]:
+        for upsampling_method in ["nearest", "interpolate"]:
+            dense_layers = [{"channels": 4}, {"channels": 8}, {"channels": 16}]
+            if dim == 1:
+                upsampling_factors = 3
+            else:
+                upsampling_factors = (2, 3)
+            kwargs = dict()
+            C = 5
+            shape = [10, C] + [10]*dim
+            lay1 = cls(C, dense_layers, upsampling_factors, upsampling_method,
+                       **kwargs)
+            lay2 = cls.from_dump(lay1.dump)
+            tensor = torch.rand(size=shape, dtype=torch.float)
+            assert torch.allclose(lay1(tensor), lay2(tensor),
+                                  rtol=rtol, atol=atol)
+
+
+def test_Weighting():
+    for cls, dim in [(lay.Linear, 0), (lay.Conv1d, 1), (lay.Conv2d, 2)]:
+        for bias in [True, False]:
+            kwargs = {"bias": bias}
+            C_in, C_out = 5, 3
+            if dim == 0:
+                args = (C_in, C_out)
+            elif dim == 1:
+                kernel_size = 3
+                args = (C_in, C_out, kernel_size)
+                kwargs["stride"] = 3
+            elif dim == 2:
+                kernel_size = (2, 3)
+                args = (C_in, C_out, kernel_size)
+                kwargs["stride"] = (3, 2)
+            shape = [10, C_in] + [10]*dim
+            lay1 = cls(*args, **kwargs)
+            lay2 = cls.from_dump(lay1.dump)
+            tensor = torch.rand(size=shape, dtype=torch.float)
+            assert torch.allclose(lay1(tensor), lay2(tensor),
+                                  rtol=rtol, atol=atol)
 
 
 if __name__ == "__main__":
