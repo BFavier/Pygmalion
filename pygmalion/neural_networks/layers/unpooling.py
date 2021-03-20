@@ -35,8 +35,11 @@ class Unpooling(torch.nn.Module):
 
     @property
     def dump(self):
+        factor = self.factor
+        if hasattr(factor, "__iter__"):
+            factor = list(factor)
         return {"type": type(self).__name__,
-                "factor": [f for f in self.factor],
+                "factor": factor,
                 "method": self.method}
 
 
