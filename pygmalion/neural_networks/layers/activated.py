@@ -148,11 +148,12 @@ class Activated1d(Activated):
 
     def downsample(self, X: torch.Tensor) -> torch.Tensor:
         if not hasattr(self, "padding"):
-            window = self.weighting.kernel_size
-            left, right = window // 2, window - window // 2
+            window = self.weighting.kernel_size[0]
+            left = (window - 1) // 2
+            right = (window - 1) - left
             X = X[:, :, left:-right]
-        if self.weighting.stride != 1:
-            X = F.avg_pool1d(X, self.weighting.stride)
+        if self.weighting.stride != (1,):
+            X = F.max_pool1d(X, self.weighting.stride)
         return X
 
 
@@ -182,9 +183,9 @@ class Activated2d(Activated):
     def downsample(self, X: torch.Tensor) -> torch.Tensor:
         if not hasattr(self, "padding"):
             window = self.weighting.kernel_size
-            top, left = [w // 2 for w in window]
-            bot, right = [w - w // 2 for w in window]
+            top, left = [(w-1) // 2 for w in window]
+            bot, right = [(w-1) - (w-1) // 2 for w in window]
             X = X[:, :, top:-bot, left:-right]
         if self.weighting.stride != (1, 1):
-            X = F.avg_pool2d(X, self.weighting.stride)
+            X = F.max_pool2d(X, self.weighting.stride)
         return X

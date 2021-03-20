@@ -16,7 +16,7 @@ class BatchNorm:
         cls = globals()[dump["type"]]
         obj = cls.__new__(cls)
         torch.nn.Module.__init__(obj)
-        obj.num_features = dump["num"]
+        obj.num_features = dump["num features"]
         obj.momentum = dump["momentum"]
         obj.affine = dump["affine"]
         obj.eps = dump["eps"]
@@ -49,7 +49,7 @@ class BatchNorm:
                 "running mean": self.running_mean.tolist(),
                 "running var": self.running_var.tolist(),
                 "track running stats": self.track_running_stats,
-                "num batches tracked": self.num_batches_tracked,
+                "num batches tracked": self.num_batches_tracked.tolist(),
                 "momentum": self.momentum,
                 "eps": self.eps,
                 "affine": self.affine,

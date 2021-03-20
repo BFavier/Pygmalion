@@ -20,8 +20,12 @@ class Pooling(torch.nn.Module):
 
     @property
     def dump(self) -> dict:
+        if self.pooling_window is not None:
+            pooling_window = [s for s in self.pooling_window]
+        else:
+            pooling_window = None
         return {"type": type(self).__name__,
-                "pooling window": [s for s in self.pooling_window],
+                "pooling window": pooling_window,
                 "pooling type": self.pooling_type}
 
     def __init__(self, pooling_window, pooling_type):
