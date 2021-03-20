@@ -14,7 +14,10 @@ class Pooling(torch.nn.Module):
         cls = globals()[dump["type"]]
         obj = cls.__new__(cls)
         torch.nn.Module.__init__(obj)
-        obj.pooling_window = tuple(dump["pooling window"])
+        pooling_window = dump["pooling window"]
+        if pooling_window is not None:
+            pooling_window = tuple(pooling_window)
+        obj.pooling_window = pooling_window
         obj.pooling_type = dump["pooling type"]
         return obj
 
