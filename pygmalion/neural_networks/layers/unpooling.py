@@ -14,7 +14,10 @@ class Unpooling(torch.nn.Module):
         cls = globals()[dump["type"]]
         obj = cls.__new__(cls)
         torch.nn.Module.__init__(obj)
-        obj.factor = tuple(dump["factor"])
+        factor = dump["factor"]
+        if hasattr(factor, "__iter__"):
+            factor = tuple(factor)
+        obj.factor = factor
         obj.method = dump["method"]
         return obj
 
