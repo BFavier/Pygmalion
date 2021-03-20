@@ -97,7 +97,7 @@ class Upsampling(torch.nn.Module):
         if X2 is smaller than X1, it is padded with 0
         """
         padding = [[0, l1 - l2] for l1, l2 in
-                   zip(X1.shape[2:], X2.shape[2:])]
+                   zip(X1.shape[-1:1:-1], X2.shape[-1:1:-1])]
         padding = sum(padding, [])
         if any(p > 0 for p in padding):
             X2 = torch.nn.functional.pad(X2, padding, value=0.)
