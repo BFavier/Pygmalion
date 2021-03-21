@@ -7,31 +7,6 @@ import numpy as np
 class Model:
 
     @classmethod
-    def load(cls, file: str) -> object:
-        """
-        Load a model from the disk (must be a .json or .h5)
-
-        Parameters
-        ----------
-        file : str
-            path of the file to read
-        """
-        file = pathlib.Path(file)
-        suffix = file.suffix.lower()
-        if not file.is_file():
-            raise FileNotFoundError("The file '{file}' does not exist")
-        if suffix == ".json":
-            with open(file) as json_file:
-                dump = json.load(json_file)
-        elif suffix == ".h5":
-            f = h5py.File(file, "r")
-            dump = cls._load_h5(f)
-        else:
-            raise ValueError("The file must be '.json' or '.h5' file, "
-                             f"but got a '{suffix}'")
-        return cls.from_dump(dump)
-
-    @classmethod
     def from_dump(cls, dump: dict) -> object:
         """
         Return an object from a dump
@@ -111,34 +86,3 @@ class Model:
             group.attrs["type"] = "None"
         else:
             raise ValueError(f"Unsupported data type: {type(obj)}")
-
-    @classmethod
-    def _load_h5(cls, group: h5py.Group) -> object:
-        """
-        Recursively load the content of an hdf5 file into a python object.
-
-        Parameters
-        ----------
-        group : h5py.Group
-            An hdf5 group (or the opened file)
-
-        Returns
-        -------
-        object
-            The python object
-        """
-        group_type = group.attrs["type"]
-        if group_type == "dict":
-            return {name: cls._load_h5(group[name]) for name in group}
-        elif group_type == "list":
-            return [cls._load_h5(group[name]) for name in group]
-        elif group_type == "scalar":
-            return group.attrs["data"].tolist()
-        elif group_type == "str":
-            return group.attrs["data"]
-        elif group_type == "None":
-            return None
-        elif group_type == "binary":
-            return group["data"][...].tolist()
-        else:
-            raise ValueError(f"Unknown group type '{group_type}'")
