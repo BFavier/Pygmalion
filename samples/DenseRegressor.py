@@ -20,7 +20,7 @@ data = (x, y)
 # Create and train the model
 hidden_layers = [{"channels": 8},
                  {"channels": 8}]
-model = ml.neural_networks.DenseRegressor(inputs, hidden_layers=hidden_layers,
+model = ml.neural_networks.DenseRegressor(inputs, hidden_layers,
                                           activation="tanh")
 data, test_data = ml.split(data, frac=0.2)
 train_data, val_data = ml.split(data, frac=0.2)
