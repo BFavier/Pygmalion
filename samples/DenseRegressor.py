@@ -24,7 +24,7 @@ model = ml.neural_networks.DenseRegressor(inputs, hidden_layers,
                                           activation="tanh")
 data, test_data = ml.split(data, frac=0.2)
 train_data, val_data = ml.split(data, frac=0.2)
-model.train(train_data, val_data, patience=100)
+model.train(train_data, val_data, patience=500)
 
 # Plot results
 model.plot_residuals()
