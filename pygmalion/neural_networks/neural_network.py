@@ -39,8 +39,8 @@ class NeuralNetwork(Model):
     def from_dump(cls, dump: dict) -> 'NeuralNetwork':
         assert cls.__name__ == dump["type"]
         obj = cls.__new__(cls)
-        obj.residuals = dump["residuals"]
         obj.module = cls.ModuleType.from_dump(dump["module"])
+        obj.residuals = dump["residuals"]
         obj.optimization_method = dump["optimization method"]
         obj.GPU = dump["GPU"]
         return obj
@@ -297,11 +297,7 @@ class NeuralNetwork(Model):
     def dump(self):
         return {"type": type(self).__name__,
                 "GPU": self.GPU,
-                "learning rate": self.learning_rate,
-                "norm update factor": self.norm_update_factor,
                 "optimization method": self.optimization_method,
-                "L1": self.L1,
-                "L2": self.L2,
                 "residuals": self.residuals,
                 "module": self.module.dump}
 
