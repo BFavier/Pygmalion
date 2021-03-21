@@ -42,21 +42,12 @@ class NeuralNetwork(Model):
         obj.residuals = dump["residuals"]
         obj.module = cls.ModuleType.from_dump(dump["module"])
         obj.optimization_method = dump["optimization method"]
-        obj.norm_update_factor = dump["norm update factor"]
         obj.GPU = dump["GPU"]
-        obj.learning_rate = dump["learning rate"]
-        obj.L1 = dump["L1"]
-        obj.L2 = dump["L2"]
         return obj
 
     def __init__(self, *args,
                  GPU: Union[None, int, List[int]] = None,
-                 learning_rate: float = 1.0E-3,
-                 norm_update_factor: Union[float, None] = 0.1,
                  optimization_method: str = "Adam",
-                 shuffle: bool = True,
-                 L1: Union[float, None] = None,
-                 L2: Union[float, None] = None,
                  **kwargs):
         """
         Parameters
@@ -66,26 +57,14 @@ class NeuralNetwork(Model):
         GPU : None or int or list of int
             The indice of the GPU to evaluate the model on
             Set None to evaluate on cpu
-        learning_rate : float
-            The learning rate of the model
-        norm_update_factor : float or None
-            The update factor used for batch normalization
         optimization_method : str
             The name of the optimization method
-        L1 : float or None
-            L1 regularization added to the loss function
-        L2 : float or None
-            L2 regularization added to the loss function
         **kwargs : dict
             The kwargs passed to the constructor of 'self.module'
         """
         self.module = self.ModuleType(*args, **kwargs)
         self.GPU = GPU
         self.optimization_method = optimization_method
-        self.learning_rate = learning_rate
-        self.norm_update_factor = norm_update_factor
-        self.L1 = L1
-        self.L2 = L2
         self.residuals = {"training loss": [],
                           "validation loss": [],
                           "epochs": [],
@@ -95,8 +74,12 @@ class NeuralNetwork(Model):
               validation_data: Union[tuple, None] = None,
               n_epochs: int = 1000,
               patience: int = 100,
-              verbose: bool = True,
-              batch_length: Union[int, None] = None):
+              learning_rate: float = 1.0E-3,
+              batch_length: Union[int, None] = None,
+              L1: Union[float, None] = None,
+              L2: Union[float, None] = None,
+              norm_update_factor: Union[float, None] = 0.1,
+              verbose: bool = True):
         """
         Trains a neural network model.
 
@@ -113,12 +96,22 @@ class NeuralNetwork(Model):
             The maximum number of epochs
         patience : int
             The number of epochs before early stopping
-        verbose : bool
-            If True the loss are displayed at each epoch
+        learning_rate : float
+            The learning rate used to update the parameters
         batch_length : int or None
             Maximum size of the batchs
             Or None to process the full data in one go
+        L1 : float or None
+            L1 penalization added to the loss function
+        L2 : float or None
+            L2 penalization added to the loss function
+        norm_update_factor : float or None
+            The update factor used for batch normalization
+        verbose : bool
+            If True the loss are displayed at each epoch
         """
+        self._set_learning_rate(learning_rate)
+        self._set_norm_update_factor(norm_update_factor)
         self.module.train()
         # Converts training/validation data to tensors
         device = self.device if batch_length is None else torch.device("cpu")
@@ -148,7 +141,7 @@ class NeuralNetwork(Model):
         # trains the model, stops if the user press 'ctrl+c'
         self._training_loop(loss_module,
                             training_data, validation_data, n_epochs,
-                            patience, verbose, batch_length,
+                            patience, verbose, batch_length, L1, L2,
                             best_epoch, best_loss, best_state)
 
     def plot_residuals(self, ax=None, log: bool = True):
@@ -170,9 +163,10 @@ class NeuralNetwork(Model):
         ax.scatter(epochs, self.residuals["training loss"],
                    marker=".",
                    label="training loss")
-        ax.scatter(epochs, self.residuals["validation loss"],
-                   marker=".",
-                   label="validation loss")
+        if any([v is not None for v in self.residuals["validation loss"]]):
+            ax.scatter(epochs, self.residuals["validation loss"],
+                       marker=".",
+                       label="validation loss")
         if self.residuals["best epoch"] is not None:
             ax.axvline(self.residuals["best epoch"], color="k")
         ax.set_ylabel("loss")
@@ -266,35 +260,6 @@ class NeuralNetwork(Model):
             return torch.device(f"cuda:{self.GPU[0]}")
 
     @property
-    def learning_rate(self) -> float:
-        """
-        Returns the learning rate used for training
-
-        Returns
-        -------
-        float :
-            the learning rate
-        """
-        if hasattr(self, "_learning_rate"):
-            return self._learning_rate
-        else:
-            return 0
-
-    @learning_rate.setter
-    def learning_rate(self, lr: float):
-        """
-        set the learning rate for the training
-
-        Parameters:
-        -----------
-        lr : float
-            new learning rate
-        """
-        self._learning_rate = lr
-        for g in self.optimizer.param_groups:
-            g["lr"] = lr
-
-    @property
     def optimization_method(self) -> str:
         """
         returns the name of the optimization method
@@ -325,23 +290,34 @@ class NeuralNetwork(Model):
             raise ValueError(f"Invalid optimizer '{name}', "
                              f"valid options are: {available}")
         cls = getattr(torch.optim, name)
-        self.optimizer = cls(self.module.parameters(), self.learning_rate)
+        self.optimizer = cls(self.module.parameters(), 0.001)
         self._optimization_method = name
 
     @property
-    def norm_update_factor(self):
-        """
-        Returns the update factor used for batch normalization
+    def dump(self):
+        return {"type": type(self).__name__,
+                "GPU": self.GPU,
+                "learning rate": self.learning_rate,
+                "norm update factor": self.norm_update_factor,
+                "optimization method": self.optimization_method,
+                "L1": self.L1,
+                "L2": self.L2,
+                "residuals": self.residuals,
+                "module": self.module.dump}
 
-        Returns
-        -------
-        float or None:
-            the update factor
+    def _set_learning_rate(self, lr: float):
         """
-        return self._f
+        set the learning rate for the training
 
-    @norm_update_factor.setter
-    def norm_update_factor(self, f: Union[float, None]):
+        Parameters:
+        -----------
+        lr : float
+            new learning rate
+        """
+        for g in self.optimizer.param_groups:
+            g["lr"] = lr
+
+    def _set_norm_update_factor(self, f: Union[float, None]):
         """
         Set the update factor 'f' used for batch normalization
         moment = f*batch_moment + (1-f)*moment
@@ -359,19 +335,6 @@ class NeuralNetwork(Model):
         for m in self.module.modules():
             if type(m).__name__.startswith("BatchNorm"):
                 m.momentum = f
-        self._f = f
-
-    @property
-    def dump(self):
-        return {"type": type(self).__name__,
-                "GPU": self.GPU,
-                "learning rate": self.learning_rate,
-                "norm update factor": self.norm_update_factor,
-                "optimization method": self.optimization_method,
-                "L1": self.L1,
-                "L2": self.L2,
-                "residuals": self.residuals,
-                "module": self.module.dump}
 
     def _loss_function(self, y_pred: torch.Tensor, y_target: torch.Tensor,
                        weights: Union[None, torch.Tensor] = None
@@ -445,6 +408,8 @@ class NeuralNetwork(Model):
                        patience: int,
                        verbose: bool,
                        batch_length: Union[int, None],
+                       L1: Union[float, None],
+                       L2: Union[float, None],
                        best_epoch: int,
                        best_loss: float,
                        best_state: tuple):
@@ -484,6 +449,10 @@ class NeuralNetwork(Model):
         batch_length : int or None
             The maximum number of items in a minibatchs
             or None to not to use minibatchs
+        L1 : float or None
+            The L1 penalization added to the loss function
+        L2 : float or None
+            The L2 penalization added to the loss function
         best_epoch : int
             the epoch of the previous best state
         best_loss : float
@@ -497,12 +466,12 @@ class NeuralNetwork(Model):
                 self.optimizer.zero_grad()
                 training_loss = self._batch_loss(loss_module,
                                                  training_data, batch_length,
-                                                 train=True)
+                                                 L1, L2, train=True)
                 if validation_data is not None:
                     validation_loss = self._batch_loss(loss_module,
                                                        validation_data,
                                                        batch_length,
-                                                       train=False)
+                                                       L1, L2, train=False)
                     if validation_loss < best_loss:
                         best_epoch = epoch
                         best_loss = validation_loss
@@ -541,6 +510,8 @@ class NeuralNetwork(Model):
     def _batch_loss(self, loss_module: torch.nn.Module,
                     data: Union[tuple, Callable],
                     batch_length: Union[int, None],
+                    L1: Union[float, None],
+                    L2: Union[float, None],
                     train: bool) -> float:
         """
         Compute the loss on the given data, processing it by batchs of maximum
@@ -555,9 +526,13 @@ class NeuralNetwork(Model):
             The (X, Y, weights) to evaluate the loss on,
             or a function that yields them by batch.
             'X' and 'Y' are tensors, 'weights' is a list of float or None.
-        L_minibatch : int or None
-            The maximum number of observations in a minibatch.
+        batch_length : int or None
+            The maximum number of observations in a batch.
             If None the whole data is processed in one go.
+        L1 : float or None
+            The L1 penalization added to the loss function
+        L2 : float or None
+            The L2 penalization added to the loss function
         train : bool
             If True, the gradient is back propagated
 
@@ -568,7 +543,7 @@ class NeuralNetwork(Model):
         """
         if batch_length is None:
             return self._eval_loss(loss_module,
-                                   *data, train)
+                                   *data, L1, L2, train)
         else:
             X, Y, weights = self._shuffle(data)
             N = self._len(X)
@@ -581,7 +556,7 @@ class NeuralNetwork(Model):
                 y = self._index(Y, start=start, end=end)
                 w = self._index(weights, start=start, end=end)
                 losses.append(self._eval_loss(loss_module,
-                                              x, y, w, train))
+                                              x, y, w, L1, L2, train))
             return sum(losses)/len(losses)
 
     def _shuffle(self, batch_data: Tuple[torch.Tensor]):
@@ -662,8 +637,9 @@ class NeuralNetwork(Model):
 
     def _eval_loss(self, loss_module: torch.nn.Module,
                    x: torch.Tensor, y: torch.Tensor,
-                   w: Union[List[float], None] = None,
-                   train: bool = False) -> torch.Tensor:
+                   w: Union[List[float], None],
+                   L1: Union[float, None], L2: Union[float, None],
+                   train: bool) -> torch.Tensor:
         """
         Evaluates the loss module on the given batch of data.
         If 'train' is True, also backpropagate the gradient.
@@ -681,6 +657,10 @@ class NeuralNetwork(Model):
             target
         w : List of float, or None
             weights
+        L1 : float or None
+            The L1 penalization added to the loss function
+        L2 : float or None
+            The L2 penalization added to the loss function
         train : bool
             If True, grad is backpropagated
 
@@ -695,14 +675,14 @@ class NeuralNetwork(Model):
         w = self._to(w, device)
         if train:
             loss = loss_module(x, y, w).mean()
-            loss = self._regularization(loss)
+            loss = self._regularization(loss, L1, L2)
             loss.backward()
         else:
             with torch.no_grad():
                 self.module.eval()
                 loss = loss_module(x, y, weights=w).mean()
                 self.module.train()
-                loss = self._regularization(loss)
+                loss = self._regularization(loss, L1, L2)
         loss = float(loss)
         torch.cuda.empty_cache()
         return loss
@@ -723,7 +703,9 @@ class NeuralNetwork(Model):
         else:
             raise ValueError(f"Unexpect variable type '{type(variable)}'")
 
-    def _regularization(self, loss: torch.Tensor) -> torch.Tensor:
+    def _regularization(self, loss: torch.Tensor,
+                        L1: Union[float, None],
+                        L2: Union[float, None]) -> torch.Tensor:
         """
         Add L1 and L2 regularization terms to the loss
 
@@ -731,18 +713,22 @@ class NeuralNetwork(Model):
         ----------
         loss : torch.Tensor
             the scalar tensor representing the loss
+        L1 : float or None
+            The L1 penalization added to the loss function
+        L2 : float or None
+            The L2 penalization added to the loss function
 
         Returns
         -------
         torch.Tensor :
             the regularized loss
         """
-        if self.L1 is not None:
+        if L1 is not None:
             norm = sum([torch.norm(p, 1)
                         for p in self.module.parameters()])
-            loss = loss + self.L1 * norm
-        if self.L2 is not None:
+            loss = loss + L1 * norm
+        if L2 is not None:
             norm = sum([torch.norm(p, 2)
                         for p in self.module.parameters()])
-            loss = loss + self.L2 * norm
+            loss = loss + L2 * norm
         return loss
