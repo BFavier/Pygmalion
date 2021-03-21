@@ -3,7 +3,7 @@ import numpy as np
 import pandas as pd
 from typing import Union, List, Tuple
 from .layers import Linear, BatchNorm2d
-from .layers import Encoder2d, Pooling2d, Dense0d
+from .layers import Encoder2d, Dense0d
 from .conversions import floats_to_tensor, tensor_to_index
 from .conversions import classes_to_tensor, images_to_tensor
 from .conversions import tensor_to_probabilities
@@ -21,7 +21,6 @@ class ImageClassifierModule(torch.nn.Module):
         obj.classes = dump["classes"]
         obj.input_norm = BatchNorm2d.from_dump(dump["input norm"])
         obj.encoder = Encoder2d.from_dump(dump["encoder"])
-        obj.final_pool = Pooling2d.from_dump(dump["final pool"])
         obj.dense = Dense0d.from_dump(dump["dense"])
         obj.output = Linear.from_dump(dump["output"])
         return obj
