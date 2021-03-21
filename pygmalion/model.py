@@ -132,7 +132,9 @@ class Model:
             return {name: cls._load_h5(group[name]) for name in group}
         elif group_type == "list":
             return [cls._load_h5(group[name]) for name in group]
-        elif group_type == "scalar" or group_type == "str":
+        elif group_type == "scalar":
+            return group.attrs["data"].tolist()
+        elif group_type == "str":
             return group.attrs["data"]
         elif group_type == "None":
             return None
