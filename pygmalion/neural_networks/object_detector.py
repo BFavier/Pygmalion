@@ -147,7 +147,7 @@ class ObjectDetectorModule(torch.nn.Module):
         return {"type": type(self).__name__,
                 "classes": list(self.classes),
                 "cell size": list(self.cell_size),
-                "boxes per cell": self.boxes_percell,
+                "boxes per cell": self.boxes_per_cell,
                 "input norm": self.input_norm.dump,
                 "encoder": self.encoder.dump,
                 "dense": self.dense.dump,
