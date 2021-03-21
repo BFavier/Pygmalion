@@ -51,7 +51,7 @@ class NeuralNetworkClassifier(NeuralNetwork):
 
     @property
     def class_weights(self):
-        if self._class_weights is None:
+        if self.module.class_weights is None:
             return None
         else:
             return self.module.class_weights.tolist()
