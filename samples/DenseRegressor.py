@@ -12,7 +12,7 @@ ml.datasets.boston_housing(data_path)
 # Load the data
 df = pd.read_csv(data_path / "boston_housing.csv")
 target = "medv"
-inputs = [c for c in d_Fcolumns if c != target]
+inputs = [c for c in df.columns if c != target]
 x = df[inputs]
 y = df[target]
 data = (x, y)

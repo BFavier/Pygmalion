@@ -47,7 +47,7 @@ y_pred = sum([model(x_test[i:i+100]) for i in range(0, len(x_test), 100)], [])
 ml.plot_confusion_matrix(y_pred, y_test, ax=ax)
 acc = ml.accuracy(y_pred, y_test)
 ax.set_title(f"Accuracy = {acc:.3g}")
-_Ftight_layout()
+f.tight_layout()
 
 # Plot metrics
 lx, ly = 5, 5
@@ -63,7 +63,7 @@ for n in range(lx*ly):
     ax.grid(False)
     ax.set_xticks([])
     ax.set_yticks([])
-_Ftight_layout()
+f.tight_layout()
 
 plt.show()
 IPython.embed()

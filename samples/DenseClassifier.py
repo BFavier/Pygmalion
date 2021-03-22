@@ -13,7 +13,7 @@ ml.datasets.iris(data_path)
 # Load the data
 df = pd.read_csv(data_path / "iris.csv")
 target = "variety"
-inputs = [c for c in d_Fcolumns if c != "variety"]
+inputs = [c for c in df.columns if c != "variety"]
 x = df[inputs]
 y = df[target]
 classes = y.unique()

@@ -64,7 +64,7 @@ for x, y_t in zip(x_train[:5], y_train[:5]):
         ax.set_title(title)
         ax.set_xticks([])
         ax.set_yticks([])
-    _Ftight_layout()
+    f.tight_layout()
 plt.show()
 
 IPython.embed()
