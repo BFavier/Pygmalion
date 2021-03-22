@@ -1,6 +1,6 @@
 import torch
-from .unpooling import Unpooling, Unpooling1d, Unpooling2d
-from .dense import Dense, Dense1d, Dense2d
+from ._unpooling import Unpooling, Unpooling1d, Unpooling2d
+from ._dense import Dense, Dense1d, Dense2d
 from typing import Union, List, Tuple
 
 

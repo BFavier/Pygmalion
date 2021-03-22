@@ -1,6 +1,6 @@
 import torch
 from typing import Union, List, Tuple
-from .downsampling import Downsampling, Downsampling1d, Downsampling2d
+from ._downsampling import Downsampling, Downsampling1d, Downsampling2d
 
 
 class Encoder(torch.nn.Module):

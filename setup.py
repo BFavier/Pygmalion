@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 import setuptools
 
-with open("pygmalion/info.py", "r") as fh:
+with open("pygmalion/_info.py", "r") as fh:
     lines = fh.readlines()
     key_values = [line.rstrip().replace("\"", "").split(" = ")
                   for line in lines]

@@ -1,7 +1,7 @@
 import torch
 from typing import Union, List, Tuple
-from .encoder import Encoder1d, Encoder2d
-from .decoder import Decoder1d, Decoder2d
+from ._encoder import Encoder1d, Encoder2d
+from ._decoder import Decoder1d, Decoder2d
 
 
 class UNet(torch.nn.Module):

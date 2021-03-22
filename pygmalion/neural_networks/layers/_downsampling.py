@@ -1,6 +1,6 @@
 import torch
-from .pooling import Pooling, Pooling1d, Pooling2d
-from .dense import Dense, Dense1d, Dense2d
+from ._pooling import Pooling, Pooling1d, Pooling2d
+from ._dense import Dense, Dense1d, Dense2d
 from typing import Union, List, Tuple
 
 

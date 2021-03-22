@@ -1,8 +1,8 @@
-import torch
-import numpy as np
+import torch as _torch
+import numpy as _np
 from typing import Iterable
-from .conversions import tensor_to_index
-from .neural_network import NeuralNetwork
+from ._conversions import tensor_to_index
+from ._neural_network import NeuralNetwork
 
 
 class NeuralNetworkClassifier(NeuralNetwork):
@@ -30,7 +30,7 @@ class NeuralNetworkClassifier(NeuralNetwork):
         else:
             self.class_weights = [class_weights[c] for c in self.classes]
 
-    def index(self, X) -> np.ndarray:
+    def index(self, X) -> _np.ndarray:
         """
         Returns the category index for each observation
 
@@ -60,8 +60,8 @@ class NeuralNetworkClassifier(NeuralNetwork):
     def class_weights(self, other: Iterable[float]):
         if other is not None:
             assert len(other) == len(self.classes)
-            other = torch.tensor(other, dtype=torch.float,
-                                 device=self.device)
+            other = _torch.tensor(other, dtype=_torch.float,
+                                  device=self.device)
         self.module.class_weights = other
 
     @property

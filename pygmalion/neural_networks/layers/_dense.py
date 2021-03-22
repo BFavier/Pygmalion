@@ -1,6 +1,6 @@
 import torch
 from typing import Union, List
-from .activated import Activated, Activated0d, Activated1d, Activated2d
+from ._activated import Activated, Activated0d, Activated1d, Activated2d
 
 
 class Dense(torch.nn.Module):

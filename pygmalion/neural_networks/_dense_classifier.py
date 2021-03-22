@@ -3,11 +3,11 @@ import pandas as pd
 import numpy as np
 from typing import List, Union
 from .layers import BatchNorm1d, Linear, Dense0d
-from .conversions import dataframe_to_tensor, classes_to_tensor
-from .conversions import floats_to_tensor, tensor_to_classes
-from .conversions import tensor_to_probabilities
-from .neural_network_classifier import NeuralNetworkClassifier
-from .loss_functions import cross_entropy
+from ._conversions import dataframe_to_tensor, classes_to_tensor
+from ._conversions import floats_to_tensor, tensor_to_classes
+from ._conversions import tensor_to_probabilities
+from ._neural_network_classifier import NeuralNetworkClassifier
+from ._loss_functions import cross_entropy
 
 
 class DenseClassifierModule(torch.nn.Module):

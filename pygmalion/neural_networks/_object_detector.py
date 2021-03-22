@@ -1,21 +1,21 @@
-import torch
-import numpy as np
+import torch as _torch
+import numpy as _np
 from typing import Union, List, Tuple
 from .layers import Conv2d, BatchNorm2d
 from .layers import Encoder2d, Dense2d
-from .conversions import bounding_boxes_to_tensor, images_to_tensor
-from .conversions import tensor_to_bounding_boxes
-from .neural_network_classifier import NeuralNetworkClassifier
-from .loss_functions import object_detector_loss
+from ._conversions import bounding_boxes_to_tensor, images_to_tensor
+from ._conversions import tensor_to_bounding_boxes
+from ._neural_network_classifier import NeuralNetworkClassifier
+from ._loss_functions import object_detector_loss
 
 
-class ObjectDetectorModule(torch.nn.Module):
+class ObjectDetectorModule(_torch.nn.Module):
 
     @classmethod
     def from_dump(cls, dump):
         assert cls.__name__ == dump["type"]
         obj = cls.__new__(cls)
-        torch.nn.Module.__init__(obj)
+        _torch.nn.Module.__init__(obj)
         obj.classes = dump["classes"]
         obj.cell_size = dump["cell size"]
         obj.boxes_per_cell = dump["boxes per cell"]
@@ -81,7 +81,7 @@ class ObjectDetectorModule(torch.nn.Module):
         out_channels = boxes_per_cell * (5+len(classes))
         self.output = Conv2d(in_channels, out_channels, kernel_size=(1, 1))
 
-    def forward(self, X: torch.Tensor) -> Tuple[torch.Tensor]:
+    def forward(self, X: _torch.Tensor) -> Tuple[_torch.Tensor]:
         """
         The output of this module is particular.
         It returns the tensors
@@ -99,12 +99,12 @@ class ObjectDetectorModule(torch.nn.Module):
 
         Parameters
         ----------
-        X : torch.Tensor
+        X : _torch.Tensor
             The images to process
 
         Returns
         -------
-        tuple of torch.Tensor :
+        tuple of _torch.Tensor :
             the (boxe_size, object_proba, class_proba) tensors
         """
         X = self.input_norm(X)
@@ -113,33 +113,34 @@ class ObjectDetectorModule(torch.nn.Module):
         X = self.output(X)
         N, C, H, W = X.shape
         X = X.view(N, self.boxes_per_cell, C//self.boxes_per_cell, H, W)
-        boxe_coords = torch.sigmoid(X[:, :, :2, ...])
+        boxe_coords = _torch.sigmoid(X[:, :, :2, ...])
         boxe_size = X[:, :, 2:4, ...]
-        object_proba = torch.sigmoid(X[:, :, 4, ...])
+        object_proba = _torch.sigmoid(X[:, :, 4, ...])
         class_proba = X[:, :, 5:, ...]
         return self._highest_confidence_boxe((boxe_coords, boxe_size,
                                              object_proba, class_proba))
 
-    def loss(self, y_pred: Tuple[torch.Tensor],
-             y_target: Tuple[torch.Tensor],
-             weights: Union[None, torch.Tensor] = None):
+    def loss(self, y_pred: Tuple[_torch.Tensor],
+             y_target: Tuple[_torch.Tensor],
+             weights: Union[None, _torch.Tensor] = None):
         return object_detector_loss(y_pred, y_target, weights,
                                     self.class_weights)
 
-    def _highest_confidence_boxe(self, tensors: Tuple[torch.Tensor]):
+    def _highest_confidence_boxe(self, tensors: Tuple[_torch.Tensor]):
         """
         Returns the predicted boxe with highest confidence for each anchor cell
         """
         boxe_coords, boxe_size, object_proba, class_proba = tensors
-        object_proba, indexes = torch.max(object_proba, dim=1)
+        object_proba, indexes = _torch.max(object_proba, dim=1)
         indexes = indexes.unsqueeze(1)
         boxes_index = indexes.expand((-1, 2, -1, -1)).unsqueeze(1)
-        boxe_coords = torch.gather(boxe_coords, 1, boxes_index).squeeze(1)
-        boxe_size = torch.gather(boxe_size, 1, boxes_index).squeeze(1)
+        boxe_coords = _torch.gather(boxe_coords, 1, boxes_index).squeeze(1)
+        boxe_size = _torch.gather(boxe_size, 1, boxes_index).squeeze(1)
         _, _, n, _, _ = class_proba.shape
-        class_proba = torch.gather(class_proba, 1,
-                                   indexes.expand((-1, n, -1, -1)).unsqueeze(1)
-                                   ).squeeze(1)
+        class_proba = _torch.gather(class_proba, 1,
+                                    indexes.expand((-1, n, -1, -1)
+                                                   ).unsqueeze(1)
+                                    ).squeeze(1)
         return boxe_coords, boxe_size, object_proba, class_proba
 
     @property
@@ -161,10 +162,10 @@ class ObjectDetector(NeuralNetworkClassifier):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-    def _data_to_tensor(self, X: np.ndarray,
+    def _data_to_tensor(self, X: _np.ndarray,
                         Y: Union[None, List[dict]],
                         weights: None = None,
-                        device: torch.device = torch.device("cpu")) -> tuple:
+                        device: _torch.device = _torch.device("cpu")) -> tuple:
         if weights is not None:
             raise ValueError("The weight of each observation must be passed in"
                              " the dictionary of bounding boxes, not as a"
@@ -182,6 +183,6 @@ class ObjectDetector(NeuralNetworkClassifier):
             w = None
         return x, y, w
 
-    def _tensor_to_y(self, tensors: Tuple[torch.Tensor]) -> List[dict]:
+    def _tensor_to_y(self, tensors: Tuple[_torch.Tensor]) -> List[dict]:
         return tensor_to_bounding_boxes(tensors, self.module.cell_size,
                                         self.module.classes)

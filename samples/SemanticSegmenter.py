@@ -51,7 +51,7 @@ model.train(train_data, val_data, n_epochs=500, batch_length=5,
 # ml.plot_confusion_matrix(y_pred, y_test, ax=ax)
 # acc = ml.accuracy(y_pred, y_test)
 # ax.set_title(f"Accuracy = {acc:.3g}")
-# f.tight_layout()
+# _Ftight_layout()
 
 # Plot results
 x_train, y_train = train_data
@@ -64,7 +64,7 @@ for x, y_t in zip(x_train[:5], y_train[:5]):
         ax.set_title(title)
         ax.set_xticks([])
         ax.set_yticks([])
-    f.tight_layout()
+    _Ftight_layout()
 plt.show()
 
 IPython.embed()

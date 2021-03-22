@@ -1,10 +1,10 @@
 import torch
 import torch.nn.functional as F
 from typing import Union, Tuple
-from .padding import Padding, Padding1d, Padding2d
-from .weighting import Weighting, Linear, Conv1d, Conv2d
-from .batch_norm import BatchNorm, BatchNorm1d, BatchNorm2d
-from .dropout import Dropout
+from ._padding import Padding, Padding1d, Padding2d
+from ._weighting import Weighting, Linear, Conv1d, Conv2d
+from ._batch_norm import BatchNorm, BatchNorm1d, BatchNorm2d
+from ._dropout import Dropout
 
 
 class Activated(torch.nn.Module):

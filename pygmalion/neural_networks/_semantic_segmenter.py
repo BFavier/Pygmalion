@@ -1,21 +1,21 @@
-import torch
-import numpy as np
+import torch as _torch
+import numpy as _np
 from typing import Union, List, Tuple, Dict, Iterable
 from .layers import BatchNorm2d, Conv2d
 from .layers import UNet2d
-from .conversions import floats_to_tensor, tensor_to_index
-from .conversions import segmented_to_tensor, images_to_tensor
-from .neural_network_classifier import NeuralNetworkClassifier
-from .loss_functions import soft_dice_loss
+from ._conversions import floats_to_tensor, tensor_to_index
+from ._conversions import segmented_to_tensor, images_to_tensor
+from ._neural_network_classifier import NeuralNetworkClassifier
+from ._loss_functions import soft_dice_loss
 
 
-class SemanticSegmenterModule(torch.nn.Module):
+class SemanticSegmenterModule(_torch.nn.Module):
 
     @classmethod
     def from_dump(cls, dump):
         assert cls.__name__ == dump["type"]
         obj = cls.__new__(cls)
-        torch.nn.Module.__init__(obj)
+        _torch.nn.Module.__init__(obj)
         obj.colors = dump["colors"]
         obj.classes = dump["classes"]
         obj.input_norm = BatchNorm2d.from_dump(dump["input norm"])
@@ -70,13 +70,13 @@ class SemanticSegmenterModule(torch.nn.Module):
         in_channels = self.u_net.out_channels(in_channels)
         self.output = Conv2d(in_channels, len(self.classes), (1, 1))
 
-    def forward(self, X: torch.Tensor):
+    def forward(self, X: _torch.Tensor):
         X = self.input_norm(X)
         X = self.u_net(X)
         return self.output(X)
 
-    def loss(self, y_pred: torch.Tensor, y_target: torch.Tensor,
-             weights: Union[None, torch.Tensor] = None):
+    def loss(self, y_pred: _torch.Tensor, y_target: _torch.Tensor,
+             weights: Union[None, _torch.Tensor] = None):
         return soft_dice_loss(y_pred, y_target, weights,
                               self.class_weights)
 
@@ -97,16 +97,16 @@ class SemanticSegmenter(NeuralNetworkClassifier):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-    def _data_to_tensor(self, X: Iterable[np.ndarray],
+    def _data_to_tensor(self, X: Iterable[_np.ndarray],
                         Y: Union[None, List[str]],
                         weights: Union[None, List[float]] = None,
-                        device: torch.device = torch.device("cpu")) -> tuple:
+                        device: _torch.device = _torch.device("cpu")) -> tuple:
         x = images_to_tensor(X, device)
         y = None if Y is None else segmented_to_tensor(Y, self.module.colors,
                                                        device)
         w = None if weights is None else floats_to_tensor(weights, device)
         return x, y, w
 
-    def _tensor_to_y(self, tensor: torch.Tensor) -> np.ndarray:
+    def _tensor_to_y(self, tensor: _torch.Tensor) -> _np.ndarray:
         indexes = tensor_to_index(tensor)
-        return np.array(self.module.colors)[indexes]
+        return _np.array(self.module.colors)[indexes]

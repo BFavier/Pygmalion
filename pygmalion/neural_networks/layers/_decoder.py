@@ -1,6 +1,6 @@
 import torch
 from typing import Union, List, Tuple
-from .upsampling import Upsampling, Upsampling1d, Upsampling2d
+from ._upsampling import Upsampling, Upsampling1d, Upsampling2d
 
 
 class Decoder(torch.nn.Module):

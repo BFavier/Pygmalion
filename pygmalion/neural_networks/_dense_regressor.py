@@ -3,10 +3,10 @@ import pandas as pd
 import numpy as np
 from typing import List, Union, Iterable
 from .layers import Dense0d, BatchNorm0d, Linear
-from .conversions import dataframe_to_tensor, \
+from ._conversions import dataframe_to_tensor, \
                          floats_to_tensor, tensor_to_floats
-from .neural_network import NeuralNetwork
-from .loss_functions import RMSE
+from ._neural_network import NeuralNetwork
+from ._loss_functions import RMSE
 
 
 class DenseRegressorModule(torch.nn.Module):

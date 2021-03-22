@@ -30,7 +30,7 @@ You can download a dataset and split it with the **split** function.
 ~~~python
 >>> ml.datasets.boston_housing("./")
 >>> df = pd.read_csv("./boston_housing.csv")
->>> x, y = df[[c for c in df.columns if c != "medv"]], df["medv"]
+>>> x, y = df[[c for c in d_Fcolumns if c != "medv"]], df["medv"]
 >>> data, test_data = ml.split((x, y), frac=0.1)
 >>> train_data, val_data = ml.split(data, frac=0.1)
 ~~~
@@ -68,7 +68,7 @@ For a classifier model you can evaluate the [**accuracy**](https://en.wikipedia.
 ~~~python
 >>> ml.datasets.iris("./")
 >>> df = pd.read_csv("./iris.csv")
->>> x, y = df[[c for c in df.columns if c != "variety"]], df["variety"]
+>>> x, y = df[[c for c in d_Fcolumns if c != "variety"]], df["variety"]
 >>> inputs, classes = x.columns(), y.unique()
 >>> hidden_layers = [{"channels": 5},
 >>>                  {"channels": 5},
@@ -115,7 +115,7 @@ The neural network models all share some common attributes:
 
 * The **GPU** attribute is either None to train on CPU, an integer between 0 and the number of available CUDA compatible GPUs to train on a single GPU, or a list of integers to train on multiples GPU.
 * The **learning_rate** attribute is the learning rate used during training.
-* The **optimization_method** attributes is the string name of the torch.optim optimizer used during training ("Adam", "SGD", ...).
+* The **optimization_method** attributes is the string name of the _torch.optim optimizer used during training ("Adam", "SGD", ...).
 * The **L1**/**L2** attribute is the L1/L2 penalization factor used during training.
 * The **residuals** attribute is a dict containing the training and validation loss history.
 * The **norm_update_factor** attribute is the factor used to update the batch normalization running mean and variance. The default value is mostly always ok, unless you do a lot of batchs/minibatchs where it might benefit to getting reduced.
