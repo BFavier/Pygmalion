@@ -102,9 +102,9 @@ class NeuralNetwork(Model):
             Maximum size of the batchs
             Or None to process the full data in one go
         L1 : float or None
-            L1 penalization added to the loss function
+            L1 regularization added to the loss function
         L2 : float or None
-            L2 penalization added to the loss function
+            L2 regularization added to the loss function
         norm_update_factor : float or None
             The update factor used for batch normalization
         verbose : bool
@@ -446,9 +446,9 @@ class NeuralNetwork(Model):
             The maximum number of items in a minibatchs
             or None to not to use minibatchs
         L1 : float or None
-            The L1 penalization added to the loss function
+            The L1 regularization added to the loss function
         L2 : float or None
-            The L2 penalization added to the loss function
+            The L2 regularization added to the loss function
         best_epoch : int
             the epoch of the previous best state
         best_loss : float
@@ -526,9 +526,9 @@ class NeuralNetwork(Model):
             The maximum number of observations in a batch.
             If None the whole data is processed in one go.
         L1 : float or None
-            The L1 penalization added to the loss function
+            The L1 regularization added to the loss function
         L2 : float or None
-            The L2 penalization added to the loss function
+            The L2 regularization added to the loss function
         train : bool
             If True, the gradient is back propagated
 
@@ -654,9 +654,9 @@ class NeuralNetwork(Model):
         w : List of float, or None
             weights
         L1 : float or None
-            The L1 penalization added to the loss function
+            The L1 regularization added to the loss function
         L2 : float or None
-            The L2 penalization added to the loss function
+            The L2 regularization added to the loss function
         train : bool
             If True, grad is backpropagated
 
@@ -710,9 +710,9 @@ class NeuralNetwork(Model):
         loss : _torch.Tensor
             the scalar tensor representing the loss
         L1 : float or None
-            The L1 penalization added to the loss function
+            The L1 regularization added to the loss function
         L2 : float or None
-            The L2 penalization added to the loss function
+            The L2 regularization added to the loss function
 
         Returns
         -------
