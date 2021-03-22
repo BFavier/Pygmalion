@@ -114,11 +114,8 @@ For examples of model training see the **samples** folder in the [github page](h
 The neural network models all share some common attributes:
 
 * The **GPU** attribute is either None to train on CPU, an integer between 0 and the number of available CUDA compatible GPUs to train on a single GPU, or a list of integers to train on multiples GPU.
-* The **learning_rate** attribute is the learning rate used during training.
 * The **optimization_method** attributes is the string name of the _torch.optim optimizer used during training ("Adam", "SGD", ...).
-* The **L1**/**L2** attribute is the L1/L2 penalization factor used during training.
 * The **residuals** attribute is a dict containing the training and validation loss history.
-* The **norm_update_factor** attribute is the factor used to update the batch normalization running mean and variance. The default value is mostly always ok, unless you do a lot of batchs/minibatchs where it might benefit to getting reduced.
 
 The classifier neural networks have an additional attribute:
 
@@ -132,15 +129,19 @@ The underlying pytorch Module and Optimizer can be accessed as the **model** and
 The **train** method is used to train the neural networks model. The prototype of the method is: 
 
 ~~~python
-def train(self, training_data: Union[tuple, Callable],
-          validation_data: Union[tuple, Callable, None] = None,
+def train(self, training_data: tuple,
+          validation_data: Union[tuple, None] = None,
           n_epochs: int = 1000,
           patience: int = 100,
-          verbose: bool = True,
-          batch_length: Union[int, None] = None):
+          learning_rate: float = 1.0E-3,
+          batch_length: Union[int, None] = None,
+          L1: Union[float, None] = None,
+          L2: Union[float, None] = None,
+          norm_update_factor: Union[float, None] = 0.1,
+          verbose: bool = True):
 ~~~
 
-* The parameter **training_data** must be a tuple of (x, y, [weight]). The weight is optional. The types of x/y/weights depends on the model types.
+* The parameter **training_data** must be a tuple of (x, y, [weights]). The weights are optional. The types of x/y/weights depends on the model types.
 
 * The parameter **validation_data** is similar to **training_data**. This is the data on which the loss is evaluated, but not back propagated (the model doesn't learn from it). It is used for early stopping: the training stops if the validation loss doesn't improve anymore (to prevent overfitting). This parameter is optional, so that you can verify that your model is able to overfit before trying to train it with early stopping.
 
@@ -148,9 +149,15 @@ def train(self, training_data: Union[tuple, Callable],
 
 * The **patience** parameter is the number of epoch without improvement of the validation loss after which the early stopping triggers.
 
-* The **verbose** parameter describes whether ther train/validation loss shoudl be printed at eahc epoch.
+* The **learning_rate** attribute is the learning rate used during training.
 
 * If the **batch_length** parameter is not None, the data are shuffled and cut in batches of at most **batch_length** observations at each epoch. This is necessary to train big models on limited GPU memory.
+
+* The **L1**/**L2** attribute is the L1/L2 regularization factor used during training.
+
+* The **norm_update_factor** attribute is the factor used to update the batch normalization layers running mean and variance. The default value is mostly always ok.
+
+* The **verbose** parameter describes whether ther train/validation loss shoudl be printed at eahc epoch.
 
 The history of the loss can be plotted using the **plot_residuals** method.
 
@@ -209,7 +216,8 @@ The args and kwargs passed to the underlying pytorch Module are mostly the same 
 ~~~python
 >>> def __init__(self, inputs: List[str], classes: List[str],
 >>>              hidden_layers: List[dict],
->>>              activation: str = "relu", stacked: bool = False,
+>>>              activation: str = "relu",
+>>>              stacked: bool = False,
 >>>              dropout: Union[float, None] = None):
 ~~~
 
