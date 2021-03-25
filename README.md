@@ -134,7 +134,7 @@ def train(self, training_data: tuple,
           n_epochs: int = 1000,
           patience: int = 100,
           learning_rate: float = 1.0E-3,
-          batch_length: Union[int, None] = None,
+          batch_size: Union[int, None] = None,
           L1: Union[float, None] = None,
           L2: Union[float, None] = None,
           norm_update_factor: Union[float, None] = 0.1,
@@ -151,7 +151,7 @@ def train(self, training_data: tuple,
 
 * The **learning_rate** attribute is the learning rate used during training.
 
-* If the **batch_length** parameter is not None, the data are shuffled and cut in batches of at most **batch_length** observations at each epoch. This is necessary to train big models on limited GPU memory.
+* If the **batch_size** parameter is not None, the data are shuffled and cut in batches of at most **batch_size** observations at each epoch. This is necessary to train big models on limited GPU memory.
 
 * The **L1**/**L2** attribute is the L1/L2 regularization factor used during training.
 
