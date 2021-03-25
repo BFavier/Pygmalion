@@ -41,7 +41,7 @@ model = nn.SemanticSegmenter(3, classes,
                              GPU=0)
 # print(model.module.shapes)
 train_data, val_data = ml.split((x, y), frac=0.2)
-model.train(train_data, val_data, n_epochs=500, batch_length=5,
+model.train(train_data, val_data, n_epochs=500, batch_size=5,
             learning_rate=1.0E-3)
 
 # Plot metrics

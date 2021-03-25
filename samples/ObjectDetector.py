@@ -52,7 +52,7 @@ model = nn.ObjectDetector(in_channels, classes,
                           GPU=0,
                           class_weights=class_weights)
 
-model.train(train_data, n_epochs=1000, batch_length=5,
+model.train(train_data, n_epochs=1000, batch_size=5,
             learning_rate=1.0E-3)
 
 model.plot_residuals()
