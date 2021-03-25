@@ -19,30 +19,33 @@ mean = sum([w for w in class_weights.values()])
 class_weights = {k: w/mean for k, w in class_weights.items()}
 with open(data_path / "classes.json", "r") as file:
     classes = json.load(file)
-x = np.load(data_path / "train_images.npy")[:100]
-y = np.load(data_path / "train_segmented.npy")[:100]
-x_test = np.load(data_path / "test_images.npy")[:50]
-y_test = np.load(data_path / "test_segmented.npy")[:50]
+x = np.load(data_path / "train_images.npy")
+y = np.load(data_path / "train_segmented.npy")
+x_test = np.load(data_path / "test_images.npy")
+y_test = np.load(data_path / "test_segmented.npy")
 
 # Create and train the model
 downward = [{"window": (3, 3), "channels": 4},
+            {"window": (3, 3), "channels": 4},
             {"window": (3, 3), "channels": 8},
-            {"window": (3, 3), "channels": 16}]
-pooling = [(4, 4), (4, 4), (4, 4)]
-upward = [{"window": (3, 3), "channels": 16},
-          {"window": (3, 3), "channels": 8},
-          {"window": (3, 3), "channels": 4}]
+            {"window": (3, 3), "channels": 8},
+            {"window": (3, 3), "channels": 16},
+            {"window": (3, 3), "channels": 16},
+            {"window": (3, 3), "channels": 32},
+            {"window": (3, 3), "channels": 32}]
+pooling = [(2, 2), (2, 2), (2, 2), (2, 2), (2, 2), (2, 2), (2, 2), (2, 2)]
+upward = downward[::-1]
 model = nn.SemanticSegmenter(3, classes,
                              downsampling=downward,
                              pooling=pooling,
                              upsampling=upward,
-                             upsampling_method="nearest",
-                             activation="tanh",
+                             upsampling_method="interpolate",
+                             activation="elu",
                              GPU=0)
 # print(model.module.shapes)
 train_data, val_data = ml.split((x, y), frac=0.2)
-model.train(train_data, val_data, n_epochs=500, batch_size=5,
-            learning_rate=1.0E-3)
+model.train(train_data, val_data, n_epochs=5000, batch_size=15,
+            learning_rate=1.0E-3, minibatching=True)
 
 # Plot metrics
 # model.plot_residuals()
@@ -54,6 +57,7 @@ model.train(train_data, val_data, n_epochs=500, batch_size=5,
 # _Ftight_layout()
 
 # Plot results
+model.plot_residuals()
 x_train, y_train = train_data
 for x, y_t in zip(x_train[:5], y_train[:5]):
     y_p = model([x])[0]
