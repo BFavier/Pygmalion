@@ -80,6 +80,14 @@ def test_Downsampling():
                                   rtol=rtol, atol=atol)
 
 
+def test_Embeding():
+    lay1 = lay.Embedding(100, 10)
+    lay2 = lay.Embedding.from_dump(lay1.dump)
+    tensor = torch.randint(0, 100, size=(100, 20), dtype=torch.long)
+    assert torch.allclose(lay1(tensor), lay2(tensor),
+                          rtol=rtol, atol=atol)
+
+
 def test_Encoder():
     for cls, dim in [(lay.Encoder1d, 1), (lay.Encoder2d, 2)]:
         dense_layers = [[{"channels": 4}, {"channels": 8}], {"channels": 16}]
@@ -92,6 +100,14 @@ def test_Encoder():
         tensor = torch.rand(size=shape, dtype=torch.float)
         assert torch.allclose(lay1(tensor), lay2(tensor),
                               rtol=rtol, atol=atol)
+
+
+def test_MultiHeadAttention():
+    lay1 = lay.MultiHeadAttention(100, 10)
+    lay2 = lay.MultiHeadAttention.from_dump(lay1.dump)
+    tensor = torch.randint(0, 100, size=(100, 20), dtype=torch.long)
+    assert torch.allclose(lay1(tensor), lay2(tensor),
+                          rtol=rtol, atol=atol)
 
 
 def test_Padding():

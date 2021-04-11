@@ -4,7 +4,9 @@ from ._decoder import Decoder1d, Decoder2d
 from ._dense import Dense0d, Dense1d, Dense2d
 from ._downsampling import Downsampling1d, Downsampling2d
 from ._dropout import Dropout
+from ._embedding import Embedding
 from ._encoder import Encoder1d, Encoder2d
+from ._multi_head_attention import MultiHeadAttention
 from ._padding import Padding1d, Padding2d
 from ._pooling import Pooling1d, Pooling2d
 from ._u_net import UNet1d, UNet2d
