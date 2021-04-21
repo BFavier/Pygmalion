@@ -1,60 +1,74 @@
 import torch
 import math
 from ._weighting import Linear
+from ._batch_norm import BatchNorm0d
 
 
 class MultiHeadAttention(torch.nn.Module):
 
-    def __init__(self, in_features: int, out_features: int, n_heads: int):
+    def __init__(self, projection_dim: int, n_heads: int):
         super().__init__()
-        self._n_heads = n_heads
-        self.query = Linear(in_features, out_features*n_heads, bias=False)
-        self.key = Linear(in_features, out_features*n_heads, bias=False)
-        self.value = Linear(in_features, out_features*n_heads, bias=False)
+        self.n_heads = n_heads
+        self.projection_dim = projection_dim
+        dim = projection_dim*n_heads
+        self.query = Linear(dim, dim, bias=False)
+        self.key = Linear(dim, dim, bias=False)
+        self.value = Linear(dim, dim, bias=False)
+        self.norm = BatchNorm0d(dim)
 
     @classmethod
     def from_dump(cls, dump: dict) -> 'MultiHeadAttention':
         assert dump["type"] == cls.__name__
         obj = cls.__new__(cls)
         torch.nn.Module.__init__(obj)
+        obj.n_heads = dump["n heads"]
+        obj.projection_dim = dump["projection dim"]
         obj.query = Linear.from_dump(dump["query"])
         obj.key = Linear.from_dump(dump["key"])
         obj.value = Linear.from_dump(dump["value"])
+        obj.norm = BatchNorm0d.from_dump(dump["norm"])
         return obj
 
-    def forward(self, X, Y, masked: bool = True):
+    def forward(self, query, key, masked: bool = True):
         """
         Parameters
         ----------
-        X : torch.Tensor
-            input of shape (N, L, I) with
+        query : torch.Tensor
+            tensor of input words of shape (N, Lq, D) with
             * N the number of sentences to treat
-            * L the number of words per sentence
-            * I the input embeding dimension of each word
+            * Lq the number of words per input sentence
+            * D the input embeding dimension of each word
+
+
+        key : torch.Tensor
+            tensor of predicted output words of shape (N, Lk, D) with
+            * N the number of sentences to treat
+            * Lk the number of words per output sentence
+            * D the output embeding dimension of each word
 
         Returns
         -------
         torch.Tensor :
-            tensor of shape (N, L, H, O), with :
+            tensor of shape (N, Ly, P*H), with :
+            * P the projection dimension
             * H the number of heads
-            * O the output embeding dimension
         """
-        N, L, _ = X.shape
-        q = self.query(X)
-        k = self.key(Y)
-        v = self.value(Y)
-        q = q.unsqueeze(2).expand(-1, -1, self.out_channels, -1)
-        k = k.unsqueeze(3).expand(-1, -1, -1, self.out_channels)
+        N, Lq, _ = query.shape
+        N, Lk, _ = key.shape
+        q = self.query(query).view(N, Lq, 1, self.n_heads, self.projection_dim)
+        k = self.key(key).view(N, 1, Lk, self.n_heads, self.projection_dim)
+        v = self.value(key).view(N, 1, Lk, self.n_heads, self.projection_dim)
         score = torch.sum(q*k, dim=-1) / math.sqrt(self.out_channels)
-        score = score.view(N, L, self.n_heads, self.out_channels)
         if masked:
-            mask = torch.triu(torch.ones(N, L, dtype=bool), diagonal=1)
-            mask = mask.unsqueeze(-1).unsqueeze(-1)
-            mask = mask.expand(-1, -1, self.n_heads, self.out_channels)
-            score = score.masked_fill(mask, -1.0E9)
-        attention = torch.softmax(score, dim=-1)
-        v = v.view(N, L, self.n_heads, self.out_channels)
-        return v*attention
+            mask = torch.ones(1, Lq, Lk, dtype=bool, device=score.device)
+            mask = torch.triu(mask, diagonal=1)
+            mask = mask.unsqueeze(-1)
+            score = score.masked_fill(mask, -1.0E6)
+        attention = torch.softmax(score, dim=2).unsqueeze(-1)
+        res = torch.sum(v*attention, dim=2)
+        res = res.view(N, Lq, -1) + query
+        res = self.norm(res.view(-1, self.out_channels))
+        return res.view(N, Lq, self.out_channels)
 
     @property
     def in_channels(self):
@@ -62,15 +76,14 @@ class MultiHeadAttention(torch.nn.Module):
 
     @property
     def out_channels(self):
-        return self.query.out_channels // self.n_heads
-
-    @property
-    def n_heads(self):
-        return self._n_heads
+        return self.value.out_channels
 
     @property
     def dump(self) -> dict:
         return {"type": type(self).__name__,
+                "n heads": self.n_heads,
+                "projection dim": self.projection_dim,
                 "query": self.query.dump,
                 "key": self.key.dump,
-                "value": self.value.dump}
+                "value": self.value.dump,
+                "norm": self.norm.dump}

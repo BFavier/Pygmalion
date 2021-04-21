@@ -197,9 +197,10 @@ def confusion_matrix(predicted: Iterable[str], target: Iterable[str],
     assert len(predicted) == len(target)
     if classes is None:
         classes = np.unique(np.stack([predicted, target]))
-    predicted = pd.Series(predicted).reset_index(drop=True)
-    target = pd.Series(target).reset_index(drop=True)
-    tab = pd.crosstab(predicted, target, normalize="all")
+    predicted = pd.Categorical(predicted, categories=classes)
+    target = pd.Categorical(target, categories=classes)
+    tab = pd.crosstab(predicted, target, normalize="all",
+                      rownames=["predicted"], colnames=["target"])
     for c in classes:
         if c not in tab.index:
             tab.loc[c] = 0

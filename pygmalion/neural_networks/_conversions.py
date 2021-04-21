@@ -73,9 +73,9 @@ def tensor_to_images(tensor: torch.Tensor,
         return colors[tensor_to_longs(tensor)]
 
 
-def tensor_to_index(tensor: torch.tensor) -> np.ndarray:
+def tensor_to_index(tensor: torch.tensor, dim=1) -> np.ndarray:
     """Converts a tensor to an array of category index"""
-    return tensor_to_longs(torch.argmax(tensor, dim=1))
+    return tensor_to_longs(torch.argmax(tensor, dim=dim))
 
 
 def classes_to_tensor(input: Iterable[str],
@@ -87,7 +87,8 @@ def classes_to_tensor(input: Iterable[str],
     The tensor contains for each input the index of the category.
     """
     assert isinstance(classes, list)
-    return longs_to_tensor([classes.index(i) for i in input],
+    indexes = {c: i for i, c in enumerate(classes)}
+    return longs_to_tensor([indexes[c] for c in input],
                            device)
 
 
@@ -298,3 +299,60 @@ def tensor_to_bounding_boxes(tensors: Tuple[torch.Tensor],
                            for c in confidence[i, mask[i]][k]]}
            for i in range(N)]
     return res
+
+
+def sentences_to_tensor(sentences: Iterable[str],
+                        lexicon: List[str],
+                        device: torch.device) -> torch.Tensor:
+    """
+    converts a list of sentences to tensor
+
+    Parameters
+    ----------
+    sentences : iterable of str
+        a list of sentences: words separated by a single white spaces
+    lexicon : list of str
+        a list of unique possible words
+
+    Returns
+    -------
+    torch.Tensor :
+        a tensor of shape (N, L) of longs, where:
+        * N is the number of sentences
+        * L is the length of longest sentence
+        and each scalar is the index of a word in the lexicon
+    """
+    assert isinstance(lexicon, list)
+    sentences = [s.split() for s in sentences]
+    L_max = max([len(s) for s in sentences])
+    sentences = [["\r"] + s + ["\n"]*(L_max - len(s) + 1)
+                 for s in sentences]
+    indexes = {c: i for i, c in enumerate(lexicon)}
+    data = [[indexes[w] for w in s] for s in sentences]
+    return longs_to_tensor(data, device)
+
+
+def tensor_to_sentences(tensor: torch.Tensor,
+                        lexicon: List[str]) -> List[str]:
+    """
+    converts a tensor to a list of sentences
+
+    Parameters
+    ----------
+    tensor : torch.Tensor
+        a tensor of shape (N, L) where:
+        * N is the number of sentences
+        * L is the length of longest sentence
+    lexicon : list of str
+        a list of unique possible words
+
+    Returns
+    -------
+    list of str :
+        a list of sentences,
+        each sentence is a set of words separated by whitespaces
+    """
+    indexes = tensor_to_longs(tensor.view(-1))
+    words = np.array(lexicon)[indexes]
+    sentence = " ".join(words[1:-1])
+    return sentence
