@@ -18,7 +18,7 @@ x_train = np.load(data_path / "train_images.npy")
 y_train = np.array(classes)[np.load(data_path / "train_labels.npy")]
 x_test = np.load(data_path / "test_images.npy")
 y_test = np.array(classes)[np.load(data_path / "test_labels.npy")]
-in_channels = 1
+in_features = 1
 
 # Create and train the model
 conv = [[{"window": (3, 3), "channels": 16, "dropout": 0.2, "padded": False},
@@ -29,7 +29,7 @@ conv = [[{"window": (3, 3), "channels": 16, "dropout": 0.2, "padded": False},
          {"window": (3, 3), "channels": 32, "dropout": 0.2}]]
 pooling = [(2, 2), (2, 2)]
 dense = [{"channels": 16}]
-model = nn.ImageClassifier(in_channels, classes,
+model = nn.ImageClassifier(in_features, classes,
                            convolutions=conv,
                            pooling=pooling,
                            dense=dense,

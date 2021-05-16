@@ -46,16 +46,16 @@ class DenseClassifierModule(torch.nn.Module):
         """
         super().__init__()
         self.inputs = list(inputs)
-        in_channels = len(inputs)
+        in_features = len(inputs)
         self.classes = list(classes)
-        self.input_norm = BatchNorm1d(in_channels)
-        self.dense = Dense0d(in_channels,
+        self.input_norm = BatchNorm1d(in_features)
+        self.dense = Dense0d(in_features,
                              layers=hidden_layers,
                              activation=activation,
                              stacked=stacked,
                              dropout=dropout)
-        in_channels = self.dense.out_channels(in_channels)
-        self.output = Linear(in_channels,
+        in_features = self.dense.out_features(in_features)
+        self.output = Linear(in_features,
                              len(self.classes))
 
     def forward(self, x):

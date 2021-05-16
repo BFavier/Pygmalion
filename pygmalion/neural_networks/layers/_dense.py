@@ -18,7 +18,7 @@ class Dense(torch.nn.Module):
             obj.layers.append(Activated.from_dump(layer))
         return obj
 
-    def __init__(self, in_channels: int,
+    def __init__(self, in_features: int,
                  layers: Union[dict, List[dict]],
                  activation: str = "relu",
                  stacked: bool = False,
@@ -27,7 +27,7 @@ class Dense(torch.nn.Module):
         """
         Parameters
         ----------
-        in_channels : int
+        in_features : int
             the number of channels of the input
         layers : dict, or list of dict
             the parameters of each 'Activated' layer in the dense layer
@@ -50,8 +50,8 @@ class Dense(torch.nn.Module):
             kwargs.setdefault("dropout", dropout)
             if type(self) != Dense0d:
                 kwargs.setdefault("padded", padded)
-            layer = self.ActivatedNd(in_channels, **kwargs)
-            in_channels = layer.out_channels(in_channels)
+            layer = self.ActivatedNd(in_features, **kwargs)
+            in_features = layer.out_features
             self.layers.append(layer)
 
     def forward(self, X):
@@ -71,17 +71,17 @@ class Dense(torch.nn.Module):
             shape = layer.shape_out(shape)
         return shape
 
-    def in_channels(self, out_channels: int) -> int:
-        channels = out_channels
-        for layer in self.layers[::-1]:
-            channels = layer.in_channels(channels)
-        return channels
+    def in_features(self, out_features: int) -> int:
+        if len(self.layers) > 0:
+            return self.layers[0].in_features
+        else:
+            return out_features
 
-    def out_channels(self, in_channels: int) -> int:
-        channels = in_channels
-        for layer in self.layers:
-            channels = layer.out_channels(channels)
-        return channels
+    def out_features(self, in_features: int) -> int:
+        if len(self.layers) > 0:
+            return self.layers[-1].out_features
+        else:
+            return in_features
 
     @property
     def dump(self):

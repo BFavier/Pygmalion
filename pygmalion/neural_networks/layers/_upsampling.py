@@ -19,7 +19,7 @@ class Upsampling(torch.nn.Module):
         obj.dense = Dense.from_dump(dump["dense"])
         return obj
 
-    def __init__(self, in_channels: int,
+    def __init__(self, in_features: int,
                  dense_layer: Union[List[dict], dict],
                  upsampling_factor: Union[int, Tuple[int, int]],
                  upsampling_method: str = "nearest",
@@ -28,7 +28,7 @@ class Upsampling(torch.nn.Module):
         """
         Parameters
         ----------
-        in_channels : int
+        in_features : int
             the number of channels of the input
         dense_layer : dict, or list of dict
             the parameters of all layers of the 'DenseNd'
@@ -45,7 +45,7 @@ class Upsampling(torch.nn.Module):
         super().__init__()
         unpooling = self.UnpoolingNd(factor=upsampling_factor,
                                      method=upsampling_method)
-        dense = self.DenseNd(in_channels+stacked_channels,
+        dense = self.DenseNd(in_features+stacked_channels,
                              dense_layer, **kwargs)
         self.unpooling = unpooling
         self.stacked_channels = stacked_channels
@@ -85,11 +85,11 @@ class Upsampling(torch.nn.Module):
     def shape_out(self, shape_in: list) -> list:
         return self.dense.shape_out(self.pooling.shape_out(shape_in))
 
-    def in_channels(self, out_channels: int) -> int:
-        return self.dense.in_channels(out_channels) - self.stacked_channels
+    def in_features(self, out_features: int) -> int:
+        return self.dense.in_features(out_features) - self.stacked_channels
 
-    def out_channels(self, in_channels: int) -> int:
-        return self.dense.out_channels(in_channels+self.stacked_channels)
+    def out_features(self, in_features: int) -> int:
+        return self.dense.out_features(in_features+self.stacked_channels)
 
     def concat(self, X1: torch.Tensor, X2: torch.Tensor) -> torch.Tensor:
         """

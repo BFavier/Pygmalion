@@ -60,14 +60,6 @@ class Linear(torch.nn.Linear, Weighting):
         assert shape_out == []
         return []
 
-    @property
-    def in_channels(self):
-        return self.in_features
-
-    @property
-    def out_channels(self):
-        return self.out_features
-
 
 class _Convolution(Weighting):
     """A template for batch norm layers"""
@@ -83,8 +75,6 @@ class _Convolution(Weighting):
         obj.dilation = (1,)
         obj.output_padding = (0,)
         obj.groups = 1
-        obj.in_channels = dump["in channels"]
-        obj.out_channels = dump["out channels"]
         obj.kernel_size = tuple(dump["kernel size"])
         obj.stride = tuple(dump["stride"])
         obj.weight = torch.nn.Parameter(
@@ -99,8 +89,6 @@ class _Convolution(Weighting):
     @property
     def dump(self) -> dict:
         d = {"type": type(self).__name__,
-             "in channels": self.in_channels,
-             "out channels": self.out_channels,
              "kernel size": list(self.kernel_size),
              "stride": list(self.stride),
              "weight": self.weight.tolist()}
@@ -118,21 +106,45 @@ class _Convolution(Weighting):
         return [(d-1)*s + k for d, k, s in
                 zip(shape_out, self.kernel_size, self.stride)]
 
+    @property
+    def in_features(self) -> int:
+        return self.weight.shape[1]
+
+    @property
+    def out_features(self) -> int:
+        return self.weight.shape[0]
+
+    @property
+    def in_channels(self) -> int:
+        return self.in_features
+
+    @property
+    def out_channels(self) -> int:
+        return self.out_features
+
+    @in_channels.setter
+    def in_channels(self, other) -> int:
+        pass
+
+    @out_channels.setter
+    def out_channels(self, other) -> int:
+        pass
+
 
 class Conv1d(torch.nn.Conv1d, _Convolution):
     """A wrapper around torch.nn.Conv1d"""
 
-    def __init__(self, in_channels: int,
-                 out_channels: int,
+    def __init__(self, in_features: int,
+                 out_features: int,
                  kernel_size: int,
                  stride: int = 1,
                  bias: bool = True):
         """
         Parameters
         ----------
-        in_channels : int
+        in_features : int
             The number of input channels
-        out_channels : int
+        out_features : int
             The number of output channels
         kernel_size : int
             The size of the convolved kernel
@@ -142,24 +154,24 @@ class Conv1d(torch.nn.Conv1d, _Convolution):
             Whether to have a bias in the linear equation:
             y = weight*x + bias
         """
-        torch.nn.Conv1d.__init__(self, in_channels, out_channels,
+        torch.nn.Conv1d.__init__(self, in_features, out_features,
                                  kernel_size, stride, bias=bias)
 
 
 class Conv2d(torch.nn.Conv2d, _Convolution):
     """A wrapper around torch.nn.Conv2d"""
 
-    def __init__(self, in_channels: int,
-                 out_channels: int,
+    def __init__(self, in_features: int,
+                 out_features: int,
                  kernel_size: Tuple[int, int],
                  stride: Tuple[int, int] = (1, 1),
                  bias: bool = True):
         """
         Parameters
         ----------
-        in_channels : int
+        in_features : int
             The number of input channels
-        out_channels : int
+        out_features : int
             The number of output channels
         kernel_size : tuple of int
             The (height, width) size of the convolved kernel
@@ -169,5 +181,5 @@ class Conv2d(torch.nn.Conv2d, _Convolution):
             Whether to have a bias in the linear equation:
             y = weight*x + bias
         """
-        torch.nn.Conv2d.__init__(self, in_channels, out_channels,
+        torch.nn.Conv2d.__init__(self, in_features, out_features,
                                  kernel_size, stride, bias=bias)

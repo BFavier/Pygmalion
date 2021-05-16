@@ -75,7 +75,7 @@ class Pooling1d(Pooling):
         pooling_type : one of {"max", "avg"}
             The type of pooling to perform
         """
-        super().__init__(pooling_window, pooling_type)
+        super().__init__((pooling_window,), pooling_type)
 
 
 class Pooling2d(Pooling):

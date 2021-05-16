@@ -18,7 +18,7 @@ class Encoder(torch.nn.Module):
             obj.stages.append(Downsampling.from_dump(d))
         return obj
 
-    def __init__(self, in_channels: int,
+    def __init__(self, in_features: int,
                  dense_layers: List[Union[dict, List[dict]]],
                  pooling_windows: List[Union[int, Tuple[int, int]]],
                  pooling_type: str = "max",
@@ -27,7 +27,7 @@ class Encoder(torch.nn.Module):
                  activation: str = "relu",
                  dropout: Union[float, None] = None):
         """
-        in_channels : int
+        in_features : int
             The number of channels of the input
         dense_layers : list of [dict / list of dict]
             the kwargs of all 'DenseNd' layers
@@ -48,7 +48,7 @@ class Encoder(torch.nn.Module):
         super().__init__()
         self.stages = torch.nn.ModuleList()
         for dense_layer, pool in zip(dense_layers, pooling_windows):
-            stage = self.DownsamplingNd(in_channels, dense_layer,
+            stage = self.DownsamplingNd(in_features, dense_layer,
                                         pooling_type=pooling_type,
                                         pooling_window=pool,
                                         padded=padded,
@@ -56,7 +56,7 @@ class Encoder(torch.nn.Module):
                                         activation=activation,
                                         dropout=dropout)
             self.stages.append(stage)
-            in_channels = stage.out_channels(in_channels)
+            in_features = stage.out_features(in_features)
 
     def forward(self, X: torch.Tensor) -> torch.Tensor:
         for stage in self.stages:
@@ -73,15 +73,17 @@ class Encoder(torch.nn.Module):
             shape_out = stage.shape_in(shape_out)
         return shape_out
 
-    def in_channels(self, out_channels: int) -> int:
-        for stage in self.stages[::-1]:
-            out_channels = stage.in_channels(out_channels)
-        return out_channels
+    def in_features(self, out_features: int) -> int:
+        if len(self.stages) > 0:
+            return self.stages[0].in_features(out_features)
+        else:
+            return out_features
 
-    def out_channels(self, in_channels: int) -> int:
-        for stage in self.stages:
-            in_channels = stage.out_channels(in_channels)
-        return in_channels
+    def out_features(self, in_features: int) -> int:
+        if len(self.stages) > 0:
+            return self.stages[-1].out_features(in_features)
+        else:
+            return in_features
 
     @property
     def dump(self):

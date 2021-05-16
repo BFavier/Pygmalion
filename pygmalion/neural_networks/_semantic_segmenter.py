@@ -23,7 +23,7 @@ class SemanticSegmenterModule(_torch.nn.Module):
         obj.output = Conv2d.from_dump(dump["output"])
         return obj
 
-    def __init__(self, in_channels: int,
+    def __init__(self, in_features: int,
                  colors: Dict[str, Union[int, List[int]]],
                  downsampling: List[Union[dict, List[dict]]],
                  pooling: List[Tuple[int, int]],
@@ -36,7 +36,7 @@ class SemanticSegmenterModule(_torch.nn.Module):
         """
         Parameters
         ----------
-        in_channels : int
+        in_features : int
             The number of channels of the input
         colors : dict
             a dict of {class: color}
@@ -60,15 +60,15 @@ class SemanticSegmenterModule(_torch.nn.Module):
         super().__init__()
         self.classes = [c for c in colors.keys()]
         self.colors = [colors[c] for c in self.classes]
-        self.input_norm = BatchNorm2d(in_channels)
-        self.u_net = UNet2d(in_channels, downsampling, pooling, upsampling,
+        self.input_norm = BatchNorm2d(in_features)
+        self.u_net = UNet2d(in_features, downsampling, pooling, upsampling,
                             pooling_type=pooling_type,
                             upsampling_method=upsampling_method,
                             activation=activation,
                             stacked=stacked,
                             dropout=dropout)
-        in_channels = self.u_net.out_channels(in_channels)
-        self.output = Conv2d(in_channels, len(self.classes), (1, 1))
+        in_features = self.u_net.out_features(in_features)
+        self.output = Conv2d(in_features, len(self.classes), (1, 1))
 
     def forward(self, X: _torch.Tensor):
         X = self.input_norm(X)

@@ -28,14 +28,14 @@ def test_DenseRegressor():
 
 
 def test_ImageClassifier():
-    in_channels = 3
+    in_features = 3
     classes = ["1", "2", "3"]
     conv = [{"window": (3, 3), "channels": 4},
             {"window": (3, 3), "channels": 4},
             {"window": (3, 3), "channels": 4}]
     pooling = [(2, 2), (2, 2)]
     dense = [{"channels": 4}]
-    m1 = nn.ImageClassifier(in_channels, classes,
+    m1 = nn.ImageClassifier(in_features, classes,
                             convolutions=conv,
                             pooling=pooling,
                             dense=dense,)
@@ -45,7 +45,7 @@ def test_ImageClassifier():
 
 
 # def test_ObjectDetector():
-#     in_channels = 3
+#     in_features = 3
 #     boxes_per_cell = 3
 #     classes = ["1", "2", "3"]
 #     down = [{"window": (3, 3), "channels": 4},
@@ -54,7 +54,7 @@ def test_ImageClassifier():
 #     pooling = [(2, 2), (2, 2), (2, 2)]
 #     dense = [{"window": (3, 3), "channels": 4},
 #              {"window": (3, 3), "channels": 4}]
-#     m1 = nn.ObjectDetector(in_channels, classes,
+#     m1 = nn.ObjectDetector(in_features, classes,
 #                            boxes_per_cell,
 #                            downsampling=down,
 #                            pooling=pooling,
@@ -65,7 +65,7 @@ def test_ImageClassifier():
 
 
 def test_SemanticSegmenter():
-    in_channels = 3
+    in_features = 3
     colors = {"1": [255, 0, 0], "2": [0, 255, 0], "3": [0, 0, 255]}
     downward = [{"window": (3, 3), "channels": 4},
                 {"window": (3, 3), "channels": 4},
@@ -74,7 +74,7 @@ def test_SemanticSegmenter():
     upward = [{"window": (3, 3), "channels": 4},
               {"window": (3, 3), "channels": 4},
               {"window": (3, 3), "channels": 4}]
-    m1 = nn.SemanticSegmenter(in_channels, colors,
+    m1 = nn.SemanticSegmenter(in_features, colors,
                               downsampling=downward,
                               pooling=pooling,
                               upsampling=upward)

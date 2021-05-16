@@ -25,7 +25,7 @@ class ImageClassifierModule(torch.nn.Module):
         obj.output = Linear.from_dump(dump["output"])
         return obj
 
-    def __init__(self, in_channels: int,
+    def __init__(self, in_features: int,
                  classes: List[str],
                  convolutions: Union[List[dict], List[List[dict]]],
                  pooling: List[Tuple[int, int]],
@@ -38,7 +38,7 @@ class ImageClassifierModule(torch.nn.Module):
         """
         Parameters
         ----------
-        in_channels : int
+        in_features : int
             the number of channels in the input images
         classes : list of str
             the unique classes the model can predict
@@ -63,18 +63,18 @@ class ImageClassifierModule(torch.nn.Module):
         super().__init__()
         assert len(pooling) == len(convolutions) - 1
         self.classes = list(classes)
-        self.input_norm = BatchNorm2d(in_channels)
-        self.encoder = Encoder2d(in_channels, convolutions, pooling+[None],
+        self.input_norm = BatchNorm2d(in_features)
+        self.encoder = Encoder2d(in_features, convolutions, pooling+[None],
                                  pooling_type=pooling_type,
                                  padded=padded,
                                  activation=activation,
                                  stacked=stacked,
                                  dropout=dropout)
-        in_channels = self.encoder.out_channels(in_channels)
-        self.dense = Dense0d(in_channels, dense, activation=activation,
+        in_features = self.encoder.out_features(in_features)
+        self.dense = Dense0d(in_features, dense, activation=activation,
                              stacked=stacked, dropout=dropout)
-        in_channels = self.dense.out_channels(in_channels)
-        self.output = Linear(in_channels, len(classes))
+        in_features = self.dense.out_features(in_features)
+        self.output = Linear(in_features, len(classes))
 
     def forward(self, X: torch.Tensor):
         X = self.input_norm(X)

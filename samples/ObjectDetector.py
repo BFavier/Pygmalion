@@ -31,7 +31,7 @@ train_data = (x_train, y_train)
 val_data = (x_val, y_val)
 classes = [k for k in class_weights.keys()]
 boxes_per_cell = 3
-in_channels = 3
+in_features = 3
 
 # Create and train the model
 down = [{"window": (3, 3), "channels": 4},
@@ -43,7 +43,7 @@ down = [{"window": (3, 3), "channels": 4},
 pooling = [(2, 2), (2, 2), (2, 2), (2, 2), (2, 2), (2, 2)]
 dense = [{"window": (3, 3), "channels": 32},
          {"window": (3, 3), "channels": 64}]
-model = nn.ObjectDetector(in_channels, classes,
+model = nn.ObjectDetector(in_features, classes,
                           boxes_per_cell,
                           downsampling=down,
                           pooling=pooling,

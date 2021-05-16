@@ -19,7 +19,7 @@ class UNet(torch.nn.Module):
         obj.decoder = cls.DecoderNd.from_dump(dump["decoder"])
         return obj
 
-    def __init__(self, in_channels: int,
+    def __init__(self, in_features: int,
                  downsampling: List[Union[dict, List[dict]]],
                  pooling: List[Union[int, Tuple[int, int]]],
                  upsampling: List[Union[dict, List[dict]]],
@@ -29,7 +29,7 @@ class UNet(torch.nn.Module):
                  stacked: bool = False,
                  dropout: Union[float, None] = None):
         """
-        in_channels : int
+        in_features : int
             The number of channels of the input
         downsampling : list of [dict / list of dict]
             the kwargs for the Dense layer for all downsampling layers
@@ -50,7 +50,7 @@ class UNet(torch.nn.Module):
         """
         assert len(downsampling) == len(pooling) == len(upsampling)
         super().__init__()
-        self.encoder = self.EncoderNd(in_channels, downsampling, pooling,
+        self.encoder = self.EncoderNd(in_features, downsampling, pooling,
                                       pooling_type=pooling_type,
                                       padded=True,
                                       stacked=stacked,
@@ -58,12 +58,12 @@ class UNet(torch.nn.Module):
                                       dropout=dropout)
         channels = []
         up_factors = []
-        out_channels = in_channels
+        out_features = in_features
         for down in self.encoder.stages:
-            channels.insert(0, out_channels)
+            channels.insert(0, out_features)
             up_factors.insert(0, down.downsampling_factor)
-            out_channels = down.out_channels(out_channels)
-        self.decoder = self.DecoderNd(out_channels, upsampling, up_factors,
+            out_features = down.out_features(out_features)
+        self.decoder = self.DecoderNd(out_features, upsampling, up_factors,
                                       stacked_channels=channels,
                                       upsampling_method=upsampling_method,
                                       padded=True,
@@ -92,17 +92,11 @@ class UNet(torch.nn.Module):
         shape = self.encoder.shape_in(shape)
         return shape
 
-    def in_channels(self, out_channels: int) -> int:
-        channels = out_channels
-        channels = self.decoder.in_channels(channels)
-        channels = self.encoder.in_channels(channels)
-        return channels
+    def in_features(self, out_features: int) -> int:
+        return self.encoder.in_features(out_features)
 
-    def out_channels(self, in_channels):
-        channels = in_channels
-        channels = self.encoder.out_channels(channels)
-        channels = self.decoder.out_channels(channels)
-        return channels
+    def out_features(self, in_features: int) -> int:
+        return self.decoder(in_features)
 
     @property
     def UpsamplingNd(self):

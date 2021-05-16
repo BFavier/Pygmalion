@@ -25,7 +25,7 @@ class ObjectDetectorModule(_torch.nn.Module):
         obj.output = Conv2d.from_dump(dump["output"])
         return obj
 
-    def __init__(self, in_channels: int,
+    def __init__(self, in_features: int,
                  classes: List[str],
                  boxes_per_cell: int,
                  downsampling: Union[List[dict], List[List[dict]]],
@@ -39,7 +39,7 @@ class ObjectDetectorModule(_torch.nn.Module):
         """
         Parameters
         ----------
-        in_channels : int
+        in_features : int
             the number of channels in the input images
         classes : list of str
             the unique classes the model can predict
@@ -66,20 +66,20 @@ class ObjectDetectorModule(_torch.nn.Module):
         assert len(pooling) == len(downsampling)
         self.boxes_per_cell = boxes_per_cell
         self.classes = list(classes)
-        self.input_norm = BatchNorm2d(in_channels)
-        self.encoder = Encoder2d(in_channels, downsampling, pooling,
+        self.input_norm = BatchNorm2d(in_features)
+        self.encoder = Encoder2d(in_features, downsampling, pooling,
                                  pooling_type=pooling_type,
                                  padded=padded,
                                  activation=activation,
                                  stacked=stacked,
                                  dropout=dropout)
         self.cell_size = self.encoder.shape_in([1, 1])
-        in_channels = self.encoder.out_channels(in_channels)
-        self.dense = Dense2d(in_channels, dense, activation=activation,
+        in_features = self.encoder.out_features(in_features)
+        self.dense = Dense2d(in_features, dense, activation=activation,
                              stacked=stacked, dropout=dropout)
-        in_channels = self.dense.out_channels(in_channels)
-        out_channels = boxes_per_cell * (5+len(classes))
-        self.output = Conv2d(in_channels, out_channels, kernel_size=(1, 1))
+        in_features = self.dense.out_features(in_features)
+        out_features = boxes_per_cell * (5+len(classes))
+        self.output = Conv2d(in_features, out_features, kernel_size=(1, 1))
 
     def forward(self, X: _torch.Tensor) -> Tuple[_torch.Tensor]:
         """

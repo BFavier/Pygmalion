@@ -43,15 +43,15 @@ class DenseRegressorModule(torch.nn.Module):
         """
         super().__init__()
         self.inputs = list(inputs)
-        in_channels = len(inputs)
-        self.input_norm = BatchNorm0d(in_channels)
-        self.dense = Dense0d(in_channels,
+        in_features = len(inputs)
+        self.input_norm = BatchNorm0d(in_features)
+        self.dense = Dense0d(in_features,
                              layers=hidden_layers,
                              activation=activation,
                              stacked=stacked,
                              dropout=dropout)
-        in_channels = self.dense.out_channels(in_channels)
-        self.output = Linear(in_channels, 1)
+        in_features = self.dense.out_features(in_features)
+        self.output = Linear(in_features, 1)
         self.target_norm = BatchNorm0d(1)
 
     def forward(self, x):

@@ -43,20 +43,16 @@ class Activated(torch.nn.Module):
         shape_in = self.padding.shape_in(shape_in)
         return shape_in
 
-    def out_channels(self, in_channels: int) -> int:
-        assert in_channels == self.weighting.in_channels
-        c = self.weighting.out_channels
+    @property
+    def out_features(self) -> int:
+        f = self.weighting.out_features
         if self.stacked:
-            c += self.weighting.in_channels
-        return c
+            f += self.weighting.in_features
+        return f
 
-    def in_channels(self, out_channels: int) -> int:
-        if self.stacked:
-            assert out_channels == (self.weighting.out_channels
-                                    + self.weighting.in_channels)
-        else:
-            assert out_channels == self.weighting.out_channels
-        return self.weighting.in_channels
+    @property
+    def in_features(self) -> int:
+        return self.weighting.in_features
 
     def forward(self, X: torch.Tensor) -> torch.Tensor:
         input = X
@@ -92,33 +88,18 @@ class Activated(torch.nn.Module):
 
 class Activated0d(Activated):
 
-    def __init__(self, in_channels: int,
-                 channels: int = 8,
+    def __init__(self, in_features: int,
+                 features: int = 8,
                  activation: str = "relu",
                  dropout: Union[None, float] = None,
                  bias: bool = True,
                  stacked: bool = False):
         super().__init__()
-        self.weighting = Linear(in_channels, channels, bias=bias)
-        self.normalization = BatchNorm1d(channels)
+        self.weighting = Linear(in_features, features, bias=bias)
+        self.normalization = BatchNorm1d(features)
         self.activation = activation
         self.dropout = Dropout(dropout)
         self.stacked = stacked
-
-    def out_channels(self, in_channels: int) -> int:
-        assert in_channels == self.weighting.in_features
-        c = self.weighting.out_features
-        if self.stacked:
-            c += self.weighting.in_features
-        return c
-
-    def in_channels(self, out_channels: int) -> int:
-        if self.stacked:
-            assert out_channels == (self.weighting.out_features
-                                    + self.weighting.in_features)
-        else:
-            assert out_channels == self.weighting.out_features
-        return self.weighting.in_channels
 
     def downsample(self, X: torch.Tensor) -> torch.Tensor:
         return X
@@ -126,8 +107,8 @@ class Activated0d(Activated):
 
 class Activated1d(Activated):
 
-    def __init__(self, in_channels: int,
-                 channels: int = 8,
+    def __init__(self, in_features: int,
+                 features: int = 8,
                  window: int = 3,
                  stride: int = 1,
                  activation: str = "relu",
@@ -139,9 +120,9 @@ class Activated1d(Activated):
         if padded:
             left, right = window // 2, window - 1 - window // 2
             self.padding = Padding1d((left, right))
-        self.weighting = Conv1d(in_channels, channels, kernel_size=window,
+        self.weighting = Conv1d(in_features, features, kernel_size=window,
                                 stride=stride, bias=bias)
-        self.normalization = BatchNorm1d(channels)
+        self.normalization = BatchNorm1d(features)
         self.activation = activation
         self.dropout = Dropout(dropout)
         self.stacked = stacked
@@ -159,8 +140,8 @@ class Activated1d(Activated):
 
 class Activated2d(Activated):
 
-    def __init__(self, in_channels: int,
-                 channels: int = 8,
+    def __init__(self, in_features: int,
+                 features: int = 8,
                  window: Tuple[int, int] = (3, 3),
                  stride: Tuple[int, int] = (1, 1),
                  activation: str = "relu",
@@ -173,9 +154,9 @@ class Activated2d(Activated):
             top, left = [w // 2 for w in window]
             bot, right = [w - 1 - w // 2 for w in window]
             self.padding = Padding2d((left, right, top, bot))
-        self.weighting = Conv2d(in_channels, channels, kernel_size=window,
+        self.weighting = Conv2d(in_features, features, kernel_size=window,
                                 stride=stride, bias=bias)
-        self.normalization = BatchNorm2d(channels)
+        self.normalization = BatchNorm2d(features)
         self.activation = activation
         self.dropout = Dropout(dropout)
         self.stacked = stacked

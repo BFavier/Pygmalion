@@ -18,7 +18,7 @@ class Downsampling(torch.nn.Module):
         obj.pooling = Pooling.from_dump(dump["pooling"])
         return obj
 
-    def __init__(self, in_channels: int,
+    def __init__(self, in_features: int,
                  dense_layer: Union[List[dict], dict],
                  pooling_window: Union[int, Tuple[int, int]],
                  pooling_type: str,
@@ -26,7 +26,7 @@ class Downsampling(torch.nn.Module):
         """
         Parameters
         ----------
-        in_channels : int
+        in_features : int
             the number of channels of the input
         dense_layer : dict, or list of dict
             the parameters of all layers of the 'DenseNd'
@@ -38,7 +38,7 @@ class Downsampling(torch.nn.Module):
             additional kwargs passed to DenseNd
         """
         super().__init__()
-        dense = self.DenseNd(in_channels, dense_layer, **kwargs)
+        dense = self.DenseNd(in_features, dense_layer, **kwargs)
         pooling = self.PoolingNd(pooling_window, pooling_type)
         self.dense = dense
         self.pooling = pooling
@@ -54,11 +54,11 @@ class Downsampling(torch.nn.Module):
     def shape_out(self, shape_in: list) -> list:
         return self.pooling.shape_out(self.dense.shape_out(shape_in))
 
-    def in_channels(self, out_channels: int) -> int:
-        return self.dense.in_channels(out_channels)
+    def in_features(self, out_features: int) -> int:
+        return self.dense.in_features(out_features)
 
-    def out_channels(self, in_channels: int) -> int:
-        return self.dense.out_channels(in_channels)
+    def out_features(self, in_features: int) -> int:
+        return self.dense.out_features(in_features)
 
     @property
     def dump(self) -> dict:

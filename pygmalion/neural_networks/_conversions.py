@@ -302,7 +302,6 @@ def tensor_to_bounding_boxes(tensors: Tuple[torch.Tensor],
 
 
 def sentences_to_tensor(sentences: Iterable[str],
-                        lexicon: List[str],
                         device: torch.device) -> torch.Tensor:
     """
     converts a list of sentences to tensor
@@ -310,9 +309,7 @@ def sentences_to_tensor(sentences: Iterable[str],
     Parameters
     ----------
     sentences : iterable of str
-        a list of sentences: words separated by a single white spaces
-    lexicon : list of str
-        a list of unique possible words
+        a list of sentences
 
     Returns
     -------
@@ -322,18 +319,14 @@ def sentences_to_tensor(sentences: Iterable[str],
         * L is the length of longest sentence
         and each scalar is the index of a word in the lexicon
     """
-    assert isinstance(lexicon, list)
-    sentences = [s.split() for s in sentences]
-    L_max = max([len(s) for s in sentences])
-    sentences = [["\r"] + s + ["\n"]*(L_max - len(s) + 1)
-                 for s in sentences]
-    indexes = {c: i for i, c in enumerate(lexicon)}
-    data = [[indexes[w] for w in s] for s in sentences]
+    sentences = [s.encode("utf-8") for s in sentences]
+    L_max = max(len(s) for s in sentences)
+    data = [list(b"\r" + s + b"\n"*(L_max - len(s) + 1))
+            for s in sentences]
     return longs_to_tensor(data, device)
 
 
-def tensor_to_sentences(tensor: torch.Tensor,
-                        lexicon: List[str]) -> List[str]:
+def tensor_to_sentences(tensor: torch.Tensor) -> List[str]:
     """
     converts a tensor to a list of sentences
 
@@ -352,7 +345,5 @@ def tensor_to_sentences(tensor: torch.Tensor,
         a list of sentences,
         each sentence is a set of words separated by whitespaces
     """
-    indexes = tensor_to_longs(tensor.view(-1))
-    words = np.array(lexicon)[indexes]
-    sentence = " ".join(words[1:-1])
-    return sentence
+    sentences = tensor_to_longs(tensor)
+    return [bytes(s.tolist()).decode("utf-8") for s in sentences]
