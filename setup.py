@@ -26,7 +26,7 @@ setuptools.setup(
         "matplotlib>=3.2",
         "h5py>=3.1"
     ],
-    python_requires='>=3.6',
+    python_requires='>=3.8',
     url="https://github.com/BFavier/Pygmalion",
     packages=setuptools.find_packages(),
     classifiers=(                                 # Classifiers help people find your 
