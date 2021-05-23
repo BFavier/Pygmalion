@@ -96,15 +96,14 @@ def kfold(data: Tuple[Any], k: int = 3, shuffle: bool = True) -> tuple:
     """
     L = len(data[0])
     indexes = np.random.permutation(L) if shuffle else np.arange(L)
-    indexes = np.split(indexes, k)
+    indexes = np.array_split(indexes, k)
     for i in range(k):
-        train = []
-        for j, ind in enumerate(indexes):
-            if j == i:
-                test = ind
-            else:
-                train.extend(ind)
-        yield _index(data, train), _index(data, test)
+        train_index = np.concatenate([ind for j, ind in enumerate(indexes)
+                                      if j != i])
+        train = tuple(_index(d, train_index) for d in data)
+        test_index = indexes[i]
+        test = tuple(_index(d, test_index) for d in data)
+        yield train, test
 
 
 def MSE(predicted: np.ndarray, target: np.ndarray, weights=None):
@@ -167,13 +166,15 @@ def plot_correlation(predicted: Iterable[float], target: Iterable[float],
     delta = sup - inf if sup != inf else 1
     sup += 0.05*delta
     inf -= 0.05*delta
-    plt.plot([inf, sup], [inf, sup], color="k", zorder=0)
+    ax.plot([inf, sup], [inf, sup], color="k", zorder=0)
     ax.set_xlim([inf, sup])
     ax.set_ylim([inf, sup])
     ax.set_xlabel("target")
     ax.set_ylabel("predicted")
     ax.set_aspect("equal", "box")
-    ax.legend()
+    legend = ax.legend()
+    if len(legend.texts) == 0:
+        legend.remove()
 
 
 def confusion_matrix(predicted: Iterable[str], target: Iterable[str],
