@@ -1,8 +1,8 @@
 import re
 from random import random
-from itertools import count
+from itertools import count, chain
 from collections import Counter, deque
-from typing import List, Tuple, Iterable, Iterator, Dict
+from typing import List, Tuple, Iterable, Iterator, Dict, Optional
 
 
 class Token:
@@ -81,14 +81,24 @@ class Sentence:
         the pairs present in the sentence
     first : Token
         the first token of the sentence (a sentence can't be empty)
+    weight : int
+        the number of occurences of the sentence in the corpus
+        (to compute merges only once)
     """
 
     def __repr__(self):
         return "".join(repr(t) for t in self)
 
-    def __init__(self, sentence: str):
+    def __init__(self, sentence: str, weight: int = 1):
+        """
+        sentence : str
+            the sentence to encode
+        weight : int
+            the sentence weight (if a sentence is repeated in the corpus)
+        """
         assert len(sentence) > 0
         data = (int(b) for b in sentence.encode("utf-8"))
+        self.weight = weight
         self.pairs = dict()
         self.first = Token(next(data))
         previous = self.first
@@ -129,26 +139,26 @@ class Sentence:
         while len(pairs) > 0:
             token = Token(new_token)
             merge_pair = pairs.popleft()
-            removed_pairs.update([tuple(merge_pair)])
+            removed_pairs[tuple(merge_pair)] += self.weight
             previous, next = merge_pair.previous, merge_pair.next
             merge_pair.unlink()
             if previous is not None:
                 left = previous.first
                 previous.unlink()
-                removed_pairs.update([tuple(previous)])
+                removed_pairs[tuple(previous)] += self.weight
                 self._unregister_pair(previous)
                 new_pair = Pair(left, token)
-                added_pairs.update([tuple(new_pair)])
+                added_pairs[tuple(new_pair)] += self.weight
                 self._register_pair(new_pair)
             else:
                 self.first = token
             if next is not None:
                 right = next.second
                 next.unlink()
-                removed_pairs.update([tuple(next)])
+                removed_pairs[tuple(next)] += self.weight
                 self._unregister_pair(next)
                 new_pair = Pair(token, right)
-                added_pairs.update([tuple(new_pair)])
+                added_pairs[tuple(new_pair)] += self.weight
                 self._register_pair(new_pair)
 
 
@@ -165,16 +175,34 @@ class BytePairEncoder:
         only in training mode. This improves model's robustness to typos
     """
 
+    @classmethod
+    def from_dump(cls, dump: dict) -> "BytePairEncoder":
+        assert dump["type"] == cls.__name__
+        return cls(code=dump["code"], dropout=dump["dropout"])
+
     def __repr__(self):
         return (f"{type(self).__name__}({len(self.vocabulary)} tokens,"
                 f" dropout={self.dropout})")
 
-    def __init__(self, dropout=None):
-        self.code = dict()
+    def __init__(self, code: Dict[int, Tuple[int, ...]] = dict(),
+                 dropout: Optional[float] = None):
+        """
+        Build a BytePairEncoder tokenizer
+
+        Parameters
+        ----------
+        code : dict of {int: tuple of int}
+            a dict of {token: subtokens}
+        dropout : float or None
+            either None (no dropout used) or a float between 0 and 1
+            the dropout is the probability of a byte pair merge to be skipped
+        """
+        self.code = code
         self.dropout = dropout
 
     def train(self, sentences: List[str], max_tokens: int = 5000,
-              min_frequency: float = 1.0E-4, verbose: bool = True):
+              min_frequency: float = 1.0E-4, verbose: bool = True,
+              word_piece: bool = True):
         """
         Trains the byte pair encoding
 
@@ -188,9 +216,25 @@ class BytePairEncoder:
             the minimum frequency of each new token in the corpus to be valid
         verbose : bool
             If True, display progression
+        word_piece : bool
+            If True, the corpus is split into
+            single words/white spaces/punctuation,
+            and subword can't cross the word boundary.
+            This should be set to False for languages that are not whitespace
+            separated.
+
+        Returns
+        -------
+        dict of {bytes: int}:
+            the count of each subword occurence in the training corpus
         """
-        print("loading data: ", end="", flush=True)
-        sentences = [Sentence(s) for s in sentences if len(s) > 0]
+        print("loading data ...", flush=True)
+        if word_piece:
+            unique_words = Counter(self._split_words(sentences))
+            sentences = [Sentence(s, weight=c) for s, c in unique_words.items()
+                         if len(s) > 0]
+        else:
+            sentences = [Sentence(s) for s in sentences if len(s) > 0]
         code = dict()
         pairs_count = self._get_pair_counts(sentences)
         tokens_count = self._get_tokens_count(sentences)
@@ -198,11 +242,12 @@ class BytePairEncoder:
         n_tokens = self._build_code(code, sentences, pairs_count, tokens_count,
                                     n_tokens, max_tokens, min_frequency,
                                     verbose)
-        self._prune_code(code, tokens_count, n_tokens, min_frequency, verbose)
-        self.code = code
-        return tokens_count
+        self.code, final_tokens = self._prune_code(code, tokens_count,
+                                                   n_tokens, min_frequency,
+                                                   verbose)
+        return {self._bytes(k, self.code): i for k, i in final_tokens.items()}
 
-    def encode(self, sentence: str, use_dropout: bool = False) -> List[int]:
+    def encode(self, sentence: str, use_dropout: bool = True) -> List[int]:
         """
         Apply the tokenization
         """
@@ -222,18 +267,28 @@ class BytePairEncoder:
         return bytes(encoded).decode("utf-8", errors="replace")
 
     @property
+    def dump(self):
+        return {"type": type(self).__name__,
+                "code": self.code,
+                "dropout": self.dropout}
+
+    @property
     def vocabulary(self) -> List[bytes]:
         """returns all the single tokens"""
         byte = [bytes([i]) for i in range(256)]
         return byte + [self._bytes(t, self.code) for t in self.code.keys()]
 
-    def _bytes(self, token_index: int, tokens: Dict[int, Tuple[int]]) -> bytes:
+    def _split_words(self, sentences: Iterable[str]) -> Iterable[str]:
+        """Split each sentence into a list of 'words'"""
+        return chain(*(re.findall(r"[\w]+|[^\w]", s) for s in sentences))
+
+    def _bytes(self, token_index: int, code: Dict[int, Tuple[int]]) -> bytes:
         """returns the bytes representation of a token"""
         if token_index < 256:
             return bytes([token_index])
         else:
-            return b"".join((self._bytes(t, tokens)
-                             for t in tokens[token_index]))
+            return b"".join((self._bytes(t, code)
+                             for t in code[token_index]))
 
     def _build_code(self, code: Dict[int, Tuple[int]],
                     sentences: List[Sentence],
@@ -245,21 +300,18 @@ class BytePairEncoder:
         Fills the code dictionnary with new token until not possible anymore
         """
         for i in count(1):
-            best_pair, pair_count = max(pairs_count.items(),
-                                        key=lambda x: x[1])
-            if pair_count == 0:
+            if len(pairs_count) == 0:
                 if verbose:
                     print("\nno more pairs to merge", flush=True)
                 break
+            best_pair, pair_count = max(pairs_count.items(),
+                                        key=lambda x: x[1])
             new_token = 256 + len(code)
             new_token_frequency = pair_count / (n_tokens - pair_count)
             if new_token_frequency < min_frequency:
                 if verbose:
                     print("\nminimum token frequency reached", flush=True)
                 break
-            n_valid = sum(self._token_is_valid(token, tokens_count,
-                                               n_tokens, min_frequency)
-                          for token in code.keys()) + 256
             code[new_token] = best_pair
             added_pairs, removed_pairs = Counter(), Counter()
             for s in sentences:
@@ -270,6 +322,9 @@ class BytePairEncoder:
             tokens_count[best_pair[1]] -= pair_count
             tokens_count[new_token] += pair_count
             n_tokens -= pair_count
+            n_valid = sum(self._token_is_valid(token, tokens_count,
+                                               n_tokens, min_frequency)
+                          for token in code.keys()) + 256
             if verbose:
                 print(f"\r\033[K\rMerge iterations {i}: "
                       f"{n_valid} tokens, "
@@ -282,9 +337,10 @@ class BytePairEncoder:
         return n_tokens
 
     def _prune_code(self, code, tokens_count: Dict[int, int], n_tokens: int,
-                    min_frequency: float, verbose: bool):
+                    min_frequency: float, verbose: bool) -> tuple:
         """
         Remove tokens that are too unfrequent from the code dictionary
+        Returns the pruned code, and pruned tokens count
         """
         for i in count(1):
             for token in tuple(code.keys()):
@@ -303,16 +359,19 @@ class BytePairEncoder:
                       end="", flush=True)
         mapping = {k: i+256 for i, k in enumerate(code.keys())}
         mapping.update({i: i for i in range(256)})
-        code = {mapping[k]: tuple(mapping[t] for t in v)
-                for k, v in code.items()}
+        final_code = {mapping[k]: tuple(mapping[t] for t in v)
+                      for k, v in code.items()}
+        final_tokens = {mapping[k]: i for k, i in tokens_count.items()
+                        if i > 0}
         if verbose:
             print("")
+        return final_code, final_tokens
 
     def _get_pair_counts(self, sentences: List[Sentence]) -> Counter:
         """
         Returns a counter of the occurences of each pair in all the sentences
         """
-        iterable = (Counter({k: len(p) for k, p in s.pairs.items()})
+        iterable = (Counter({k: len(p)*s.weight for k, p in s.pairs.items()})
                     for s in sentences)
         return sum(iterable, Counter())
 
@@ -320,7 +379,7 @@ class BytePairEncoder:
         """
         Returns a counter of the occurences of each token in all the sentences
         """
-        iterable = (Counter((int(t) for t in s)) for s in sentences)
+        iterable = (Counter({int(t): s.weight for t in s}) for s in sentences)
         return sum(iterable, Counter())
 
     def _unmerge_tokens(self, token: int, code: Dict[int, Tuple[int]]
@@ -372,35 +431,9 @@ class BytePairEncoder:
         while i < len(sentence):
             j = i+len(code)
             if (j <= len(sentence) and tuple(sentence[i:j]) == code
-                    and dropout is not None and random() >= dropout):
+                    and (dropout is None or random() >= dropout)):
                 i = j
                 yield token
             else:
                 yield sentence[i]
                 i += 1
-
-
-if __name__ == "__main__":
-    from timeit import timeit
-    import pathlib
-    import IPython
-    path = pathlib.Path(__file__).parent
-    with open(path / "corpus.txt", "r") as file:
-        corpus = file.read().lower().split("\n")
-    # with open(path / "europarl-v7.en.txt", "r", encoding="latin-1") as file:
-    #     corpus = file.read().lower().split("\n")
-    # bpe = BytePairEncoder()
-    # res = bpe.train(corpus)
-    # corp = Corpus(corpus)
-    # print(bpe.vocabulary)
-    # coded = [bpe.encode(c) for c in corpus]
-    # s = Sentence("1223333")
-    # s.merge((50, 50), 0)
-    # s.merge((49, 0), 1)
-    c = BytePairEncoder()
-    res = c.train(corpus, max_tokens=1000)
-    s = c.encode("Hello world")
-    c.decode(s)
-    # print(timeit(c.train(corpus, as_array=True), number=10))
-    # print(timeit(c.train(corpus, as_array=False), number=10))
-    IPython.embed()
