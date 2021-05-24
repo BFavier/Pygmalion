@@ -12,31 +12,39 @@ data_path = pathlib.Path(__file__).parent / "data"
 
 def load_text(path):
     with open(path, "r", encoding="utf-8") as file:
-        raw = [line.encode("utf-8") for line in file]
-    Lmax = max(len(line) for line in raw)
-    padded = [b"\r" + line + b"\n" * (Lmax - len(line)) for line in raw]
-    longs = np.array([list(p) for p in padded])
-    return longs
+        lines = file.read().split("\n")
+    return lines
 
 
-# en = load_text(data_path / "europarl" / "europarl-tokenized-en.txt")
-# fr = load_text(data_path / "europarl" / "europarl-tokenized-fr.txt")
+# en = load_text(data_path / "europarl" / "europarl-tokenized-en.txt")[:1000]
+# fr = load_text(data_path / "europarl" / "europarl-tokenized-fr.txt")[:1000]
+en = ["hello world",
+      "My name is Jean",
+      "i like trees",
+      "i am superman",
+      "see you tommorow"]
+fr = ["bonjour le monde",
+      "je m'appel Jean",
+      "j'aime les arbres",
+      "je suis superman",
+      "on se voit demain"]
 
-en = ["hello world"]
-fr = ["bonjour le monde"]
-lexicon_in, lexicon_out = en[0].split(), fr[0].split()
+tokenizer_in = ml.unsupervised.BytePairEncoder()
+tokenizer_in.train(en)
+tokenizer_out = ml.unsupervised.WhitespaceTokenizer()
+tokenizer_out.train(fr)
 
-
+n_stages = 4
 projection_dim = 16
 n_heads = 4
-layers = [{"channels": 128}]
-n_stages = 4
+hidden_layers = [{"features": 128}]
 
-model = ml.neural_networks.Traductor(embedding_dim, lexicon_in, lexicon_out,
-                                     projection_dim, n_heads, layers, n_stages,
-                                     GPU=0)
+model = ml.neural_networks.Traductor(tokenizer_in, tokenizer_out,
+                                     n_stages, projection_dim, n_heads,
+                                     hidden_layers,
+                                     GPU=0, optimization_method="Adam")
 
-model.train((en, fr), n_epochs=500, learning_rate=1.0E-3)
-print(model(en[0], max_words=10).split(" "))
+model.train((en, fr), n_epochs=500, learning_rate=1.0E-3, batch_size=10)
+print(model(en[0], max_words=10))
 
 IPython.embed()

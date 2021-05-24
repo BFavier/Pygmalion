@@ -103,10 +103,11 @@ def test_Encoder():
 
 
 def test_MultiHeadAttention():
-    lay1 = lay.MultiHeadAttention(100, 10)
+    lay1 = lay.MultiHeadAttention(10, 4)
     lay2 = lay.MultiHeadAttention.from_dump(lay1.dump)
-    tensor = torch.randint(0, 100, size=(100, 20), dtype=torch.long)
-    assert torch.allclose(lay1(tensor), lay2(tensor),
+    tensor = torch.rand(size=(100, 20, 40), dtype=torch.float)
+    assert torch.allclose(lay1(tensor, tensor, masked=True),
+                          lay2(tensor, tensor, masked=True),
                           rtol=rtol, atol=atol)
 
 

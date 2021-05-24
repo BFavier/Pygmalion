@@ -1,9 +1,9 @@
 import torch
-from typing import Union, List, Iterable
-from .layers import TransformerEncoderStage, TransformerDecoderStage
-from .layers import Embedding, Linear
+from typing import Union, List
+from .layers import Transformer, Embedding
+from .layers import Linear
 from ._conversions import sentences_to_tensor, tensor_to_sentences
-from ._conversions import floats_to_tensor
+from ._conversions import floats_to_tensor, longs_to_tensor
 from ._neural_network_classifier import NeuralNetworkClassifier
 from ._loss_functions import cross_entropy
 
@@ -19,22 +19,16 @@ class TraductorModule(torch.nn.Module):
         obj.lexicon_out = dump["lexicon out"]
         obj.embedding_in = Embedding.from_dump(dump["embedding in"])
         obj.embedding_out = Embedding.from_dump(dump["embedding out"])
-        obj.encoders = torch.nn.ModuleList()
-        for e in dump["encoders"]:
-            obj.encoders.append(TransformerEncoderStage.from_dump(e))
-        obj.decoders = torch.nn.ModuleList()
-        for d in dump["decoders"]:
-            obj.decoders.append(TransformerDecoderStage.from_dump(d))
-        obj.output = Linear.from_dump(dump["output"])
+        obj.transformer = Transformer.from_dump(dump["transformer"])
         return obj
 
-    def __init__(self, embedding_dim: int,
-                 lexicon_in: Iterable[str],
-                 lexicon_out: Iterable[str],
+    def __init__(self,
+                 tokenizer_in,
+                 tokenizer_out,
+                 n_stages: int,
                  projection_dim: int,
                  n_heads: int,
-                 layers: List[dict],
-                 n_stages: int,
+                 hidden_layers: List[dict],
                  activation: str = "relu",
                  stacked: bool = False,
                  dropout: Union[float, None] = None):
@@ -52,24 +46,15 @@ class TraductorModule(torch.nn.Module):
             the default value for the 'dropout' key of the kwargs
         """
         super().__init__()
-        self.lexicon_in = ["\r"] + list(set(lexicon_in)) + ["\n"]
-        self.lexicon_out = ["\r"] + list(set(lexicon_out)) + ["\n"]
-        self.embedding_dim = embedding_dim
-        self.embedding_in = Embedding(len(self.lexicon_in), embedding_dim)
-        self.embedding_out = Embedding(len(self.lexicon_out), embedding_dim)
-        self.encoders = torch.nn.ModuleList()
-        for stage in range(n_stages):
-            t = TransformerEncoderStage(projection_dim, n_heads, layers,
-                                        embedding_dim, activation=activation,
-                                        stacked=stacked, dropout=dropout)
-            self.encoders.append(t)
-        self.decoders = torch.nn.ModuleList()
-        for stage in range(n_stages):
-            t = TransformerDecoderStage(projection_dim, n_heads, layers,
-                                        embedding_dim, activation=activation,
-                                        stacked=stacked, dropout=dropout)
-            self.decoders.append(t)
-        self.output = Linear(embedding_dim, len(self.lexicon_out))
+        self.embedding_dim = projection_dim*n_heads
+        self.tokenizer_in = tokenizer_in
+        self.tokenizer_out = tokenizer_out
+        self.embedding_in = Embedding(256, self.embedding_dim)
+        self.embedding_out = Embedding(256, self.embedding_dim)
+        self.transformer = Transformer(n_stages, projection_dim, n_heads,
+                                       hidden_layers, activation=activation,
+                                       stacked=stacked, dropout=dropout)
+        self.output = Linear(self.embedding_dim, 256)
 
     def forward(self, X):
         """
@@ -87,10 +72,13 @@ class TraductorModule(torch.nn.Module):
         torch.Tensor :
             tensor of floats of shape (N, L, D) with D the embedding dimension
         """
+        try:
+            X = self.tokenizer_in.encode(X, use_dropout=self.training)
+        except TypeError:
+            X = self.tokenizer_in.encode(X)
+        X = longs_to_tensor(X, self.device)
         X = self.embedding_in(X)
-        X = self._positional_embedding(X)
-        for stage in self.encoders:
-            X = stage(X)
+        X = self.transformer.encode(X)
         return X
 
     def decode(self, encoded, Y):
@@ -115,10 +103,13 @@ class TraductorModule(torch.nn.Module):
         torch.Tensor :
             tensor of floats of shape (N, Ly, D)
         """
+        try:
+            Y = self.tokenizer_out.encode(Y, use_dropout=self.training)
+        except TypeError:
+            Y = self.tokenizer_out.encode(Y)
+        Y = longs_to_tensor(Y, self.device)
         Y = self.embedding_out(Y)
-        Y = self._positional_embedding(Y)
-        for stage in self.decoders:
-            Y = stage(encoded, Y)
+        Y = self.transformer.decode(encoded, Y)
         return self.output(Y)
 
     def loss(self, encoded, y_target, weights=None):
@@ -154,12 +145,9 @@ class TraductorModule(torch.nn.Module):
     @property
     def dump(self):
         return {"type": type(self).__name__,
-                "lexicon in": self.lexicon_in,
-                "lexicon out": self.lexicon_out,
                 "embedding in": self.embedding_in.dump,
                 "embedding out": self.embedding_out.dump,
-                "encoders": [e.dump for e in self.encoders],
-                "decoders": [d.dump for d in self.decoders],
+                "transformer": self.transformer.dump,
                 "output": self.output.dump}
 
 
@@ -180,12 +168,67 @@ class Traductor(NeuralNetworkClassifier):
                         Y: Union[None, List[str]],
                         weights: None = None,
                         device: torch.device = torch.device("cpu")) -> tuple:
-        x = sentences_to_tensor(X, self.module.lexicon_in, device)
-        y = None if Y is None else sentences_to_tensor(Y,
-                                                       self.module.lexicon_out,
-                                                       device)
+        x = X
+        y = Y
         w = None if weights is None else floats_to_tensor(weights, device)
         return x, y, w
 
     def _tensor_to_y(self, tensor) -> List[str]:
         return tensor_to_sentences(tensor, self.module.lexicon_out)
+
+
+# def sentences_to_tensor(sentences: Iterable[str],
+#                         lexicon: List[str],
+#                         device: torch.device) -> torch.Tensor:
+#     """
+#     converts a list of sentences to tensor
+
+#     Parameters
+#     ----------
+#     sentences : iterable of str
+#         a list of sentences: words separated by a single white spaces
+#     lexicon : list of str
+#         a list of unique possible words
+
+#     Returns
+#     -------
+#     torch.Tensor :
+#         a tensor of shape (N, L) of longs, where:
+#         * N is the number of sentences
+#         * L is the length of longest sentence
+#         and each scalar is the index of a word in the lexicon
+#     """
+#     assert isinstance(lexicon, list)
+#     sentences = [s.split() for s in sentences]
+#     L_max = max([len(s) for s in sentences])
+#     sentences = [["\r"] + s + ["\n"]*(L_max - len(s) + 1)
+#                  for s in sentences]
+#     indexes = {c: i for i, c in enumerate(lexicon)}
+#     data = [[indexes[w] for w in s] for s in sentences]
+#     return longs_to_tensor(data, device)
+
+
+# def tensor_to_sentences(tensor: torch.Tensor,
+#                         lexicon: List[str]) -> List[str]:
+#     """
+#     converts a tensor to a list of sentences
+
+#     Parameters
+#     ----------
+#     tensor : torch.Tensor
+#         a tensor of shape (N, L) where:
+#         * N is the number of sentences
+#         * L is the length of longest sentence
+#     lexicon : list of str
+#         a list of unique possible words
+
+#     Returns
+#     -------
+#     list of str :
+#         a list of sentences,
+#         each sentence is a set of words separated by whitespaces
+#     """
+#     indexes = tensor_to_longs(tensor.view(-1))
+#     words = np.array(lexicon)[indexes]
+#     sentence = " ".join(words[1:-1])
+#     return sentence
