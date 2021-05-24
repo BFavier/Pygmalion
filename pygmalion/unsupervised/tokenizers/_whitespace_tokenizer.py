@@ -2,9 +2,10 @@ import re
 from itertools import chain
 from collections import Counter
 from typing import Iterable, List, Dict
+from ._tokenizer import Tokenizer
 
 
-class WhitespaceTokenizer:
+class WhitespaceTokenizer(Tokenizer):
     """
     Tokenizer for whitespace separated words
 

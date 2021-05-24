@@ -1,5 +1,5 @@
 import torch
-from typing import List
+from typing import List, Optional
 from ._dense import Dense0d
 from ._weighting import Linear
 from ._multi_head_attention import MultiHeadAttention as MHA
@@ -30,7 +30,7 @@ class TransformerEncoderStage(torch.nn.Module):
     def forward(self, X):
         input = X
         N, L, _ = X.shape
-        X = self.self_attention(X, X, masked=False)
+        X = self.self_attention(X, X)
         X = self.dense(X.view(N*L, -1))
         X = self.output(X) + input.view(N*L, -1)
         return X.view(N, L, -1)
@@ -66,11 +66,11 @@ class TransformerDecoderStage(torch.nn.Module):
         self.output = Linear(self.dense.out_features(in_features),
                              in_features)
 
-    def forward(self, encoded, Y):
+    def forward(self, encoded, Y, mask: Optional[torch.Tensor] = None):
         input = Y
         N, L, _ = Y.shape
-        Y = self.self_attention(Y, Y, masked=True)
-        Y = self.masked_attention(Y, encoded, masked=False)
+        Y = self.self_attention(Y, Y, mask=None)
+        Y = self.masked_attention(Y, encoded, mask=mask)
         Y = self.dense(Y.view(N*L, -1))
         Y = self.output(Y) + input.view(N*L, -1)
         return Y.view(N, L, -1)
@@ -146,10 +146,10 @@ class TransformerDecoder(torch.nn.Module):
                                                        hidden_layers, **kwargs)
                                )
 
-    def forward(self, encoded, Y):
+    def forward(self, encoded, Y, mask: Optional[torch.Tensor] = None):
         Y = positional_encoding(Y)
         for stage in self.stages:
-            Y = stage(encoded, Y)
+            Y = stage(encoded, Y, mask=mask)
         return Y
 
     @property
@@ -200,7 +200,7 @@ class Transformer(torch.nn.Module):
         """
         return self.encoder(X)
 
-    def decode(self, encoded, Y):
+    def decode(self, encoded, Y, mask: Optional[torch.Tensor] = None):
         """
         performs the decoding part of the network:
         for each of the already predicted tokens, predict the next token.
@@ -226,7 +226,7 @@ class Transformer(torch.nn.Module):
         torch.Tensor :
             tensor of floats of shape (N, Ly, D)
         """
-        Y = self.decoder(encoded, Y)
+        Y = self.decoder(encoded, Y, mask=mask)
         return Y
 
     @property

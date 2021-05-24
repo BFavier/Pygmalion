@@ -3,6 +3,7 @@ from random import random
 from itertools import count, chain
 from collections import Counter, deque
 from typing import List, Tuple, Iterable, Iterator, Dict, Optional
+from ._tokenizer import DynamicTokenizer
 
 
 class Token:
@@ -162,7 +163,7 @@ class Sentence:
                 self._register_pair(new_pair)
 
 
-class BytePairEncoder:
+class BytePairEncoder(DynamicTokenizer):
     """
     byte level Byte Pair Encoding (BPE) is a method of subword tokenization
 

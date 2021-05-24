@@ -1,11 +1,6 @@
 import pygmalion as ml
-import pandas as pd
 import pathlib
 import IPython
-import matplotlib.pyplot as plt
-import numpy as np
-import itertools
-import spacy
 
 data_path = pathlib.Path(__file__).parent / "data"
 
@@ -29,9 +24,9 @@ fr = ["bonjour le monde",
       "je suis superman",
       "on se voit demain"]
 
-tokenizer_in = ml.unsupervised.BytePairEncoder()
+tokenizer_in = ml.unsupervised.tokenizers.BytePairEncoder()
 tokenizer_in.train(en)
-tokenizer_out = ml.unsupervised.WhitespaceTokenizer()
+tokenizer_out = ml.unsupervised.tokenizers.WhitespaceTokenizer()
 tokenizer_out.train(fr)
 
 n_stages = 4
@@ -42,9 +37,9 @@ hidden_layers = [{"features": 128}]
 model = ml.neural_networks.Traductor(tokenizer_in, tokenizer_out,
                                      n_stages, projection_dim, n_heads,
                                      hidden_layers,
-                                     GPU=0, optimization_method="Adam")
+                                     GPU=None, optimization_method="Adam")
 
-model.train((en, fr), n_epochs=500, learning_rate=1.0E-3, batch_size=10)
+model.train((en, fr), n_epochs=101, learning_rate=1.0E-3, batch_size=10)
 print(model(en[0], max_words=10))
 
 IPython.embed()

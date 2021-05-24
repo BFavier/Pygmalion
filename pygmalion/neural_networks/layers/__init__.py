@@ -15,3 +15,4 @@ from ._u_net import UNet1d, UNet2d
 from ._unpooling import Unpooling1d, Unpooling2d
 from ._upsampling import Upsampling1d, Upsampling2d
 from ._weighting import Linear, Conv1d, Conv2d
+from ._functional import mask_chronological
