@@ -18,8 +18,8 @@ y = df[target]
 data = (x, y)
 
 # Create and train the model
-hidden_layers = [{"channels": 8},
-                 {"channels": 8}]
+hidden_layers = [{"features": 8},
+                 {"features": 8}]
 model = ml.neural_networks.DenseRegressor(inputs, hidden_layers,
                                           activation="tanh")
 data, test_data = ml.split(data, frac=0.2)
