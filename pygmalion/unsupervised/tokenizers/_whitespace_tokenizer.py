@@ -66,6 +66,18 @@ class WhitespaceTokenizer(Tokenizer):
         return re.findall(r"[\w]+|[^\s\w]", sentence)
 
     @property
+    def vocabulary(self):
+        return self._vocabulary
+
+    @vocabulary.setter
+    def vocabulary(self, other):
+        self._vocabulary = other
+
+    @property
+    def n_tokens(self):
+        return len(self.vocabulary)
+
+    @property
     def dump(self):
         return {"type": type(self).__name__,
                 "vocabulary": self.vocabulary}

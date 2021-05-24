@@ -279,6 +279,10 @@ class BytePairEncoder(DynamicTokenizer):
         byte = [bytes([i]) for i in range(256)]
         return byte + [self._bytes(t, self.code) for t in self.code.keys()]
 
+    @property
+    def n_tokens(self):
+        return len(self.code) + 256
+
     def _split_words(self, sentences: Iterable[str]) -> Iterable[str]:
         """Split each sentence into a list of 'words'"""
         return chain(*(re.findall(r"[\w]+|[^\w]", s) for s in sentences))

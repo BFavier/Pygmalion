@@ -312,6 +312,12 @@ def sentences_to_tensor(sentences: Iterable[str],
     ----------
     sentences : iterable of str
         a list of sentences
+    tokenizer : Tokenizer
+        the tokenizer to segment sentences
+    device : torch.device
+        the device to host the tensor on
+    **kwargs : dict
+        dict of kwargs passed to the tokenizer when encoding
 
 
     Returns
@@ -323,10 +329,11 @@ def sentences_to_tensor(sentences: Iterable[str],
         and each scalar is the index of a word in the lexicon
     """
     sentences = [tokenizer.encode(s, **kwargs) for s in sentences]
+    n_tokens = tokenizer.n_tokens
     L_max = max(len(s) for s in sentences)
-    data = [[ord("\r")] + s + [ord("\n")]*(L_max - len(s) + 1)
+    data = [[-1] + s + [n_tokens]*(L_max - len(s) + 1)
             for s in sentences]
-    return longs_to_tensor(data, device)
+    return longs_to_tensor(data, device) + 1
 
 
 def tensor_to_sentences(tensor: torch.Tensor, tokenizer: object) -> List[str]:
@@ -339,7 +346,7 @@ def tensor_to_sentences(tensor: torch.Tensor, tokenizer: object) -> List[str]:
         a tensor of shape (N, L) where:
         * N is the number of sentences
         * L is the length of longest sentence
-    tokenizer : object
+    tokenizer : Tokenizer
         a tokenizer with a 'decode' method
 
     Returns
@@ -348,5 +355,5 @@ def tensor_to_sentences(tensor: torch.Tensor, tokenizer: object) -> List[str]:
         a list of sentences,
         each sentence is a set of words separated by whitespaces
     """
-    sentences = tensor_to_longs(tensor)
+    sentences = tensor_to_longs(tensor)[:, 1:-1] - 1
     return [tokenizer.decode(s) for s in sentences]

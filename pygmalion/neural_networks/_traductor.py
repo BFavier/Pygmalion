@@ -89,15 +89,15 @@ class TraductorModule(torch.nn.Module):
         self.embedding_dim = projection_dim*n_heads
         self.tokenizer_in = tokenizer_in
         self.tokenizer_out = tokenizer_out
-        self.embedding_in = Embedding(len(self.tokenizer_in.vocabulary),
+        self.embedding_in = Embedding(self.tokenizer_in.n_tokens+2,
                                       self.embedding_dim)
-        self.embedding_out = Embedding(len(self.tokenizer_out.vocabulary),
+        self.embedding_out = Embedding(self.tokenizer_out.n_tokens+2,
                                        self.embedding_dim)
         self.transformer = Transformer(n_stages, projection_dim, n_heads,
                                        hidden_layers, activation=activation,
                                        stacked=stacked, dropout=dropout)
         self.output = Linear(self.embedding_dim,
-                             len(self.tokenizer_out.vocabulary))
+                             self.tokenizer_out.n_tokens+2)
 
     def forward(self, X):
         """
@@ -159,14 +159,16 @@ class TraductorModule(torch.nn.Module):
 
     def predict(self, X, max_words=100):
         encoded = self(X)
+        sentence_start, sentence_end = 0, self.tokenizer_out.n_tokens+1
         # Y is initialized as a single 'start of sentence' character
-        Y = torch.full([1, 1], ord("\r"), dtype=torch.long, device=X.device)
+        Y = torch.full([1, 1], sentence_start,
+                       dtype=torch.long, device=X.device)
         for _ in range(max_words):
             res = self.decode(encoded, Y)
             res = torch.argmax(res, dim=-1)
             index = res[:, -1:]
             Y = torch.cat([Y, index], dim=-1)
-            if index.item() == ord("\n"):
+            if index.item() == sentence_end:
                 break
         return Y
 
@@ -227,60 +229,3 @@ class Traductor(NeuralNetworkClassifier):
             return DynamicTextDataset(sentences, tokenizer, device)
         else:
             return sentences_to_tensor(sentences, tokenizer, device)
-
-
-# def sentences_to_tensor(sentences: Iterable[str],
-#                         lexicon: List[str],
-#                         device: torch.device) -> torch.Tensor:
-#     """
-#     converts a list of sentences to tensor
-
-#     Parameters
-#     ----------
-#     sentences : iterable of str
-#         a list of sentences: words separated by a single white spaces
-#     lexicon : list of str
-#         a list of unique possible words
-
-#     Returns
-#     -------
-#     torch.Tensor :
-#         a tensor of shape (N, L) of longs, where:
-#         * N is the number of sentences
-#         * L is the length of longest sentence
-#         and each scalar is the index of a word in the lexicon
-#     """
-#     assert isinstance(lexicon, list)
-#     sentences = [s.split() for s in sentences]
-#     L_max = max([len(s) for s in sentences])
-#     sentences = [["\r"] + s + ["\n"]*(L_max - len(s) + 1)
-#                  for s in sentences]
-#     indexes = {c: i for i, c in enumerate(lexicon)}
-#     data = [[indexes[w] for w in s] for s in sentences]
-#     return longs_to_tensor(data, device)
-
-
-# def tensor_to_sentences(tensor: torch.Tensor,
-#                         lexicon: List[str]) -> List[str]:
-#     """
-#     converts a tensor to a list of sentences
-
-#     Parameters
-#     ----------
-#     tensor : torch.Tensor
-#         a tensor of shape (N, L) where:
-#         * N is the number of sentences
-#         * L is the length of longest sentence
-#     lexicon : list of str
-#         a list of unique possible words
-
-#     Returns
-#     -------
-#     list of str :
-#         a list of sentences,
-#         each sentence is a set of words separated by whitespaces
-#     """
-#     indexes = tensor_to_longs(tensor.view(-1))
-#     words = np.array(lexicon)[indexes]
-#     sentence = " ".join(words[1:-1])
-#     return sentence
