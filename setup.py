@@ -22,6 +22,7 @@ setuptools.setup(
         "pandas>=1.0",
         "numpy>=1.18",
         "torch>=1.6",
+        "torchvision",
         "requests>=2.25",
         "matplotlib>=3.2",
         "h5py>=3.1"
