@@ -570,7 +570,7 @@ class NeuralNetwork(Model):
                 n = 1
                 bounds = [0, batch_size]
             else:
-                N = self._len(X)
+                N = len(X)
                 batch_size = min(max(1, batch_size), N)
                 n = math.ceil(N/batch_size)
                 bounds = [int(i*N/n) for i in range(n+1)]
@@ -601,7 +601,7 @@ class NeuralNetwork(Model):
             The tuple of (X, Y, weights) shuffled
         """
         X, Y, weights = batch_data
-        p = torch.randperm(self._len(X))
+        p = torch.randperm(len(X))
         X = self._index(X, at=p)
         Y = self._index(Y, at=p)
         weights = self._index(weights, at=p)
@@ -633,32 +633,13 @@ class NeuralNetwork(Model):
         object :
             the indexed/sliced variable
         """
-        if isinstance(variable, tuple):
-            return tuple([self._index(v, at=at, start=start, end=end,
-                                      step=step)
-                          for v in variable])
-        elif variable is None:
+        if variable is None:
             return None
-        elif isinstance(variable, torch.Tensor):
+        else:
             if at is not None:
                 return variable[at]
             else:
                 return variable[slice(start, end, step)]
-        else:
-            raise ValueError(f"Unexpect variable type '{type(variable)}'")
-
-    def _len(self, variable: Union[torch.Tensor, tuple]) -> int:
-        """
-        Returns the number of observations in the variable (X, Y, or weight).
-        Usefull to handle various types of 'variable' that need to be indexed
-        differently.
-        """
-        if isinstance(variable, torch.Tensor):
-            return len(variable)
-        elif isinstance(variable, tuple):
-            return len(variable[0])
-        else:
-            raise ValueError(f"Unexpect variable type '{type(variable)}'")
 
     def _eval_loss(self, loss_module: torch.nn.Module,
                    x: torch.Tensor, y: torch.Tensor,
@@ -716,21 +697,17 @@ class NeuralNetwork(Model):
         torch.cuda.empty_cache()
         return loss
 
-    def _to(self, variable: Union[torch.Tensor, None, tuple],
+    def _to(self, variable: Union[torch.Tensor, None],
             device: torch.device) -> object:
         """
         Returns variable (X, Y, or weight) stored on the given device.
         Usefull to handle various types of 'variable' that need to be moved
         differently.
         """
-        if isinstance(variable, torch.Tensor):
-            return variable.to(device)
-        elif isinstance(variable, tuple):
-            return tuple([self._to(v, device) for v in variable])
-        elif variable is None:
+        if variable is None:
             return None
         else:
-            raise ValueError(f"Unexpect variable type '{type(variable)}'")
+            return variable.to(device)
 
     def _regularization(self, loss: torch.Tensor,
                         L1: Union[float, None],
