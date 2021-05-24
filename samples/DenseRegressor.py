@@ -18,13 +18,14 @@ y = df[target]
 data = (x, y)
 
 # Create and train the model
-hidden_layers = [{"features": 8},
-                 {"features": 8}]
+hidden_layers = [{"features": 16},
+                 {"features": 16},
+                 {"features": 16}]
 model = ml.neural_networks.DenseRegressor(inputs, hidden_layers,
-                                          activation="tanh")
+                                          activation="tanh", dropout=0.1)
 data, test_data = ml.split(data, frac=0.2)
 train_data, val_data = ml.split(data, frac=0.2)
-model.train(train_data, val_data, patience=500)
+model.train(train_data, val_data, patience=500, L2=1.0E-1)
 
 # Plot results
 model.plot_residuals()
