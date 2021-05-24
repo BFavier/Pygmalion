@@ -120,6 +120,7 @@ class NeuralNetwork(Model):
         # Converts training/validation data to tensors
         device = self.device if batch_size is None else torch.device("cpu")
         training_data = self._data_to_tensor(*training_data, device=device)
+        shuffle = (isinstance(self.GPU, list) or batch_size is not None)
         if validation_data is not None:
             validation_data = self._data_to_tensor(*validation_data,
                                                    device=device)
@@ -146,7 +147,7 @@ class NeuralNetwork(Model):
         self._training_loop(loss_module,
                             training_data, validation_data, n_epochs,
                             patience, verbose, batch_size, minibatching,
-                            L1, L2, best_epoch, best_loss, best_state)
+                            L1, L2, best_epoch, best_loss, best_state, shuffle)
 
     def plot_residuals(self, ax=None, log: bool = True):
         """
@@ -413,7 +414,8 @@ class NeuralNetwork(Model):
                        L2: Union[float, None],
                        best_epoch: int,
                        best_loss: float,
-                       best_state: tuple):
+                       best_state: tuple,
+                       shuffle: bool):
         """
         Trains the model for a fixed number of epoch,
         or until validation loss has'nt decreased for 'patience' epochs,
@@ -463,6 +465,8 @@ class NeuralNetwork(Model):
             the value of the previous best validation loss
         best_state : tuple
             the snapshot of the model as returned by 'self._get_state'
+        shuffle : bool
+            if True, the data is shuffled before each epoch
         """
         try:
             for epoch in range(best_epoch+1, best_epoch+n_epochs+1):
@@ -471,13 +475,14 @@ class NeuralNetwork(Model):
                 training_loss = self._batch_loss(loss_module,
                                                  training_data, batch_size,
                                                  minibatching, L1, L2,
-                                                 train=True)
+                                                 train=True, shuffle=shuffle)
                 if validation_data is not None:
                     validation_loss = self._batch_loss(loss_module,
                                                        validation_data,
                                                        batch_size,
                                                        minibatching, L1, L2,
-                                                       train=False)
+                                                       train=False,
+                                                       shuffle=shuffle)
                     if validation_loss < best_loss:
                         best_epoch = epoch
                         best_loss = validation_loss
@@ -519,7 +524,8 @@ class NeuralNetwork(Model):
                     minibatching: bool,
                     L1: Union[float, None],
                     L2: Union[float, None],
-                    train: bool) -> float:
+                    train: bool,
+                    shuffle: bool) -> float:
         """
         Compute the loss on the given data, processing it by batchs of maximum
         size 'batch_size'.
@@ -545,17 +551,21 @@ class NeuralNetwork(Model):
             The L2 regularization added to the loss function
         train : bool
             If True, the gradient is back propagated
+        shuffle : bool
+            If True, the data is shuffled before the bacth
 
         Returns
         -------
         float :
             The loss function averaged over the batchs
         """
+        if shuffle:
+            data = self._shuffle(data)
         if batch_size is None:
             loss = self._eval_loss(loss_module,
                                    *data, L1, L2, train)
         else:
-            X, Y, weights = self._shuffle(data)
+            X, Y, weights = data
             if minibatching:
                 n = 1
                 bounds = [0, batch_size]
