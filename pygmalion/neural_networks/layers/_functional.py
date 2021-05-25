@@ -32,6 +32,6 @@ def mask_chronological(Lq: int, Lk: int, device: torch.device) -> torch.Tensor:
     """
     A mask for transformers training.
     """
-    mask = torch.ones(Lq, Lk, dtype=bool)
+    mask = torch.ones(Lq, Lk, dtype=bool, device=device)
     mask = torch.triu(mask, diagonal=1)
     return mask
