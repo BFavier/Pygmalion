@@ -331,9 +331,9 @@ class BytePairEncoder(DynamicTokenizer):
                                                n_tokens, min_frequency)
                           for token in code.keys()) + 256
             if verbose:
-                print(f"\r\033[K\rMerge iterations {i}: "
+                print(f"\r\033[K\rMerge iteration {i}: "
                       f"{n_valid} tokens, "
-                      f"{new_token_frequency:.3g} token frequency",
+                      f"new token frequency={new_token_frequency:.3g}",
                       end="", flush=True)
             if n_valid >= max_tokens:
                 if verbose:
