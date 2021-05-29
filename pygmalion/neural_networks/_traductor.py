@@ -1,5 +1,5 @@
 import torch
-from typing import Union, List, Iterable
+from typing import Union, List, Dict
 from .layers import Transformer, Embedding
 from .layers import Linear
 from .layers import mask_chronological
@@ -7,45 +7,8 @@ from ._conversions import sentences_to_tensor, tensor_to_sentences
 from ._conversions import floats_to_tensor
 from ._neural_network_classifier import NeuralNetworkClassifier
 from ._loss_functions import cross_entropy
-from ..unsupervised.tokenizers import Tokenizer, DynamicTokenizer
-
-
-class DynamicTextDataset:
-    """
-    Class emulating a torch.Tensor dataset
-    for support to dynamic subword regularization
-    """
-
-    def __init__(self, text: Iterable[str], tokenizer: DynamicTokenizer,
-                 device: torch.device = torch.device("cpu")):
-        self.device = device
-        self.tokenizer = tokenizer
-        self.text = text
-
-    def __getitem__(self, index):
-        """allow indexing of the dataset"""
-        if isinstance(index, int):
-            return DynamicTextDataset([self.text[index]],
-                                      self.tokenizer, device=self.device)
-        elif isinstance(index, slice):
-            return self.__getitem__(range(index.start or 0, index.stop,
-                                          index.step or 1))
-        else:
-            return DynamicTextDataset([self.text[i] for i in index],
-                                      self.tokenizer, device=self.device)
-
-    def __len__(self):
-        """returns the length of the dataset"""
-        return len(self.text)
-
-    def to(self, device: torch.device):
-        """return the DynamicTextDataset as stored on another device"""
-        return DynamicTextDataset(self.text, self.tokenizer, device=device)
-
-    def as_tensor(self, use_dropout: bool) -> torch.Tensor:
-        """Returns the text dataset as a tensor"""
-        return sentences_to_tensor(self.text, self.tokenizer, self.device,
-                                   use_dropout=use_dropout)
+from pygmalion.unsupervised.tokenizers import DynamicTokenizer, Tokenizer
+from pygmalion.unsupervised.tokenizers import SpecialToken, DynamicTextDataset
 
 
 class TraductorModule(torch.nn.Module):
@@ -63,41 +26,41 @@ class TraductorModule(torch.nn.Module):
         return obj
 
     def __init__(self,
-                 tokenizer_in,
-                 tokenizer_out,
+                 tokenizer_in: Tokenizer,
+                 tokenizer_out: Tokenizer,
                  n_stages: int,
                  projection_dim: int,
                  n_heads: int,
                  hidden_layers: List[dict],
+                 max_length: int = 256,
                  activation: str = "relu",
-                 stacked: bool = False,
                  dropout: Union[float, None] = None):
         """
         Parameters
         ----------
-        in_channels : int
-            the number of channels in the input images
         ...
+        max_length : int
+            the maximum length of token sequence
+            sequences bigger are dropped
         activation : str
             the default value for the 'activation' key of the kwargs
-        stacked : bool
-            the default value for the 'stacked' key of the kwargs
         dropout : float or None
             the default value for the 'dropout' key of the kwargs
         """
         super().__init__()
+        self.max_length = max_length
         self.embedding_dim = projection_dim*n_heads
         self.tokenizer_in = tokenizer_in
         self.tokenizer_out = tokenizer_out
-        self.embedding_in = Embedding(self.tokenizer_in.n_tokens+2,
+        self.embedding_in = Embedding(self.tokenizer_in.n_tokens+3,
                                       self.embedding_dim)
-        self.embedding_out = Embedding(self.tokenizer_out.n_tokens+2,
+        self.embedding_out = Embedding(self.tokenizer_out.n_tokens+3,
                                        self.embedding_dim)
         self.transformer = Transformer(n_stages, projection_dim, n_heads,
                                        hidden_layers, activation=activation,
-                                       stacked=stacked, dropout=dropout)
+                                       dropout=dropout)
         self.output = Linear(self.embedding_dim,
-                             self.tokenizer_out.n_tokens+2)
+                             self.tokenizer_out.n_tokens+3)
 
     def forward(self, X):
         """
@@ -115,8 +78,7 @@ class TraductorModule(torch.nn.Module):
         torch.Tensor :
             tensor of floats of shape (N, L, D) with D the embedding dimension
         """
-        if issubclass(type(X), DynamicTextDataset):
-            X = X.as_tensor(self.training)
+        X = self._as_tensor(X)
         X = self.embedding_in(X)
         X = self.transformer.encode(X)
         return X
@@ -143,23 +105,24 @@ class TraductorModule(torch.nn.Module):
         torch.Tensor :
             tensor of floats of shape (N, Ly, D)
         """
-        if issubclass(type(Y), DynamicTextDataset):
-            Y = Y.as_tensor(self.training)
+        Y = self._as_tensor(Y)
         _, Lq = Y.shape
-        _, Lk, _ = encoded.shape
         Y = self.embedding_out(Y)
-        mask = mask_chronological(Lq, Lk, Y.device)
+        mask = mask_chronological(Lq, Lq, Y.device)
         Y = self.transformer.decode(encoded, Y, mask=mask)
         return self.output(Y)
 
     def loss(self, encoded, y_target, weights=None):
+        y_target = self._as_tensor(y_target)
         y_pred = self.decode(encoded, y_target[:, :-1])
         return cross_entropy(y_pred.transpose(1, 2), y_target[:, 1:],
                              weights, self.class_weights)
 
     def predict(self, X, max_words=100):
+        n_tokens = self.tokenizer_out.n_tokens
+        sentence_start = n_tokens
+        sentence_end = n_tokens+1
         encoded = self(X)
-        sentence_start, sentence_end = 0, self.tokenizer_out.n_tokens+1
         # Y is initialized as a single 'start of sentence' character
         Y = torch.full([1, 1], sentence_start,
                        dtype=torch.long, device=X.device)
@@ -168,9 +131,18 @@ class TraductorModule(torch.nn.Module):
             res = torch.argmax(res, dim=-1)
             index = res[:, -1:]
             Y = torch.cat([Y, index], dim=-1)
-            if index.item() == sentence_end:
+            new_token = index.item()
+            if new_token == sentence_end or new_token > n_tokens:
                 break
+        else:
+            Y = torch.cat([Y, index], dim=-1)
         return Y
+
+    def _as_tensor(self, X: Union[torch.Tensor, DynamicTextDataset]):
+        """Converts to tensor if X is a DynamicTextDataset"""
+        if issubclass(type(X), DynamicTextDataset):
+            X = X.as_tensor(self.training, self.max_length)
+        return X
 
     def _positional_embedding(self, X):
         shape = X.shape
@@ -203,8 +175,8 @@ class Traductor(NeuralNetworkClassifier):
     def __call__(self, sentence: str, max_words: int = 100):
         self.module.eval()
         x, _, _ = self._data_to_tensor([sentence], None, device=self.device)
-        y = self.module.predict(x)
-        return self._tensor_to_y(y)
+        y = self.module.predict(x, max_words=max_words)
+        return self._tensor_to_y(y)[0]
 
     def _data_to_tensor(self, X: List[str],
                         Y: Union[None, List[str]],
@@ -229,3 +201,23 @@ class Traductor(NeuralNetworkClassifier):
             return DynamicTextDataset(sentences, tokenizer, device)
         else:
             return sentences_to_tensor(sentences, tokenizer, device)
+
+    @property
+    def classes(self):
+        start = SpecialToken("START")
+        end = SpecialToken("END")
+        pad = SpecialToken("PAD")
+        return list(self.module.tokenizer_out.vocabulary) + [start, end, pad]
+
+    @property
+    def class_weights(self):
+        return super().class_weights
+
+    @class_weights.setter
+    def class_weights(self, other: Union[Dict[object, float], None]):
+        pad = SpecialToken("PAD")
+        if other is not None:
+            other[pad] = 0.
+        else:
+            other = {pad: 0.}
+        NeuralNetworkClassifier.class_weights.fset(self, other)
