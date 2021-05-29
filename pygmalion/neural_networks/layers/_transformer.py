@@ -2,6 +2,8 @@ import torch
 from typing import List, Optional
 from ._dense import Dense0d
 from ._weighting import Linear
+from ._batch_norm import BatchNorm0d
+from ._embedding import Embedding
 from ._multi_head_attention import MultiHeadAttention as MHA
 from ._functional import positional_encoding
 
@@ -26,13 +28,15 @@ class TransformerEncoderStage(torch.nn.Module):
         self.dense = Dense0d(in_features, hidden_layers, **kwargs)
         self.output = Linear(self.dense.out_features(in_features),
                              in_features)
+        self.norm = BatchNorm0d(in_features)
 
-    def forward(self, X):
+    def forward(self, X, mask=None):
         input = X
         N, L, _ = X.shape
-        X = self.self_attention(X, X)
+        X = self.self_attention(X, X, mask=mask)
         X = self.dense(X.view(N*L, -1))
         X = self.output(X) + input.view(N*L, -1)
+        X = self.norm(X)
         return X.view(N, L, -1)
 
     @property
@@ -50,8 +54,8 @@ class TransformerDecoderStage(torch.nn.Module):
         assert dump["type"] == cls.__name__
         obj = cls.__new__(cls)
         torch.nn.Module.__init__(obj)
-        obj.self_attention = MHA.from_dump(dump["self attention"])
-        obj.masked_attention = MHA.from_dump(dump["attention"])
+        obj.masked_attention = MHA.from_dump(dump["self attention"])
+        obj.attention = MHA.from_dump(dump["attention"])
         obj.dense = Dense0d.from_dump(dump["dense"])
         obj.output = Linear.from_dump(dump["output"])
         return obj
@@ -59,27 +63,29 @@ class TransformerDecoderStage(torch.nn.Module):
     def __init__(self, projection_dim: int, n_heads: int,
                  hidden_layers: List[dict], **kwargs):
         super().__init__()
-        self.self_attention = MHA(projection_dim, n_heads)
-        in_features = projection_dim * n_heads
         self.masked_attention = MHA(projection_dim, n_heads)
+        in_features = projection_dim * n_heads
+        self.attention = MHA(projection_dim, n_heads)
         self.dense = Dense0d(in_features, hidden_layers, **kwargs)
         self.output = Linear(self.dense.out_features(in_features),
                              in_features)
+        self.norm = BatchNorm0d(in_features)
 
     def forward(self, encoded, Y, mask: Optional[torch.Tensor] = None):
         input = Y
         N, L, _ = Y.shape
-        Y = self.self_attention(Y, Y, mask=None)
-        Y = self.masked_attention(Y, encoded, mask=mask)
+        Y = self.masked_attention(Y, Y, mask=mask)
+        Y = self.attention(Y, encoded, mask=None)
         Y = self.dense(Y.view(N*L, -1))
         Y = self.output(Y) + input.view(N*L, -1)
+        Y = self.norm(Y)
         return Y.view(N, L, -1)
 
     @property
     def dump(self) -> dict:
         return {"type": type(self).__name__,
-                "self attention": self.self_attention.dump,
-                "masked attention": self.masked_attention.dump,
+                "self attention": self.masked_attention.dump,
+                "masked attention": self.attention.dump,
                 "dense": self.dense.dump,
                 "output": self.output.dump}
 
@@ -113,10 +119,10 @@ class TransformerEncoder(torch.nn.Module):
                                                        hidden_layers, **kwargs)
                                )
 
-    def forward(self, X):
+    def forward(self, X, mask=None):
         X = positional_encoding(X)
         for stage in self.stages:
-            X = stage(X)
+            X = stage(X, mask=mask)
         return X
 
     @property
