@@ -22,10 +22,10 @@ hidden_layers = [{"features": 16},
                  {"features": 16},
                  {"features": 16}]
 model = ml.neural_networks.DenseRegressor(inputs, hidden_layers,
-                                          activation="tanh", dropout=0.1)
+                                          activation="elu", dropout=0.1)
 data, test_data = ml.split(data, frac=0.2)
 train_data, val_data = ml.split(data, frac=0.2)
-model.train(train_data, val_data, patience=500, L2=1.0E-1)
+model.train(train_data, val_data, patience=500, L2=1.0E-2)
 
 # Plot results
 model.plot_residuals()
