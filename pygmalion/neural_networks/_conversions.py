@@ -2,7 +2,7 @@ import torch
 import torchvision.ops as ops
 import pandas as pd
 import numpy as np
-from typing import List, Iterable, Union, Tuple
+from typing import List, Iterable, Optional, Union, Tuple
 
 
 def floats_to_tensor(arr: Iterable, device: torch.device) -> torch.Tensor:
@@ -304,6 +304,7 @@ def tensor_to_bounding_boxes(tensors: Tuple[torch.Tensor],
 def sentences_to_tensor(sentences: Iterable[str],
                         tokenizer: object,
                         device: torch.device,
+                        max_length: Optional[int] = None,
                         **kwargs) -> torch.Tensor:
     """
     converts a list of sentences to tensor
@@ -316,6 +317,8 @@ def sentences_to_tensor(sentences: Iterable[str],
         the tokenizer to segment sentences
     device : torch.device
         the device to host the tensor on
+    max_length : int or None
+        all sentences which are longer than max_length when encoded are droped
     **kwargs : dict
         dict of kwargs passed to the tokenizer when encoding
 
@@ -331,9 +334,14 @@ def sentences_to_tensor(sentences: Iterable[str],
     sentences = [tokenizer.encode(s, **kwargs) for s in sentences]
     n_tokens = tokenizer.n_tokens
     L_max = max(len(s) for s in sentences)
-    data = [[-1] + s + [n_tokens]*(L_max - len(s) + 1)
-            for s in sentences]
-    return longs_to_tensor(data, device) + 1
+    if max_length is not None:
+        L_max = min(L_max, max_length-2)
+    else:
+        max_length = L_max+2
+    start, end, pad = n_tokens, n_tokens+1, n_tokens+2
+    data = [[start] + s + [end] + [pad]*(L_max - len(s))
+            for s in sentences if len(s) < max_length-2]
+    return longs_to_tensor(data, device)
 
 
 def tensor_to_sentences(tensor: torch.Tensor, tokenizer: object) -> List[str]:
@@ -355,5 +363,5 @@ def tensor_to_sentences(tensor: torch.Tensor, tokenizer: object) -> List[str]:
         a list of sentences,
         each sentence is a set of words separated by whitespaces
     """
-    sentences = tensor_to_longs(tensor)[:, 1:-1] - 1
+    sentences = tensor_to_longs(tensor)[:, 1:-1]
     return [tokenizer.decode(s) for s in sentences]
