@@ -8,12 +8,10 @@ from typing import Optional
 
 class MultiHeadAttention(torch.nn.Module):
 
-    def __init__(self, projection_dim: int, n_heads: int,
-                 dropout: Optional[float] = None):
+    def __init__(self, projection_dim: int, n_heads: int):
         super().__init__()
         self.n_heads = n_heads
         self.projection_dim = projection_dim
-        self.dropout = dropout
         dim = projection_dim*n_heads
         self.query = Linear(dim, dim, bias=False)
         self.key = Linear(dim, dim, bias=False)
@@ -21,7 +19,7 @@ class MultiHeadAttention(torch.nn.Module):
         self.norm = BatchNorm0d(dim)
 
     @classmethod
-    def from_dump(cls, dump: dict) -> 'MultiheadAttention':
+    def from_dump(cls, dump: dict) -> 'MultiHeadAttention':
         assert dump["type"] == cls.__name__
         obj = cls.__new__(cls)
         torch.nn.Module.__init__(obj)
@@ -61,14 +59,11 @@ class MultiHeadAttention(torch.nn.Module):
         torch.Tensor :
             tensor of shape (N, Lq, D)
         """
-        attention = self._multihead_attention(query, key, mask)
-        if self.dropout is not None:
-            attention = F.dropout(attention, p=self.dropout,
-                                  training=self.training)
+        attention = self._multihead_attention_stock(query, key, mask)
         N, Lq, D = attention.shape
         attention = attention + query
-        attention = self.norm(attention.view(-1, self.out_features))
-        return attention.view(N, Lq, self.out_features)
+        attention = self.norm(attention.reshape(-1, self.out_features))
+        return attention.reshape(N, Lq, self.out_features)
 
     def _multihead_attention(self, query: torch.Tensor, key: torch.Tensor,
                              mask: Optional[torch.Tensor]):
@@ -78,9 +73,9 @@ class MultiHeadAttention(torch.nn.Module):
         """
         N, Lq, _ = query.shape
         N, Lk, _ = key.shape
-        q = self.query(query).view(N, Lq, self.n_heads, self.projection_dim)
-        k = self.key(key).view(N, Lk, self.n_heads, self.projection_dim)
-        v = self.value(key).view(N, Lk, self.n_heads, self.projection_dim)
+        q = self.query(query).reshape(N, Lq, self.n_heads, self.projection_dim)
+        k = self.key(key).reshape(N, Lk, self.n_heads, self.projection_dim)
+        v = self.value(key).reshape(N, Lk, self.n_heads, self.projection_dim)
         q, k, v = q.transpose(1, 2), k.transpose(1, 2), v.transpose(1, 2)
         attention, _ = self._scaled_dot_product_attention(q, k, v, mask)
         attention = attention.transpose(2, 1).reshape(N, Lq, -1)
