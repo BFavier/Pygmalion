@@ -86,9 +86,9 @@ def cross_entropy(y_pred: torch.Tensor, y_target: torch.Tensor,
     if weights is None:
         return F.cross_entropy(y_pred, y_target, weight=class_weights)
     else:
-        return torch.mean(F.nll_loss(F.log_softmax(y_pred, dim=1), y_target,
-                                     weight=class_weights, reduction="none"
-                                     ) * weights)
+        return (F.nll_loss(F.log_softmax(y_pred, dim=1), y_target,
+                           weight=class_weights, reduction="none")
+                * weights) / (weights.mean() + 1.0E-9)
 
 
 def soft_dice_loss(y_pred: torch.Tensor, y_target: torch.Tensor,
