@@ -1,35 +1,51 @@
 import pygmalion as ml
+import matplotlib.pyplot as plt
+import pandas as pd
 import pathlib
 import IPython
 
-data_path = pathlib.Path(__file__).parent / "data"
+path = pathlib.Path(__file__).parent
+data_path = path / "data"
+
+# Download the data
+ml.datasets.sentence_pairs(data_path)
 
 
-def load_text(path):
-    with open(path, "r", encoding="utf-8") as file:
-        lines = file.read().split("\n")
-    return lines
+# def load_text(path):
+#     with open(path, "r", encoding="utf-8") as file:
+#         lines = file.read().split("\n")
+#     return lines
 
 
-# en = load_text(data_path / "europarl" / "europarl-tokenized-en.txt")[:1000]
-# fr = load_text(data_path / "europarl" / "europarl-tokenized-fr.txt")[:1000]
-en = ["hello world",
-      "My name is Jean",
-      "i like trees",
-      "i am superman",
-      "see you tommorow"]
-fr = ["bonjour le monde",
-      "je m'appel Jean",
-      "j'aime les arbres",
-      "je suis superman",
-      "on se voit demain"]
+# en = load_text(data_path / "europarl" / "europarl-tokenized-en.txt")
+# fr = load_text(data_path / "europarl" / "europarl-tokenized-fr.txt")
+df = pd.read_csv(data_path / "sentence_pairs.txt", header=None,
+                 names=["en", "fr"], sep="\t")
 
-tokenizer_in = ml.unsupervised.tokenizers.BytePairEncoder()
-tokenizer_in.train(en)
-tokenizer_out = ml.unsupervised.tokenizers.WhitespaceTokenizer()
-tokenizer_out.train(fr)
+en, fr = df["en"].str.lower(), df["fr"].str.lower()
+# en = ["hello world",
+#       "My name is Jean",
+#       "i like trees",
+#       "i am superman",
+#       "see you tommorow"]
+# fr = ["bonjour le monde",
+#       "je m'appel Jean",
+#       "j'aime les arbres",
+#       "je suis superman",
+#       "on se voit demain"]
 
-n_stages = 4
+import pickle
+with open(path / "tokenizer_in.pk", "rb") as file:
+    tokenizer_in = pickle.load(file)
+with open(path / "tokenizer_out.pk", "rb") as file:
+    tokenizer_out = pickle.load(file)
+# tokenizer_in = ml.unsupervised.tokenizers.BytePairEncoder()
+# c1 = tokenizer_in.train(en, min_frequency=1.0E-5)
+# tokenizer_out = ml.unsupervised.tokenizers.BytePairEncoder()
+# c2 = tokenizer_out.train(fr, min_frequency=1.0E-5)
+
+
+n_stages = 2
 projection_dim = 16
 n_heads = 4
 hidden_layers = [{"features": 128}]
@@ -37,9 +53,16 @@ hidden_layers = [{"features": 128}]
 model = ml.neural_networks.Traductor(tokenizer_in, tokenizer_out,
                                      n_stages, projection_dim, n_heads,
                                      hidden_layers,
-                                     GPU=None, optimization_method="Adam")
+                                     GPU=0, optimization_method="Adam")
 
-model.train((en, fr), n_epochs=101, learning_rate=1.0E-3, batch_size=10)
-print(model(en[0], max_words=10))
+model.train((en[:500], fr[:500]), n_epochs=1000, learning_rate=1.0E-3)
+
+model.plot_residuals()
+plt.show()
+
+for sentence in en[:3]:
+    print()
+    print(sentence)
+    print(model(sentence, max_words=50))
 
 IPython.embed()
