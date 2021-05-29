@@ -5,3 +5,4 @@ from ._fashion_mnist import fashion_mnist
 from ._iris import iris
 from ._savannah import savannah
 from ._titanic import titanic
+from ._sentence_pairs import sentence_pairs
