@@ -473,16 +473,16 @@ class NeuralNetwork(Model):
                 self.optimizer.step()
                 self.optimizer.zero_grad()
                 training_loss = self._batch_loss(loss_module,
-                                                 training_data, batch_size,
+                                                 self._shuffle(training_data) if shuffle else training_data,
+                                                 batch_size,
                                                  minibatching, L1, L2,
-                                                 train=True, shuffle=shuffle)
+                                                 train=True)
                 if validation_data is not None:
                     validation_loss = self._batch_loss(loss_module,
-                                                       validation_data,
+                                                       self._shuffle(validation_data) if shuffle else validation_data,
                                                        batch_size,
                                                        minibatching, L1, L2,
-                                                       train=False,
-                                                       shuffle=shuffle)
+                                                       train=False)
                     if validation_loss < best_loss:
                         best_epoch = epoch
                         best_loss = validation_loss
@@ -524,8 +524,7 @@ class NeuralNetwork(Model):
                     minibatching: bool,
                     L1: Union[float, None],
                     L2: Union[float, None],
-                    train: bool,
-                    shuffle: bool) -> float:
+                    train: bool) -> float:
         """
         Compute the loss on the given data, processing it by batchs of maximum
         size 'batch_size'.
@@ -551,16 +550,12 @@ class NeuralNetwork(Model):
             The L2 regularization added to the loss function
         train : bool
             If True, the gradient is back propagated
-        shuffle : bool
-            If True, the data is shuffled before the bacth
 
         Returns
         -------
         float :
             The loss function averaged over the batchs
         """
-        if shuffle:
-            data = self._shuffle(data)
         if batch_size is None:
             loss = self._eval_loss(loss_module,
                                    *data, L1, L2, train)
