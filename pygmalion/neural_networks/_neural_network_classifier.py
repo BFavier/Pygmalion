@@ -1,6 +1,6 @@
 import torch as _torch
 import numpy as _np
-from typing import Iterable
+from typing import Dict, Union
 from ._conversions import tensor_to_index
 from ._neural_network import NeuralNetwork
 
@@ -28,7 +28,8 @@ class NeuralNetworkClassifier(NeuralNetwork):
         if class_weights is None:
             self.class_weights = None
         else:
-            self.class_weights = [class_weights[c] for c in self.classes]
+            self.class_weights = [class_weights.get(c, 0)
+                                  for c in self.classes]
 
     def index(self, X) -> _np.ndarray:
         """
@@ -54,12 +55,14 @@ class NeuralNetworkClassifier(NeuralNetwork):
         if self.module.class_weights is None:
             return None
         else:
-            return self.module.class_weights.tolist()
+            weights = self.module.class_weights.cpu().tolist()
+            classes = self.classes
+            return {c: w for c, w in zip(classes, weights)}
 
     @class_weights.setter
-    def class_weights(self, other: Iterable[float]):
+    def class_weights(self, other: Union[Dict[object, float], None]):
         if other is not None:
-            assert len(other) == len(self.classes)
+            other = [other.get(c, 1.) for c in self.classes]
             other = _torch.tensor(other, dtype=_torch.float,
                                   device=self.device)
         self.module.class_weights = other
