@@ -2,7 +2,7 @@ import re
 from itertools import chain
 from collections import Counter
 from typing import Iterable, List, Dict
-from ._tokenizer import Tokenizer
+from ._tokenizer import Tokenizer, SpecialToken
 
 
 class WhitespaceTokenizer(Tokenizer):
@@ -15,7 +15,7 @@ class WhitespaceTokenizer(Tokenizer):
         set of unique possible words, including '#UNKNOWN#' for unknow words
     """
 
-    _unknown = "#UNKNOWN#"
+    _unknown = SpecialToken("UNKNOWN")
 
     @classmethod
     def from_dump(cls, dump: dict) -> "WhitespaceTokenizer":
@@ -32,7 +32,7 @@ class WhitespaceTokenizer(Tokenizer):
         self.vocabulary = vocabulary
 
     def train(self, corpus: Iterable[str], max_tokens: int = 20000,
-              min_frequency: float = 1.0E-6) -> Dict[str, float]:
+              min_frequency: float = 1.0E-6) -> Dict[str, int]:
         """
         find all unique words from a corpus of whitespace separated sentences
         """
@@ -43,10 +43,12 @@ class WhitespaceTokenizer(Tokenizer):
                         if c/n_words > min_frequency),
                        key=lambda w: words_count[w], reverse=True)
         vocab = vocab[:max_tokens]
-        self.vocabulary = vocab + [self._unknown]
-        frequencies = {w: words_count[w]/n_words for w in vocab}
-        frequencies[self._unknown] = 1 - sum(frequencies.values())
-        return frequencies
+        vocab_count = {k: words_count[k] for k in vocab}
+        self.vocabulary = [self._unknown] + vocab
+        n_unknowns = n_words - sum(vocab_count.values())
+        vocab_count = dict(chain([(self._unknown, n_unknowns)],
+                                 vocab_count.items()))
+        return vocab_count
 
     def encode(self, sentence: str) -> List[int]:
         """encode a sentence"""
