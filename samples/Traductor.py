@@ -45,6 +45,8 @@ with open(path / "tokenizer_out.pk", "rb") as file:
 # c2 = tokenizer_out.train(fr, min_frequency=1.0E-5)
 
 
+# IPython.embed()
+
 n_stages = 2
 projection_dim = 16
 n_heads = 4
@@ -55,10 +57,10 @@ model = ml.neural_networks.Traductor(tokenizer_in, tokenizer_out,
                                      hidden_layers,
                                      GPU=0, optimization_method="Adam")
 
-model.train((en[:500], fr[:500]), n_epochs=1000, learning_rate=1.0E-3)
+# model.train((en[:500], fr[:500]), n_epochs=1000, learning_rate=1.0E-3)
 
-model.plot_residuals()
-plt.show()
+# model.plot_residuals()
+# plt.show()
 
 for sentence in en[:3]:
     print()

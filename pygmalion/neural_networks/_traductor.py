@@ -63,6 +63,9 @@ class TraductorModule(torch.nn.Module):
                              self.tokenizer_out.n_tokens+3)
 
     def forward(self, X):
+        return self.encode(X)
+
+    def encode(self, X):
         """
         performs the encoding part of the network
 
@@ -142,18 +145,6 @@ class TraductorModule(torch.nn.Module):
         """Converts to tensor if X is a DynamicTextDataset"""
         if issubclass(type(X), DynamicTextDataset):
             X = X.as_tensor(self.training, self.max_length)
-        return X
-
-    def _positional_embedding(self, X):
-        shape = X.shape
-        X = X.view(-1, shape[-1])
-        N, D = X.shape
-        pe = torch.zeros(N, D, dtype=torch.float, device=X.device)
-        position = torch.arange(0, D, dtype=torch.float).unsqueeze(0)
-        angle = position / 10000**(2*(position//2)/D)
-        pe[:, 0::2] = torch.cos(angle[:, 0::2])
-        pe[:, 1::2] = torch.sin(angle[:, 1::2])
-        X = (X + pe).view(shape)
         return X
 
     @property
