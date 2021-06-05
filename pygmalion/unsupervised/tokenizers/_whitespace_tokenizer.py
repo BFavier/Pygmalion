@@ -52,16 +52,12 @@ class WhitespaceTokenizer(Tokenizer):
 
     def encode(self, sentence: str) -> List[int]:
         """encode a sentence"""
-        words = {w: i for i, w in enumerate(self.vocabulary)}
-        return [words[self._tokenized(w)] for w in self._split_words(sentence)]
+        return [self._word_indexes.get(w, 0)
+                for w in self._split_words(sentence)]
 
     def decode(self, sentence: List[int]) -> str:
         """decode a sentence"""
         return " ".join([self.vocabulary[i] for i in sentence])
-
-    def _tokenized(self, word: str) -> str:
-        """replace the word by the 'unknown' token if unknown"""
-        return word if word in self.vocabulary else self._unknown
 
     def _split_words(self, sentence: str) -> List[str]:
         """Split each sentence into a list of 'words'"""
@@ -74,6 +70,11 @@ class WhitespaceTokenizer(Tokenizer):
     @vocabulary.setter
     def vocabulary(self, other):
         self._vocabulary = other
+        self._word_indexes = {w: i for i, w in enumerate(self.vocabulary)}
+
+    @property
+    def word_indexes(self):
+        return self._word_indexes
 
     @property
     def n_tokens(self):
