@@ -6,3 +6,4 @@ from ._iris import iris
 from ._savannah import savannah
 from ._titanic import titanic
 from ._sentence_pairs import sentence_pairs
+from ._airline_tweets import airline_tweets
