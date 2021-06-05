@@ -92,7 +92,7 @@ def plot_matrix(table: pd.DataFrame,
                 vmin: Optional[float] = None, vmax: Optional[float] = None,
                 cmap: str = "viridis", color_bar: bool = False,
                 format: str = ".3g", write_values: bool = False,
-                **kwargs: dict):
+                **kwargs):
     """
     Plots the confusion matrix between prediction and target
     of a classifier
@@ -117,7 +117,7 @@ def plot_matrix(table: pd.DataFrame,
         Formating used for the values writen in cells
     **kwargs : dict
         dict of additional keyword arguments passed to ax.text when writing
-        values in cell
+        values in cells
     """
     if ax is None:
         f, ax = plt.subplots()
