@@ -36,7 +36,7 @@ model = nn.ImageClassifier(in_features, classes,
                            activation="leaky_relu",
                            GPU=0)
 # print(model.module.shapes)
-train_data, val_data = ml.split((x_train, y_train), frac=0.2)
+train_data, val_data = ml.split(x_train, y_train, frac=0.2)
 model.train(train_data, val_data, n_epochs=300, batch_size=1000,
             learning_rate=1.0E-3, minibatching=True)
 

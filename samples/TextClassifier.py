@@ -27,15 +27,15 @@ model = ml.neural_networks.TextClassifier(tokenizer, classes,
                                           n_heads, hidden_layers, GPU=0,
                                           optimization_method="Adam")
 
-print("training ...", flush=True)
-
-model.train((x, y), n_epochs=1000, learning_rate=1.0E-3, batch_size=1000)
+model.train((x, y), n_epochs=1000, learning_rate=1.0E-3, batch_size=1000,
+            n_batches=5)
 model.plot_history()
 
-
-print("evaluating ...")
 y_pred = model(x, batch_size=500)
-ml.plot_matrix(ml.confusion_matrix(y, y_pred))
+f, ax = plt.subplots()
+ml.plot_matrix(ml.confusion_matrix(y, y_pred), ax=ax)
+ax.set_xlabel("target")
+ax.set_ylabel("predicted")
 plt.show()
 
 IPython.embed()

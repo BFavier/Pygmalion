@@ -17,25 +17,31 @@ x = df[inputs]
 y = df[target]
 data = (x, y)
 
+f, ax = plt.subplots()
+ml.plot_matrix(x.corr(), ax=ax, cmap="coolwarm", color_bar=True,
+               write_values=True, fontsize=5., vmin=-1., vmax=1.)
+ax.set_title("Correlation matrix")
+plt.show()
+
 # Create and train the model
 hidden_layers = [{"features": 16},
                  {"features": 16},
                  {"features": 16}]
 model = ml.neural_networks.DenseRegressor(inputs, hidden_layers,
                                           activation="elu", dropout=0.1)
-data, test_data = ml.split(data, frac=0.2)
-train_data, val_data = ml.split(data, frac=0.2)
+data, test_data = ml.split(*data, frac=0.2)
+train_data, val_data = ml.split(*data, frac=0.2)
 model.train(train_data, val_data, patience=500, L2=1.0E-2)
 
 # Plot results
 model.plot_history()
 f, ax = plt.subplots()
 x, y = train_data
-ml.plot_correlation(y, model(x), ax=ax, label="training")
+ml.plot_fitting(y, model(x), ax=ax, label="training")
 x, y = val_data
-ml.plot_correlation(y, model(x), ax=ax, label="validation")
+ml.plot_fitting(y, model(x), ax=ax, label="validation")
 x, y = test_data
-ml.plot_correlation(y, model(x), ax=ax, label="testing", color="C3")
+ml.plot_fitting(y, model(x), ax=ax, label="testing", color="C3")
 ax.set_title(f"R²={ml.R2(model(x), y):.3g}")
 ax.set_xlabel("target")
 ax.set_ylabel("predicted")
