@@ -7,6 +7,7 @@ from ._conversions import dataframe_to_tensor, \
                          floats_to_tensor, tensor_to_floats
 from ._neural_network import NeuralNetwork
 from ._loss_functions import RMSE
+from pygmalion.utilities._decorators import document
 
 
 class DenseRegressorModule(torch.nn.Module):
@@ -78,6 +79,7 @@ class DenseRegressor(NeuralNetwork):
 
     ModuleType = DenseRegressorModule
 
+    @document(ModuleType.__init__, NeuralNetwork.__init__)
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
