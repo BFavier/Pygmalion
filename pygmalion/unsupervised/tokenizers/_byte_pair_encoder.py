@@ -107,7 +107,7 @@ class BytePairEncoder(DynamicTokenizer):
         """
         codes = [coding for coding in self.code.items()]
         for t, c in codes[::-1]:
-            encoded = self._expand(encoded, t, c)
+            encoded = list(self._expand(encoded, t, c))
         return bytes(encoded).decode("utf-8", errors="replace")
 
     @property
