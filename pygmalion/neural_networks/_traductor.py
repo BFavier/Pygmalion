@@ -9,6 +9,7 @@ from ._neural_network_classifier import NeuralNetworkClassifier
 from ._loss_functions import cross_entropy
 from pygmalion.unsupervised.tokenizers import DynamicTokenizer, Tokenizer
 from pygmalion.unsupervised.tokenizers import SpecialToken, DynamicTextDataset
+from pygmalion.utilities import document
 
 
 class TraductorModule(torch.nn.Module):
@@ -160,6 +161,7 @@ class Traductor(NeuralNetworkClassifier):
 
     ModuleType = TraductorModule
 
+    @document(ModuleType.__init__, NeuralNetworkClassifier.__init__)
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 

@@ -7,6 +7,7 @@ from ._conversions import floats_to_tensor, tensor_to_index
 from ._conversions import segmented_to_tensor, images_to_tensor
 from ._neural_network_classifier import NeuralNetworkClassifier
 from ._loss_functions import soft_dice_loss
+from pygmalion.utilities import document
 
 
 class SemanticSegmenterModule(_torch.nn.Module):
@@ -94,6 +95,7 @@ class SemanticSegmenter(NeuralNetworkClassifier):
 
     ModuleType = SemanticSegmenterModule
 
+    @document(ModuleType.__init__, NeuralNetworkClassifier.__init__)
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 

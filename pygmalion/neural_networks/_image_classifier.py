@@ -9,6 +9,7 @@ from ._conversions import classes_to_tensor, images_to_tensor
 from ._conversions import tensor_to_probabilities
 from ._neural_network_classifier import NeuralNetworkClassifier
 from ._loss_functions import cross_entropy
+from pygmalion.utilities import document
 
 
 class ImageClassifierModule(torch.nn.Module):
@@ -101,6 +102,7 @@ class ImageClassifier(NeuralNetworkClassifier):
 
     ModuleType = ImageClassifierModule
 
+    @document(ModuleType.__init__, NeuralNetworkClassifier.__init__)
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 

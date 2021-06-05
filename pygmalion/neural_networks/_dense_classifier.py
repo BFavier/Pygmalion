@@ -8,6 +8,7 @@ from ._conversions import floats_to_tensor, tensor_to_classes
 from ._conversions import tensor_to_probabilities
 from ._neural_network_classifier import NeuralNetworkClassifier
 from ._loss_functions import cross_entropy
+from pygmalion.utilities import document
 
 
 class DenseClassifierModule(torch.nn.Module):
@@ -82,6 +83,7 @@ class DenseClassifier(NeuralNetworkClassifier):
 
     ModuleType = DenseClassifierModule
 
+    @document(ModuleType.__init__, NeuralNetworkClassifier.__init__)
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
