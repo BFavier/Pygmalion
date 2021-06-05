@@ -1,9 +1,9 @@
 import numpy as np
 import pandas as pd
-from typing import Any, Tuple
+from typing import Any, Tuple, Iterable
 
 
-def split(data: Tuple[Any], frac: float = 0.2, shuffle: bool = True) -> tuple:
+def split(*data: Tuple[Any], frac: float = 0.2, shuffle: bool = True) -> tuple:
     """
     Splits the input data in two (train, test)
 
@@ -31,7 +31,7 @@ def split(data: Tuple[Any], frac: float = 0.2, shuffle: bool = True) -> tuple:
     return tuple(train), tuple(test)
 
 
-def kfold(data: Tuple[Any], k: int = 3, shuffle: bool = True) -> tuple:
+def kfold(*data: Tuple[Any], k: int = 3, shuffle: bool = True) -> tuple:
     """
     Splits the input data into k-folds of (train, test) data
 
@@ -70,7 +70,7 @@ def _index(data: Any, at: np.ndarray):
         return data.iloc[at]
     elif isinstance(data, np.ndarray):
         return data[at]
-    elif isinstance(data, list):
+    elif isinstance(data, Iterable):
         return [data[i] for i in at]
     else:
-        raise RuntimeError(f"'{type(data)}' can't be indexed")
+        raise RuntimeError(f"data type '{type(data)}' not supported")
