@@ -28,15 +28,17 @@ train_data, val_data = ml.split(data, frac=0.2)
 model.train(train_data, val_data, patience=500, L2=1.0E-2)
 
 # Plot results
-model.plot_residuals()
+model.plot_history()
 f, ax = plt.subplots()
 x, y = train_data
-ml.plot_correlation(model(x), y, ax=ax, label="training")
+ml.plot_correlation(y, model(x), ax=ax, label="training")
 x, y = val_data
-ml.plot_correlation(model(x), y, ax=ax, label="validation")
+ml.plot_correlation(y, model(x), ax=ax, label="validation")
 x, y = test_data
-ml.plot_correlation(model(x), y, ax=ax, label="testing", color="C3")
+ml.plot_correlation(y, model(x), ax=ax, label="testing", color="C3")
 ax.set_title(f"R²={ml.R2(model(x), y):.3g}")
+ax.set_xlabel("target")
+ax.set_ylabel("predicted")
 plt.show()
 
 IPython.embed()
