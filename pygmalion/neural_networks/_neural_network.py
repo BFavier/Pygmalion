@@ -3,7 +3,7 @@ import torch
 import warnings
 import matplotlib.pyplot as plt
 import torch.nn.parallel as parallel
-from typing import Union, Callable, List, Tuple
+from typing import Union, List, Tuple, Optional, Iterator
 from .._model import Model
 
 
@@ -26,7 +26,7 @@ class LossModule(torch.nn.Module):
 
 class NeuralNetwork(Model):
     """
-    Parameters
+    Attributes
     ----------
     module : torch.nn.Module
         the underlying torch module of the model
@@ -45,22 +45,21 @@ class NeuralNetwork(Model):
         obj.GPU = dump["GPU"]
         return obj
 
+    def __repr__(self):
+        return f"{type(self).__name__}()"
+
     def __init__(self, *args,
                  GPU: Union[None, int, List[int]] = None,
                  optimization_method: str = "Adam",
                  **kwargs):
         """
-        Parameters
-        ----------
-        *args : tuple
-            The args passed to the constructor of 'self.module'
+        NeuralNetwork parameters
+        ------------------------
         GPU : None or int or list of int
             The indice of the GPU to evaluate the model on
             Set None to evaluate on cpu
         optimization_method : str
             The name of the optimization method
-        **kwargs : dict
-            The kwargs passed to the constructor of 'self.module'
         """
         self.module = self.ModuleType(*args, **kwargs)
         self.GPU = GPU
@@ -70,13 +69,43 @@ class NeuralNetwork(Model):
                           "epochs": [],
                           "best epoch": None}
 
+    def __call__(self, X, batch_size: Optional[int] = None):
+        """
+        Returns the model's evaluation on the given input
+
+        Parameters:
+        -----------
+        X : Any
+            The input X of the model.
+            it's type depend on the neural network type.
+        batche_size : int or None
+            Parameter used to save on memory
+            The maximum number of observations to evaluate at once
+            Or None to process everything in one go
+
+        Returns
+        -------
+        Any :
+            The returned Y value of the model.
+            it's type depends on the neural network type.
+        """
+        torch.cuda.empty_cache()
+        self.module.eval()
+        x, _, _ = self._data_to_tensor(X, None, device=self.device)
+        with torch.no_grad():
+            data = (x, None, None)
+            y = torch.cat([self.module(batch) for (batch, _, _), _ in
+                           self._as_batches(data, batch_size, None)],
+                          dim=0)
+        return self._tensor_to_y(y)
+
     def train(self, training_data: tuple,
               validation_data: Union[tuple, None] = None,
               n_epochs: int = 1000,
               patience: int = 100,
               learning_rate: float = 1.0E-3,
               batch_size: Union[int, None] = None,
-              minibatching: bool = False,
+              n_batches: Union[int, None] = None,
               L1: Union[float, None] = None,
               L2: Union[float, None] = None,
               norm_update_factor: Union[float, None] = 0.1,
@@ -102,9 +131,9 @@ class NeuralNetwork(Model):
         batch_size : int or None
             Maximum size of the batchs
             Or None to process the full data in one go
-        minibatching : bool
-            If True, the model's parameters are updated at each
-            training batch instead of at the end of the epoch
+        n_batches : int or None
+            If not None, set the number of batches processed per epoch
+            Otherwise the whole data is processed
         L1 : float or None
             L1 regularization added to the loss function
         L2 : float or None
@@ -119,8 +148,8 @@ class NeuralNetwork(Model):
         self.module.train()
         # Converts training/validation data to tensors
         device = self.device if batch_size is None else torch.device("cpu")
-        training_data = self._data_to_tensor(*training_data, device=device)
         shuffle = (isinstance(self.GPU, list) or batch_size is not None)
+        training_data = self._data_to_tensor(*training_data, device=device)
         if validation_data is not None:
             validation_data = self._data_to_tensor(*validation_data,
                                                    device=device)
@@ -146,10 +175,10 @@ class NeuralNetwork(Model):
         # trains the model, stops if the user press 'ctrl+c'
         self._training_loop(loss_module,
                             training_data, validation_data, n_epochs,
-                            patience, verbose, batch_size, minibatching,
+                            patience, verbose, batch_size, n_batches,
                             L1, L2, best_epoch, best_loss, best_state, shuffle)
 
-    def plot_residuals(self, ax=None, log: bool = True):
+    def plot_history(self, ax=None, log: bool = True):
         """
         Plot the training and validation data residuals
 
@@ -178,29 +207,6 @@ class NeuralNetwork(Model):
         ax.set_xlabel("epochs")
         ax.legend()
         f.tight_layout()
-
-    def __call__(self, X):
-        """
-        Returns the model's evaluation on the given input
-
-        Parameters:
-        -----------
-        X : Any
-            The input X of the model.
-            it's type depend on the neural network type.
-            see 'help(self.module)'
-
-        Returns
-        -------
-        Any :
-            The returned Y value of the model.
-            it's type depends on the neural network type.
-            see 'help(self.module)'
-        """
-        self.module.eval()
-        x, _, _ = self._data_to_tensor(X, None, device=self.device)
-        y = self.module(x)
-        return self._tensor_to_y(y)
 
     @property
     def GPU(self) -> bool:
@@ -337,15 +343,6 @@ class NeuralNetwork(Model):
             if type(m).__name__.startswith("BatchNorm"):
                 m.momentum = f
 
-    def _loss_function(self, y_pred: torch.Tensor, y_target: torch.Tensor,
-                       weights: Union[None, torch.Tensor] = None
-                       ) -> torch.Tensor:
-        """
-        Place holder for the method that calculates the loss function
-        """
-        raise NotImplementedError(f"'_loss_function' not implemented for "
-                                  f"model '{type(self)}'")
-
     def _data_to_tensor(self, X, Y, weights=None) -> tuple:
         """
         Place holder for the method that converts input data to torch tensor
@@ -409,7 +406,7 @@ class NeuralNetwork(Model):
                        patience: int,
                        verbose: bool,
                        batch_size: Union[int, None],
-                       minibatching: bool,
+                       n_batches: Union[int, None],
                        L1: Union[float, None],
                        L2: Union[float, None],
                        best_epoch: int,
@@ -452,9 +449,10 @@ class NeuralNetwork(Model):
         batch_size : int or None
             The maximum number of items in a batch
             or None to evaluate on all the data at once
-        minibatching : bool
-            If True, the model parameters are updated at each batch
-            instead of at the end of the epoch
+        n_batches : int or None
+            This parameter is not used if batch_size is None.
+            Number of batchs the gradient is accumulated on at each epoch.
+            If None, the whole training data is processed each epoch
         L1 : float or None
             The L1 regularization added to the loss function
         L2 : float or None
@@ -473,16 +471,18 @@ class NeuralNetwork(Model):
                 self.optimizer.step()
                 self.optimizer.zero_grad()
                 training_loss = self._batch_loss(loss_module,
-                                                 self._shuffle(training_data) if shuffle else training_data,
-                                                 batch_size,
-                                                 minibatching, L1, L2,
-                                                 train=True)
+                                                 self._shuffle(training_data)
+                                                 if shuffle else training_data,
+                                                 batch_size, n_batches,
+                                                 L1, L2, train=True)
                 if validation_data is not None:
                     validation_loss = self._batch_loss(loss_module,
-                                                       self._shuffle(validation_data) if shuffle else validation_data,
-                                                       batch_size,
-                                                       minibatching, L1, L2,
-                                                       train=False)
+                                                       self._shuffle(
+                                                           validation_data)
+                                                       if shuffle
+                                                       else validation_data,
+                                                       batch_size, None,
+                                                       L1, L2, train=False)
                     if validation_loss < best_loss:
                         best_epoch = epoch
                         best_loss = validation_loss
@@ -519,9 +519,9 @@ class NeuralNetwork(Model):
             self.residuals["best epoch"] = best_epoch
 
     def _batch_loss(self, loss_module: torch.nn.Module,
-                    data: Union[tuple, Callable],
+                    data: tuple,
                     batch_size: Union[int, None],
-                    minibatching: bool,
+                    n_batches: Union[int, None],
                     L1: Union[float, None],
                     L2: Union[float, None],
                     train: bool) -> float:
@@ -534,16 +534,15 @@ class NeuralNetwork(Model):
         ----------
         loss_module : torch.nn.Module
             module evaluating the loss of the model
-        data : tuple or Callable
+        data : tuple
             The (X, Y, weights) to evaluate the loss on,
-            or a function that yields them by batch.
-            'X' and 'Y' are tensors, 'weights' is a list of float or None.
+            each of them is a Tensor or None.
         batch_size : int or None
             The maximum number of observations in a batch.
-            If None the whole data is processed in one go.
-        minibatching : bool
-            If True only one batch is evaluated per epoch.
-            Otherwise the gradient is averaged over each batch.
+            If None the whole data is processed in one batch.
+        n_batches : int or None
+            If not None, set the number of batches processed per epoch
+            Otherwise the whole data is processed
         L1 : float or None
             The L1 regularization added to the loss function
         L2 : float or None
@@ -556,28 +555,63 @@ class NeuralNetwork(Model):
         float :
             The loss function averaged over the batchs
         """
+        losses = []
+        for data, n in self._as_batches(data, batch_size, n_batches):
+            losses.append(self._eval_loss(loss_module, *data, L1, L2, train,
+                                          scale=1./n))
+        loss = sum(losses)
+        return loss
+
+    def _as_batches(self, data: tuple, batch_size: Optional[int],
+                    n_batches: Optional[int]) -> Tuple[Iterator, int]:
+        """
+        Returns an iterator over the data splited in batches, as well as
+        the total number of batches.
+
+        - If batch size is None, returns the whole data in one go
+        - If batch_size is not None and n_batches is None,
+          returns the highest possible number of equal size batches that are
+          smaller than batch_size
+        - If batch_size and n_batches are both integers, a maximum of n_batches
+          batches of size batch_size are yielded.
+          If batch_size*n_batches is superior
+
+        Parameters
+        ----------
+        data : tuple of Tensor/None
+            the tuple of (X, Y, weights) data
+        batch_size : int or None
+            the maximum batch size
+        n_batches : int or None
+            the number of batches to yield
+
+        Returns
+        -------
+        Iterator:
+            an iterator of (data, n)
+            with data a tuple of (x, y, weights)
+            and n the number of batches that will be yielded
+        """
         if batch_size is None:
-            loss = self._eval_loss(loss_module,
-                                   *data, L1, L2, train)
+            yield data, 1
         else:
             X, Y, weights = data
-            if minibatching:
-                n = 1
-                bounds = [0, batch_size]
+            n_data = len(X)
+            if n_batches is not None and n_batches*batch_size > n_data:
+                prod = n_batches*batch_size
+                raise ValueError(f"n_batches*batch_size = {prod} is superior "
+                                 f"to the number of data {n_data}")
+            if n_batches is None:
+                n_batches = math.ceil(n_data/batch_size)
+                bounds = [int(i/n_batches*(n_data+1))
+                          for i in range(n_batches+1)]
             else:
-                N = len(X)
-                batch_size = min(max(1, batch_size), N)
-                n = math.ceil(N/batch_size)
-                bounds = [int(i*N/n) for i in range(n+1)]
-            losses = []
+                bounds = [i*batch_size for i in range(n_batches+1)]
             for (start, end) in zip(bounds[:-1], bounds[1:]):
                 x = self._index(X, start=start, end=end)
                 y = self._index(Y, start=start, end=end)
                 w = self._index(weights, start=start, end=end)
-                losses.append(self._eval_loss(loss_module,
-                                              x, y, w, L1, L2, train, 1/n))
-            loss = sum(losses)
-        return loss
+                yield (x, y, w), n_batches
 
     def _shuffle(self, batch_data: Tuple[torch.Tensor]):
         """
