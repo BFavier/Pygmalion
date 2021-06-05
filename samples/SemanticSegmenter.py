@@ -57,7 +57,7 @@ model.train(train_data, val_data, n_epochs=5000, batch_size=15,
 # _Ftight_layout()
 
 # Plot results
-model.plot_residuals()
+model.plot_history()
 x_train, y_train = train_data
 for x, y_t in zip(x_train[:5], y_train[:5]):
     y_p = model([x])[0]
