@@ -1,8 +1,9 @@
 import torch as _torch
 import numpy as _np
-from typing import Dict, Union
+from typing import Dict, Union, Optional
 from ._conversions import tensor_to_index
 from ._neural_network import NeuralNetwork
+from pygmalion.utilities._decorators import document
 
 
 class NeuralNetworkClassifier(NeuralNetwork):
@@ -13,16 +14,14 @@ class NeuralNetworkClassifier(NeuralNetwork):
         obj.class_weights = dump["class weights"]
         return obj
 
-    def __init__(self, *args, class_weights=None, **kwargs):
+    @document(NeuralNetwork.__init__)
+    def __init__(self, *args, class_weights: Optional[Dict[str, float]] = None,
+                 **kwargs):
         """
-        Parameters
-        ----------
-        *args : tuple
-            args passed to the NeuralNetwork constructor
+        NeuralNetworkClassifier parameters
+        ----------------------------------
         class_weights : dict or None
             a dict of {class: weight} or None
-        **kwargs : dict
-            kwargs passed to the NeuralNetwork constructor
         """
         super().__init__(*args, **kwargs)
         if class_weights is None:
