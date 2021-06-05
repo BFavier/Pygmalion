@@ -89,7 +89,7 @@ def plot_bounding_boxes(bboxes: dict, ax: matplotlib.axes.Axes,
 
 def plot_matrix(table: pd.DataFrame,
                 ax: Union[None, matplotlib.axes.Axes] = None,
-                vmin: Optional[float] = None, vmax: Optional[float] = None, 
+                vmin: Optional[float] = None, vmax: Optional[float] = None,
                 cmap: str = "viridis", color_bar: bool = False,
                 format: str = ".3g", write_values: bool = False,
                 **kwargs: dict):
