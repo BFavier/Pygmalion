@@ -79,14 +79,13 @@ def tensor_to_index(tensor: torch.tensor, dim=1) -> np.ndarray:
 
 
 def classes_to_tensor(input: Iterable[str],
-                      classes: List[str],
+                      classes: Iterable[str],
                       device: torch.device) -> torch.Tensor:
     """
     converts a list of classes to tensor
     'classes' must be a list of unique possible classes.
     The tensor contains for each input the index of the category.
     """
-    assert isinstance(classes, list)
     indexes = {c: i for i, c in enumerate(classes)}
     return longs_to_tensor([indexes[c] for c in input],
                            device)
@@ -334,13 +333,10 @@ def sentences_to_tensor(sentences: Iterable[str],
     sentences = [tokenizer.encode(s, **kwargs) for s in sentences]
     n_tokens = tokenizer.n_tokens
     L_max = max(len(s) for s in sentences)
-    if max_length is not None:
-        L_max = min(L_max, max_length-2)
-    else:
-        max_length = L_max+2
     start, end, pad = n_tokens, n_tokens+1, n_tokens+2
-    data = [[start] + s + [end] + [pad]*(L_max - len(s))
-            for s in sentences if len(s) < max_length-2]
+    data = [[start] + s + [end] + [pad]*(L_max - len(s)) for s in sentences]
+    if max_length is not None:
+        data = [d for d in data if len(d) <= max_length]
     return longs_to_tensor(data, device)
 
 
