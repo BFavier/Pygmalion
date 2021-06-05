@@ -1,109 +1,10 @@
 import torch
 import matplotlib
-import pathlib
-import json
-import h5py
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
-from typing import Any, Tuple, Iterable, List, Union
-from . import neural_networks as nn
-
-__all__ = ["load", "split", "kfold", "MSE", "RMSE", "R2", "accuracy",
-           "plot_correlation", "confusion_matrix", "plot_confusion_matrix",
-           "GPU_info", "plot_bounding_boxes"]
-
-
-def load(file: str) -> object:
-    """
-    Load a model from the disk (must be a .json or .h5)
-
-    Parameters
-    ----------
-    file : str
-        path of the file to read
-    """
-    file = pathlib.Path(file)
-    suffix = file.suffix.lower()
-    if not file.is_file():
-        raise FileNotFoundError("The file '{file}' does not exist")
-    if suffix == ".json":
-        with open(file) as json_file:
-            dump = json.load(json_file)
-    elif suffix == ".h5":
-        f = h5py.File(file, "r")
-        dump = _load_h5(f)
-    else:
-        raise ValueError("The file must be '.json' or '.h5' file, "
-                         f"but got a '{suffix}'")
-    if "type" not in dump.keys():
-        raise KeyError("The model's dump doesn't have a 'type' key")
-    typename = dump["type"]
-    for subpackage in [nn]:
-        if hasattr(subpackage, typename):
-            cls = getattr(subpackage, typename)
-            return cls.from_dump(dump)
-    raise ValueError(f"Unknow model type: '{typename}'")
-
-
-def split(data: Tuple[Any], frac: float = 0.2, shuffle: bool = True) -> tuple:
-    """
-    Splits the input data in two (train, test)
-
-    Parameters
-    ----------
-    data : tuple
-        Tuple of iterables
-    frac : float
-        The fraction of testing data
-    shuffle : bool
-        If True, the data is shuffled before splitting
-
-    Returns
-    -------
-    tuple :
-        the 'first' and 'second' tuples of data
-    """
-    L = len(data[0])
-    indexes = np.random.permutation(L) if shuffle else np.arange(L)
-    limit = int(round(frac * L))
-    b = indexes[:limit]
-    a = indexes[limit:]
-    train = [_index(d, a) for d in data]
-    test = [_index(d, b) for d in data]
-    return tuple(train), tuple(test)
-
-
-def kfold(data: Tuple[Any], k: int = 3, shuffle: bool = True) -> tuple:
-    """
-    Splits the input data into k-folds of (train, test) data
-
-    Parameters
-    ----------
-    data : tuple
-        Tuple of iterables
-    k : int
-        The number of folds to yield
-    shuffle : bool
-        If True, the data is shuffled before splitting
-
-
-    Yields
-    ------
-    tuple :
-        the (train, test) tuple of data
-    """
-    L = len(data[0])
-    indexes = np.random.permutation(L) if shuffle else np.arange(L)
-    indexes = np.array_split(indexes, k)
-    for i in range(k):
-        train_index = np.concatenate([ind for j, ind in enumerate(indexes)
-                                      if j != i])
-        train = tuple(_index(d, train_index) for d in data)
-        test_index = indexes[i]
-        test = tuple(_index(d, test_index) for d in data)
-        yield train, test
+from typing import Iterable, List, Union
 
 
 def MSE(predicted: np.ndarray, target: np.ndarray, weights=None):
@@ -137,7 +38,7 @@ def accuracy(predicted: np.ndarray, target: np.ndarray):
     return sum([a == b for a, b in zip(predicted, target)])/len(predicted)
 
 
-def plot_correlation(predicted: Iterable[float], target: Iterable[float],
+def plot_correlation(target: Iterable[float], predicted: Iterable[float],
                      ax: Union[None, matplotlib.axes.Axes] = None,
                      label: str = "_",
                      **kwargs):
@@ -146,10 +47,10 @@ def plot_correlation(predicted: Iterable[float], target: Iterable[float],
 
     Parameters
     ----------
-    predicted : iterable of str
-        the classes predicted by the model
     target : iterable of str
         the target to predict
+    predicted : iterable of str
+        the classes predicted by the model
     ax : None or matplotlib.axes.Axes
         The axes to draw on. If None a new window is created.
     label : str
@@ -169,15 +70,13 @@ def plot_correlation(predicted: Iterable[float], target: Iterable[float],
     ax.plot([inf, sup], [inf, sup], color="k", zorder=0)
     ax.set_xlim([inf, sup])
     ax.set_ylim([inf, sup])
-    ax.set_xlabel("target")
-    ax.set_ylabel("predicted")
     ax.set_aspect("equal", "box")
     legend = ax.legend()
     if len(legend.texts) == 0:
         legend.remove()
 
 
-def confusion_matrix(predicted: Iterable[str], target: Iterable[str],
+def confusion_matrix(target: Iterable[str], predicted: Iterable[str],
                      classes: Union[None, List[str]] = None):
     """
     Returns the confusion matrix between prediction and target
@@ -185,10 +84,10 @@ def confusion_matrix(predicted: Iterable[str], target: Iterable[str],
 
     Parameters
     ----------
-    predicted : iterable of str
-        the classes predicted by the model
     target : iterable of str
         the target to predict
+    predicted : iterable of str
+        the classes predicted by the model
     classes : None or list of str
         the unique classes to plot
         (can be a subset of the classes in 'predicted' and 'target')
@@ -200,49 +99,45 @@ def confusion_matrix(predicted: Iterable[str], target: Iterable[str],
         classes = np.unique(np.stack([predicted, target]))
     predicted = pd.Categorical(predicted, categories=classes)
     target = pd.Categorical(target, categories=classes)
-    tab = pd.crosstab(predicted, target, normalize="all",
-                      rownames=["predicted"], colnames=["target"])
+    table = pd.crosstab(predicted, target, normalize="all",
+                        rownames=["predicted"], colnames=["target"])
     for c in classes:
-        if c not in tab.index:
-            tab.loc[c] = 0
-        if c not in tab.columns:
-            tab[c] = 0
-    return tab.loc[classes, classes]
+        if c not in table.index:
+            table.loc[c] = 0
+        if c not in table.columns:
+            table[c] = 0
+    return table.loc[classes[::-1], classes]
 
 
-def plot_confusion_matrix(*args, ax: Union[None, matplotlib.axes.Axes] = None,
-                          cmap: str = "Greens", **kwargs):
+def plot_matrix(table: pd.DataFrame,
+                ax: Union[None, matplotlib.axes.Axes] = None,
+                cmap: str = "Greens"):
     """
     Plots the confusion matrix between prediction and target
     of a classifier
 
     Parameters
     ----------
-    *args : tuple
-        args passed to 'confusion_matrix'
+    table : pd.DataFrame
+        The matrix to plot the content of
     ax : None or matplotlib.axes.Axes
         The axis to draw on. If None, a new window is created.
     cmap : str
         The name of the maplotlib colormap
-    **kwargs : dict
-        kwargs passed to 'confusion_matrix'
     """
     if ax is None:
         f, ax = plt.subplots()
-    tab = confusion_matrix(*args, **kwargs)
-    inf, sup = tab.min().min(), tab.max().max()
-    ax.imshow(tab.to_numpy(), origin="lower", interpolation="nearest",
+    inf, sup = table.min().min(), table.max().max()
+    ax.imshow(table.to_numpy(), interpolation="nearest",
               cmap=cmap, vmin=inf, vmax=sup)
     ax.grid(False)
-    ax.set_xticks(range(len(tab.columns)))
-    ax.set_xticklabels(tab.columns, rotation=45)
-    ax.set_xlabel("target")
-    ax.set_yticks(range(len(tab.index)))
-    ax.set_yticklabels(tab.index, rotation=45)
-    ax.set_ylabel("predicted")
-    for y, cy in enumerate(tab.index):
-        for x, cx in enumerate(tab.columns):
-            val = tab.loc[cy, cx]
+    ax.set_xticks(range(len(table.columns)))
+    ax.set_xticklabels(table.columns, rotation=45)
+    ax.set_yticks(range(len(table.index)))
+    ax.set_yticklabels(table.index, rotation=45)
+    for y, cy in enumerate(table.index):
+        for x, cx in enumerate(table.columns):
+            val = table.loc[cy, cx]
             if val >= 0.01:
                 color = "white" if (val - inf)/(sup - inf) > 0.5 else "black"
                 ax.text(x, y, f"{val:.2f}", va='center', ha='center',
@@ -251,7 +146,7 @@ def plot_confusion_matrix(*args, ax: Union[None, matplotlib.axes.Axes] = None,
 
 def GPU_info():
     """
-    Returns the list of GPUs, with for eahc of them:
+    Returns the list of GPUs, with for each of them:
         * their name
         * their VRAM capacity in GB
         * their current memory usage (in %)
@@ -316,53 +211,3 @@ def plot_bounding_boxes(bboxes: dict, ax: matplotlib.axes.Axes,
         ax.add_patch(rect)
     ax.set_xticks([])
     ax.set_yticks([])
-
-
-def _index(data: Any, at: np.ndarray):
-    """Indexes an input data. Method depends on it's type"""
-    if data is None:
-        return None
-    elif isinstance(data, pd.DataFrame) or isinstance(data, pd.Series):
-        return data.iloc[at]
-    elif isinstance(data, np.ndarray):
-        return data[at]
-    elif isinstance(data, list):
-        return [data[i] for i in at]
-    else:
-        raise RuntimeError(f"'{type(data)}' can't be indexed")
-
-
-def _load_h5(cls, group: h5py.Group) -> dict:
-    """
-    Recursively load the content of an hdf5 file into a python dict.
-
-    Parameters
-    ----------
-    group : h5py.Group
-        An hdf5 group (or the opened file)
-
-    Returns
-    -------
-    dict
-        The model dump as a dict
-    """
-    group_type = group.attrs["type"]
-    if group_type == "dict":
-        return {name: _load_h5(group[name]) for name in group}
-    elif group_type == "list":
-        return [_load_h5(group[name]) for name in group]
-    elif group_type == "scalar":
-        return group.attrs["data"].tolist()
-    elif group_type == "str":
-        return group.attrs["data"]
-    elif group_type == "None":
-        return None
-    elif group_type == "binary":
-        return group["data"][...].tolist()
-    else:
-        raise ValueError(f"Unknown group type '{group_type}'")
-
-
-if __name__ == "__main__":
-    import IPython
-    IPython.embed()
