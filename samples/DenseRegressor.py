@@ -19,7 +19,7 @@ data = (x, y)
 
 f, ax = plt.subplots()
 ml.plot_matrix(x.corr(), ax=ax, cmap="coolwarm", color_bar=True,
-               write_values=True, fontsize=5., vmin=-1., vmax=1.)
+               write_values=True, fontsize=5., vmin=-1., vmax=1., format=".2f")
 ax.set_title("Correlation matrix")
 plt.show()
 
