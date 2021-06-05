@@ -59,7 +59,7 @@ class NeuralNetwork(Model):
             The indice of the GPU to evaluate the model on
             Set None to evaluate on cpu
         optimization_method : str
-            The name of the optimization method
+            The name of the optimization method ("Adam", "SGD", ...)
         """
         self.module = self.ModuleType(*args, **kwargs)
         self.GPU = GPU
