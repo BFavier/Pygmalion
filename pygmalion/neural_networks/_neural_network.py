@@ -65,9 +65,9 @@ class NeuralNetwork(Model):
         self.GPU = GPU
         self.optimization_method = optimization_method
         self.history = {"training loss": [],
-                          "validation loss": [],
-                          "epochs": [],
-                          "best epoch": None}
+                        "validation loss": [],
+                        "epochs": [],
+                        "best epoch": None}
 
     def __call__(self, X, batch_size: Optional[int] = None):
         """
