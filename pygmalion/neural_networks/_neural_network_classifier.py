@@ -1,6 +1,6 @@
 import torch as _torch
 import numpy as _np
-from typing import Dict, Union, Optional
+from typing import Dict, Optional
 from ._conversions import tensor_to_index
 from ._neural_network import NeuralNetwork
 from pygmalion.utilities._decorators import document
@@ -24,11 +24,7 @@ class NeuralNetworkClassifier(NeuralNetwork):
             a dict of {class: weight} or None
         """
         super().__init__(*args, **kwargs)
-        if class_weights is None:
-            self.class_weights = None
-        else:
-            self.class_weights = [class_weights.get(c, 0)
-                                  for c in self.classes]
+        self.class_weights = class_weights
 
     def index(self, X) -> _np.ndarray:
         """
@@ -59,7 +55,7 @@ class NeuralNetworkClassifier(NeuralNetwork):
             return {c: w for c, w in zip(classes, weights)}
 
     @class_weights.setter
-    def class_weights(self, other: Union[Dict[object, float], None]):
+    def class_weights(self, other: Optional[Dict[object, float]]):
         if other is not None:
             other = [other.get(c, 1.) for c in self.classes]
             other = _torch.tensor(other, dtype=_torch.float,
