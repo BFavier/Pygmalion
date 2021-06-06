@@ -18,26 +18,24 @@ x = df[inputs]
 y = df[target]
 classes = y.unique()
 
-data, test_data = ml.split(x, y, frac=0.2)
-
 # Create and train the model
 hidden_layers = [{"features": 8},
                  {"features": 8},
                  {"features": 8}]
 model = nn.DenseClassifier(inputs, classes, hidden_layers,
                            activation="elu")
-train_data, val_data = ml.split(*data, frac=0.1)
+train_data, val_data, test_data = ml.split(x, y, frac=(0.1, 0.2))
 model.train(train_data, val_data, n_epochs=3000, patience=200, L2=0.001)
 
 # Plot results
 model.plot_history()
-x, y = test_data
-y_pred = model(x)
+x_test, y_test = test_data
+y_pred = model(x_test)
 f, ax = plt.subplots()
-ml.plot_matrix(ml.confusion_matrix(y, y_pred, classes=classes), ax=ax,
-               cmap="Green", write_values=True, format=".2%")
-acc = ml.accuracy(y_pred, y)*100
-ax.set_title(f"Accuracy: {acc:.2f}%")
+ml.plot_matrix(ml.confusion_matrix(y_test, y_pred, classes=classes), ax=ax,
+               cmap="Greens", write_values=True, format=".2%")
+acc = ml.accuracy(y_pred, y_test)
+ax.set_title(f"Accuracy: {acc:.2%}")
 ax.set_ylabel("predicted")
 ax.set_xlabel("target")
 plt.tight_layout()

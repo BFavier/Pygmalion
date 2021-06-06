@@ -15,7 +15,6 @@ target = "medv"
 inputs = [c for c in df.columns if c != target]
 x = df[inputs]
 y = df[target]
-data = (x, y)
 
 f, ax = plt.subplots()
 ml.plot_matrix(x.corr(), ax=ax, cmap="coolwarm", color_bar=True,
@@ -29,20 +28,19 @@ hidden_layers = [{"features": 16},
                  {"features": 16}]
 model = ml.neural_networks.DenseRegressor(inputs, hidden_layers,
                                           activation="elu", dropout=0.1)
-data, test_data = ml.split(*data, frac=0.2)
-train_data, val_data = ml.split(*data, frac=0.2)
+train_data, val_data, test_data = ml.split(x, y, frac=(0.2, 0.1))
 model.train(train_data, val_data, patience=500, L2=1.0E-2)
 
 # Plot results
 model.plot_history()
 f, ax = plt.subplots()
-x, y = train_data
-ml.plot_fitting(y, model(x), ax=ax, label="training")
-x, y = val_data
-ml.plot_fitting(y, model(x), ax=ax, label="validation")
-x, y = test_data
-ml.plot_fitting(y, model(x), ax=ax, label="testing", color="C3")
-ax.set_title(f"R²={ml.R2(model(x), y):.3g}")
+x_train, y_train = train_data
+ml.plot_fitting(y_train, model(x_train), ax=ax, label="training")
+x_val, y_val = val_data
+ml.plot_fitting(y_val, model(x_val), ax=ax, label="validation")
+x_test, y_test = test_data
+ml.plot_fitting(y_test, model(x_test), ax=ax, label="testing", color="C3")
+ax.set_title(f"R²={ml.R2(model(x_test), y_test):.3g}")
 ax.set_xlabel("target")
 ax.set_ylabel("predicted")
 plt.show()

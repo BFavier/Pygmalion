@@ -1,17 +1,25 @@
 import numpy as np
 import pandas as pd
-from typing import Any, Tuple, Iterable
+from typing import Any, Tuple, Iterable, Union
 
 
-def split(*data: Tuple[Any], frac: float = 0.2, shuffle: bool = True) -> tuple:
+def split(*data: Tuple[Iterable], frac: Union[float, Tuple[float]] = 0.2,
+          shuffle: bool = True) -> tuple:
     """
-    Splits the input data in two (train, test)
+    Splits the input data
+
+    Example
+    -------
+    >>> # split the data into 80% training data and 20% validation data
+    >>> (x_train, y_train), (x_val, y_val) = ml.split(x, y, frac=0.2)
+    >>> # split the data into 70% train, 20% val, and 10% test data in one go
+    >>> train, val, test = ml.split(x, y, weights, frac=(0.2, 0.1))
 
     Parameters
     ----------
     data : tuple
         Tuple of iterables
-    frac : float
+    frac : float or tuple of float
         The fraction of testing data
     shuffle : bool
         If True, the data is shuffled before splitting
@@ -19,19 +27,24 @@ def split(*data: Tuple[Any], frac: float = 0.2, shuffle: bool = True) -> tuple:
     Returns
     -------
     tuple :
-        the 'first' and 'second' tuples of data
+        tuples of data
     """
     L = len(data[0])
     indexes = np.random.permutation(L) if shuffle else np.arange(L)
-    limit = int(round(frac * L))
-    b = indexes[:limit]
-    a = indexes[limit:]
-    train = [_index(d, a) for d in data]
-    test = [_index(d, b) for d in data]
-    return tuple(train), tuple(test)
+    if not hasattr(frac, "__iter__"):
+        frac = (frac,)
+    if any(f <= 0. for f in frac):
+        raise ValueError("The fractions must be superior to 0.")
+    if 1 - sum(frac) >= 1.:
+        raise ValueError("The remaining fraction must be superior to 0.")
+    frac = (1. - sum(frac),) + tuple(frac)
+    bounds = [int(round(sum(frac[:i])*L)) for i in range(len(frac)+1)]
+    splits = [tuple(_index(d, indexes[lower:upper]) for d in data)
+              for lower, upper in zip(bounds[:-1], bounds[1:])]
+    return splits
 
 
-def kfold(*data: Tuple[Any], k: int = 3, shuffle: bool = True) -> tuple:
+def kfold(*data: Tuple[Iterable], k: int = 3, shuffle: bool = True) -> tuple:
     """
     Splits the input data into k-folds of (train, test) data
 
