@@ -2,11 +2,8 @@
 
 def get_pretrained(model_name="bert-base-multilingual-cased"):
     from transformers import pipeline
-    if language is None:
-        model_name = "bert-base-multilingual-cased"
-    else:
-        model_name = f"bert-base-{language}-cased"
     model = pipeline("fill-mask", model=model_name)
+    return model
 
 
 def get_summarizer():
