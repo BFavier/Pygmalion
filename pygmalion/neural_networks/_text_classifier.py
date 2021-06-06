@@ -1,11 +1,12 @@
 import torch
 from typing import Union, List, Dict
 from .layers import Transformer, Embedding
-from .layers import Linear, Pooling1d
+from .layers import Linear, Pooling1d, Dropout
 from ._conversions import sentences_to_tensor, tensor_to_classes
 from ._conversions import floats_to_tensor, classes_to_tensor
 from ._neural_network_classifier import NeuralNetworkClassifier
 from ._loss_functions import cross_entropy
+from .layers._functional import positional_encoding
 from pygmalion.unsupervised.tokenizers import DynamicTokenizer, Tokenizer
 from pygmalion.unsupervised.tokenizers import SpecialToken, DynamicTextDataset
 from pygmalion.utilities import document
@@ -20,8 +21,7 @@ class TextClassifierModule(torch.nn.Module):
         torch.nn.Module.__init__(obj)
         obj.lexicon_in = dump["lexicon in"]
         obj.lexicon_out = dump["lexicon out"]
-        obj.embedding_in = Embedding.from_dump(dump["embedding in"])
-        obj.embedding_out = Embedding.from_dump(dump["embedding out"])
+        obj.embedding = Embedding.from_dump(dump["embedding"])
         obj.transformer = Transformer.from_dump(dump["transformer"])
         return obj
 
@@ -31,7 +31,6 @@ class TextClassifierModule(torch.nn.Module):
                  n_stages: int,
                  projection_dim: int,
                  n_heads: int,
-                 hidden_layers: List[dict],
                  max_length: int = 256,
                  activation: str = "relu",
                  dropout: Union[float, None] = None):
@@ -46,17 +45,20 @@ class TextClassifierModule(torch.nn.Module):
         self.tokenizer = tokenizer
         self.embedding = Embedding(self.tokenizer.n_tokens+3,
                                    self.embedding_dim)
+        self.dropout = Dropout(dropout)
         self.classes = list(classes)
         self.transformer = Transformer(n_stages, projection_dim, n_heads,
-                                       hidden_layers, activation=activation,
-                                       dropout=dropout)
+                                       dropout=dropout, activation=activation)
         self.pooling = Pooling1d(None)
         self.output = Linear(self.embedding_dim,
                              len(self.classes))
 
     def forward(self, X):
         X = self._as_tensor(X)
+        N, L = X.shape
         X = self.embedding(X)
+        X = positional_encoding(X)
+        X = self.dropout(X.reshape(N*L, -1)).reshape(N, L, -1)
         X = self.transformer(X)
         X = self.pooling(X.transpose(1, 2))
         X = self.output(X)

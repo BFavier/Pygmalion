@@ -1,6 +1,7 @@
 import torch
 import torch.nn.functional as F
 from typing import Union, Tuple
+from ._activation import Activation
 from ._padding import Padding, Padding1d, Padding2d
 from ._weighting import Weighting, Linear, Conv1d, Conv2d
 from ._batch_norm import BatchNorm, BatchNorm1d, BatchNorm2d
@@ -19,13 +20,13 @@ class Activated(torch.nn.Module):
 
     @classmethod
     def from_dump(cls, dump: dict):
-        cls = globals()[dump["type"]]
+        assert dump["type"] == cls.__name__
         obj = cls.__new__(cls)
         torch.nn.Module.__init__(obj)
         if "padding" in dump.keys():
             obj.padding = Padding.from_dump(dump["padding"])
         obj.weighting = Weighting.from_dump(dump["weighting"])
-        obj.activation = dump["activation"]
+        obj.activation = Activation.from_dump(dump["activation"])
         obj.normalization = BatchNorm.from_dump(dump["normalization"])
         obj.dropout = Dropout.from_dump(dump["dropout"])
         obj.stacked = dump["stacked"]
@@ -59,7 +60,7 @@ class Activated(torch.nn.Module):
         if hasattr(self, "padding"):
             X = self.padding(X)
         X = self.weighting(X)
-        X = self.function(X)
+        X = self.activation(X)
         X = self.normalization(X)
         X = self.dropout(X)
         if self.stacked:
@@ -72,18 +73,11 @@ class Activated(torch.nn.Module):
         if hasattr(self, "padding"):
             d["padding"] = self.padding.dump
         d["weighting"] = self.weighting.dump
-        d["activation"] = self.activation
+        d["activation"] = self.activation.dump
         d["normalization"] = self.normalization.dump
         d["dropout"] = self.dropout.dump
         d["stacked"] = self.stacked
         return d
-
-    @property
-    def function(self):
-        if hasattr(torch, self.activation):
-            return getattr(torch, self.activation)
-        else:
-            return getattr(F, self.activation)
 
 
 class Activated0d(Activated):
@@ -97,7 +91,7 @@ class Activated0d(Activated):
         super().__init__()
         self.weighting = Linear(in_features, features, bias=bias)
         self.normalization = BatchNorm1d(features)
-        self.activation = activation
+        self.activation = Activation(activation)
         self.dropout = Dropout(dropout)
         self.stacked = stacked
 
@@ -123,7 +117,7 @@ class Activated1d(Activated):
         self.weighting = Conv1d(in_features, features, kernel_size=window,
                                 stride=stride, bias=bias)
         self.normalization = BatchNorm1d(features)
-        self.activation = activation
+        self.activation = Activation(activation)
         self.dropout = Dropout(dropout)
         self.stacked = stacked
 
@@ -157,7 +151,7 @@ class Activated2d(Activated):
         self.weighting = Conv2d(in_features, features, kernel_size=window,
                                 stride=stride, bias=bias)
         self.normalization = BatchNorm2d(features)
-        self.activation = activation
+        self.activation = Activation(activation)
         self.dropout = Dropout(dropout)
         self.stacked = stacked
 

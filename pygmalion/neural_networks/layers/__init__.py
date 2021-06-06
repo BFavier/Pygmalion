@@ -1,3 +1,4 @@
+from ._activation import Activation
 from ._activated import Activated0d, Activated1d, Activated2d
 from ._batch_norm import BatchNorm0d, BatchNorm1d, BatchNorm2d
 from ._decoder import Decoder1d, Decoder2d

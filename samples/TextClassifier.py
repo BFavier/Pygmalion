@@ -21,14 +21,13 @@ class_weights = {c: v/s for c, v in class_weights.items()}
 tokenizer = ml.unsupervised.tokenizers.WhitespaceTokenizer()
 c = tokenizer.train(x, min_frequency=1.0E-5)
 
-n_stages = 2
+n_stages = 3
 projection_dim = 16
 n_heads = 4
-hidden_layers = [{"features": 128}]
 
 model = ml.neural_networks.TextClassifier(tokenizer, classes,
                                           n_stages, projection_dim,
-                                          n_heads, hidden_layers, GPU=0,
+                                          n_heads, dropout=0.2, GPU=0,
                                           optimization_method="Adam")
 train_data, val_data = ml.split(x, y, frac=0.2)
 model.train(train_data, validation_data=val_data, n_epochs=1000,

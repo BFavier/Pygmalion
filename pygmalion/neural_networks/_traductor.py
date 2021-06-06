@@ -1,12 +1,13 @@
 import torch
 from typing import Union, List, Dict
 from .layers import Transformer, Embedding
-from .layers import Linear
+from .layers import Linear, Dropout
 from .layers import mask_chronological
 from ._conversions import sentences_to_tensor, tensor_to_sentences
 from ._conversions import floats_to_tensor
 from ._neural_network_classifier import NeuralNetworkClassifier
 from ._loss_functions import cross_entropy
+from .layers._functional import positional_encoding
 from pygmalion.unsupervised.tokenizers import DynamicTokenizer, Tokenizer
 from pygmalion.unsupervised.tokenizers import SpecialToken, DynamicTextDataset
 from pygmalion.utilities import document
@@ -32,7 +33,6 @@ class TraductorModule(torch.nn.Module):
                  n_stages: int,
                  projection_dim: int,
                  n_heads: int,
-                 hidden_layers: List[dict],
                  max_length: int = 256,
                  activation: str = "relu",
                  dropout: Union[float, None] = None):
@@ -57,9 +57,10 @@ class TraductorModule(torch.nn.Module):
                                       self.embedding_dim)
         self.embedding_out = Embedding(self.tokenizer_out.n_tokens+3,
                                        self.embedding_dim)
+        self.dropout_in = Dropout(dropout)
+        self.dropout_out = Dropout(dropout)
         self.transformer = Transformer(n_stages, projection_dim, n_heads,
-                                       hidden_layers, activation=activation,
-                                       dropout=dropout)
+                                       dropout=dropout, activation=activation)
         self.output = Linear(self.embedding_dim,
                              self.tokenizer_out.n_tokens+3)
 
@@ -83,7 +84,10 @@ class TraductorModule(torch.nn.Module):
             tensor of floats of shape (N, L, D) with D the embedding dimension
         """
         X = self._as_tensor(X)
+        N, L = X.shape
         X = self.embedding_in(X)
+        X = positional_encoding(X)
+        X = self.dropout_in(X.reshape(N*L, -1)).reshape(N, L, -1)
         X = self.transformer.encode(X)
         return X
 
@@ -110,9 +114,11 @@ class TraductorModule(torch.nn.Module):
             tensor of floats of shape (N, Ly, D)
         """
         Y = self._as_tensor(Y)
-        _, Lq = Y.shape
+        N, L = Y.shape
         Y = self.embedding_out(Y)
-        mask = mask_chronological(Lq, Lq, Y.device)
+        Y = positional_encoding(Y)
+        Y = self.dropout_out(Y.reshape(N*L, -1)).reshape(N, L, -1)
+        mask = mask_chronological(L, L, Y.device)
         Y = self.transformer.decode(encoded, Y, mask=mask)
         return self.output(Y)
 

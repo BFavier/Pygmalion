@@ -1,7 +1,6 @@
 import torch
 import math
 from ._weighting import Linear
-from ._batch_norm import BatchNorm0d
 import torch.nn.functional as F
 from typing import Optional
 
@@ -16,7 +15,6 @@ class MultiHeadAttention(torch.nn.Module):
         self.query = Linear(dim, dim, bias=False)
         self.key = Linear(dim, dim, bias=False)
         self.value = Linear(dim, dim, bias=False)
-        self.norm = BatchNorm0d(dim)
 
     @classmethod
     def from_dump(cls, dump: dict) -> 'MultiHeadAttention':
@@ -28,8 +26,6 @@ class MultiHeadAttention(torch.nn.Module):
         obj.query = Linear.from_dump(dump["query"])
         obj.key = Linear.from_dump(dump["key"])
         obj.value = Linear.from_dump(dump["value"])
-        obj.norm = BatchNorm0d.from_dump(dump["norm"])
-        obj.dropout = dump["dropout"]
         return obj
 
     def forward(self, query: torch.Tensor, key: torch.Tensor,
@@ -59,11 +55,7 @@ class MultiHeadAttention(torch.nn.Module):
         torch.Tensor :
             tensor of shape (N, Lq, D)
         """
-        attention = self._multihead_attention_stock(query, key, mask)
-        N, Lq, D = attention.shape
-        attention = attention + query
-        attention = self.norm(attention.reshape(-1, self.out_features))
-        return attention.reshape(N, Lq, self.out_features)
+        return self._multihead_attention_stock(query, key, mask)
 
     def _multihead_attention(self, query: torch.Tensor, key: torch.Tensor,
                              mask: Optional[torch.Tensor]):
@@ -160,6 +152,4 @@ class MultiHeadAttention(torch.nn.Module):
                 "projection dim": self.projection_dim,
                 "query": self.query.dump,
                 "key": self.key.dump,
-                "value": self.value.dump,
-                "norm": self.norm.dump,
-                "dropout": self.dropout}
+                "value": self.value.dump}
