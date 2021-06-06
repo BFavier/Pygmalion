@@ -64,7 +64,7 @@ class NeuralNetwork(Model):
         self.module = self.ModuleType(*args, **kwargs)
         self.GPU = GPU
         self.optimization_method = optimization_method
-        self.residuals = {"training loss": [],
+        self.history = {"training loss": [],
                           "validation loss": [],
                           "epochs": [],
                           "best epoch": None}
@@ -160,17 +160,17 @@ class NeuralNetwork(Model):
         else:
             loss_module = LossModule(self)
         # Initializing
-        if self.residuals["best epoch"] is None:
+        if self.history["best epoch"] is None:
             best_loss = float("inf")
             best_epoch = 0
         else:
-            best_epoch = self.residuals["best epoch"]
-            i = self.residuals["epochs"].index(best_epoch)
-            best_loss = self.residuals["validation loss"][i]
+            best_epoch = self.history["best epoch"]
+            i = self.history["epochs"].index(best_epoch)
+            best_loss = self.history["validation loss"][i]
             if best_loss is None:
                 best_loss = float("inf")
             for v in ["validation loss", "training loss", "epochs"]:
-                self.residuals[v] = self.residuals[v][:i+1]
+                self.history[v] = self.history[v][:i+1]
         best_state = self._get_state()
         # trains the model, stops if the user press 'ctrl+c'
         self._training_loop(loss_module,
@@ -193,16 +193,16 @@ class NeuralNetwork(Model):
             f, ax = plt.subplots()
         if log:
             ax.set_yscale("log")
-        epochs = self.residuals["epochs"]
-        ax.scatter(epochs, self.residuals["training loss"],
+        epochs = self.history["epochs"]
+        ax.scatter(epochs, self.history["training loss"],
                    marker=".",
                    label="training loss")
-        if any([v is not None for v in self.residuals["validation loss"]]):
-            ax.scatter(epochs, self.residuals["validation loss"],
+        if any([v is not None for v in self.history["validation loss"]]):
+            ax.scatter(epochs, self.history["validation loss"],
                        marker=".",
                        label="validation loss")
-        if self.residuals["best epoch"] is not None:
-            ax.axvline(self.residuals["best epoch"], color="k")
+        if self.history["best epoch"] is not None:
+            ax.axvline(self.history["best epoch"], color="k")
         ax.set_ylabel("loss")
         ax.set_xlabel("epochs")
         ax.legend()
@@ -309,7 +309,7 @@ class NeuralNetwork(Model):
         return {"type": type(self).__name__,
                 "GPU": self.GPU,
                 "optimization method": self.optimization_method,
-                "residuals": self.residuals,
+                "residuals": self.history,
                 "module": self.module.dump}
 
     def _set_learning_rate(self, lr: float):
@@ -492,9 +492,9 @@ class NeuralNetwork(Model):
                 else:
                     best_epoch = epoch
                     validation_loss = None
-                self.residuals["training loss"].append(training_loss)
-                self.residuals["validation loss"].append(validation_loss)
-                self.residuals["epochs"].append(epoch)
+                self.history["training loss"].append(training_loss)
+                self.history["validation loss"].append(validation_loss)
+                self.history["epochs"].append(epoch)
                 if verbose:
                     msg = f"Epoch {epoch}: train={training_loss:.3g}"
                     if validation_loss is not None:
@@ -507,16 +507,16 @@ class NeuralNetwork(Model):
                 print("Training interrupted by the user", flush=True)
             # Trims data in case user interupted in the midle of the loop
             keys = ["validation loss", "training loss", "epochs"]
-            L = min(len(self.residuals[key]) for key in keys)
+            L = min(len(self.history[key]) for key in keys)
             for key in keys:
-                self.residuals[key] = self.residuals[key][:L]
-            best_epoch = min(self.residuals["epochs"][-1], best_epoch)
+                self.history[key] = self.history[key][:L]
+            best_epoch = min(self.history["epochs"][-1], best_epoch)
         finally:
             # load the best state
             if validation_data is not None:
                 self._set_state(best_state)
             # Save the best epoch
-            self.residuals["best epoch"] = best_epoch
+            self.history["best epoch"] = best_epoch
 
     def _batch_loss(self, loss_module: torch.nn.Module,
                     data: tuple,
