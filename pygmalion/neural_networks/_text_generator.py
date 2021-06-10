@@ -130,14 +130,15 @@ class TextGenerator(NeuralNetworkClassifier):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-    def __call__(self, sentence: str = "", p: float = 0.25) -> str:
+    def __call__(self, sentence: str = "", p: float = 0.25,
+                 max_tokens: int = 100) -> str:
         """
         Complete the given sentence.
         At each step, a random token is added from the p most probable tokens
         """
         self.module.eval()
         x, _, _ = self._data_to_tensor([sentence], None, device=self.device)
-        y = self.module.complete(x[:, :-1])
+        y = self.module.complete(x[:, :-1], p=p, max_tokens=max_tokens)
         return self._tensor_to_y(y)[0]
 
     def next(self, sentence: str):
