@@ -40,7 +40,7 @@ class NeuralNetwork(Model):
         assert cls.__name__ == dump["type"]
         obj = cls.__new__(cls)
         obj.module = cls.ModuleType.from_dump(dump["module"])
-        obj.residuals = dump["residuals"]
+        obj.history = dump["history"]
         obj.optimization_method = dump["optimization method"]
         obj.GPU = dump["GPU"]
         return obj
