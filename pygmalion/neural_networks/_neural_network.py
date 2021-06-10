@@ -603,7 +603,7 @@ class NeuralNetwork(Model):
                                  f"to the number of data {n_data}")
             if n_batches is None:
                 n_batches = math.ceil(n_data/batch_size)
-                bounds = [int(i/n_batches*(n_data+1))
+                bounds = [int(i/(n_batches)*(n_data))
                           for i in range(n_batches+1)]
             else:
                 bounds = [i*batch_size for i in range(n_batches+1)]
