@@ -14,10 +14,10 @@ df = pd.read_csv(data_path / "sentence_pairs.txt", header=None,
                  names=["en", "fr"], sep="\t")
 en, fr = df["en"].str.lower(), df["fr"].str.lower()
 
-tokenizer_in = ml.unsupervised.tokenizers.BytePairEncoder()
-c1 = tokenizer_in.train(en, min_frequency=1.0E-5)
-tokenizer_out = ml.unsupervised.tokenizers.BytePairEncoder()
-c2 = tokenizer_out.train(fr, min_frequency=1.0E-5)
+tokenizer_in = ml.unsupervised.tokenizers.WhitespaceTokenizer()
+c1 = tokenizer_in.train(en)
+tokenizer_out = ml.unsupervised.tokenizers.WhitespaceTokenizer()
+c2 = tokenizer_out.train(fr)
 
 
 n_stages = 2
@@ -27,7 +27,8 @@ model = ml.neural_networks.Traductor(tokenizer_in, tokenizer_out,
                                      n_stages, projection_dim, n_heads,
                                      GPU=0, optimization_method="Adam")
 
-model.train((en[:500], fr[:500]), n_epochs=1000, learning_rate=1.0E-3)
+model.train((en[:500], fr[:500]), n_epochs=100, learning_rate=1.0E-3,
+            batch_size=100, n_batches=5)
 
 model.plot_history()
 plt.show()

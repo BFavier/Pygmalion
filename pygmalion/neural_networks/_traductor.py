@@ -8,6 +8,7 @@ from ._conversions import floats_to_tensor
 from ._neural_network_classifier import NeuralNetworkClassifier
 from ._loss_functions import cross_entropy
 from .layers._functional import positional_encoding
+from pygmalion.unsupervised import tokenizers
 from pygmalion.unsupervised.tokenizers import DynamicTokenizer, Tokenizer
 from pygmalion.unsupervised.tokenizers import SpecialToken, DynamicTextDataset
 from pygmalion.utilities import document
@@ -20,11 +21,16 @@ class TraductorModule(torch.nn.Module):
         assert cls.__name__ == dump["type"]
         obj = cls.__new__(cls)
         torch.nn.Module.__init__(obj)
-        obj.lexicon_in = dump["lexicon in"]
-        obj.lexicon_out = dump["lexicon out"]
+        tkn = getattr(tokenizers, dump["tokenizer in"]["type"])
+        obj.tokenizer_in = tkn.from_dump(dump["tokenizer in"])
+        tkn = getattr(tokenizers, dump["tokenizer out"]["type"])
+        obj.tokenizer_out = tkn.from_dump(dump["tokenizer out"])
         obj.embedding_in = Embedding.from_dump(dump["embedding in"])
         obj.embedding_out = Embedding.from_dump(dump["embedding out"])
+        obj.dropout_in = Dropout.from_dump(dump["dropout in"])
+        obj.dropout_out = Dropout.from_dump(dump["dropout out"])
         obj.transformer = Transformer.from_dump(dump["transformer"])
+        obj.output = Linear.from_dump(dump["output"])
         return obj
 
     def __init__(self,
@@ -50,18 +56,18 @@ class TraductorModule(torch.nn.Module):
         """
         super().__init__()
         self.max_length = max_length
-        self.embedding_dim = projection_dim*n_heads
+        embedding_dim = projection_dim*n_heads
         self.tokenizer_in = tokenizer_in
         self.tokenizer_out = tokenizer_out
         self.embedding_in = Embedding(self.tokenizer_in.n_tokens+3,
-                                      self.embedding_dim)
+                                      embedding_dim)
         self.embedding_out = Embedding(self.tokenizer_out.n_tokens+3,
-                                       self.embedding_dim)
+                                       embedding_dim)
         self.dropout_in = Dropout(dropout)
         self.dropout_out = Dropout(dropout)
         self.transformer = Transformer(n_stages, projection_dim, n_heads,
                                        dropout=dropout, activation=activation)
-        self.output = Linear(self.embedding_dim,
+        self.output = Linear(embedding_dim,
                              self.tokenizer_out.n_tokens+3)
 
     def forward(self, X):
@@ -157,8 +163,12 @@ class TraductorModule(torch.nn.Module):
     @property
     def dump(self):
         return {"type": type(self).__name__,
+                "tokenizer in": self.tokenizer_in.dump,
+                "tokenizer out": self.tokenizer_out.dump,
                 "embedding in": self.embedding_in.dump,
                 "embedding out": self.embedding_out.dump,
+                "dropout in": self.dropout_in.dump,
+                "dropout out": self.dropout_out.dump,
                 "transformer": self.transformer.dump,
                 "output": self.output.dump}
 

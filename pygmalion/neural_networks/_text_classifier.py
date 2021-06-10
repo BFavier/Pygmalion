@@ -1,12 +1,13 @@
 import torch
 from typing import Union, List, Dict
-from .layers import Transformer, Embedding
+from .layers import TransformerEncoder, Embedding
 from .layers import Linear, Pooling1d, Dropout
 from ._conversions import sentences_to_tensor, tensor_to_classes
 from ._conversions import floats_to_tensor, classes_to_tensor
 from ._neural_network_classifier import NeuralNetworkClassifier
 from ._loss_functions import cross_entropy
 from .layers._functional import positional_encoding
+from pygmalion.unsupervised import tokenizers
 from pygmalion.unsupervised.tokenizers import DynamicTokenizer, Tokenizer
 from pygmalion.unsupervised.tokenizers import SpecialToken, DynamicTextDataset
 from pygmalion.utilities import document
@@ -19,10 +20,16 @@ class TextClassifierModule(torch.nn.Module):
         assert cls.__name__ == dump["type"]
         obj = cls.__new__(cls)
         torch.nn.Module.__init__(obj)
-        obj.lexicon_in = dump["lexicon in"]
-        obj.lexicon_out = dump["lexicon out"]
+        obj.classes = dump["classes"]
+        obj.max_length = dump["max length"]
+        tkn = getattr(tokenizers, dump["tokenizer"]["type"])
+        obj.tokenizer = tkn.from_dump(dump["tokenizer"])
         obj.embedding = Embedding.from_dump(dump["embedding"])
-        obj.transformer = Transformer.from_dump(dump["transformer"])
+        obj.dropout = Dropout.from_dump(dump["dropout"])
+        obj.transformer_encoder = TransformerEncoder.from_dump(
+            dump["transformer encoder"])
+        obj.pooling = Pooling1d.from_dump(dump["pooling"])
+        obj.output = Linear.from_dump(dump["output"])
         return obj
 
     def __init__(self,
@@ -40,17 +47,18 @@ class TextClassifierModule(torch.nn.Module):
         ...
         """
         super().__init__()
+        self.classes = list(classes)
         self.max_length = max_length
-        self.embedding_dim = projection_dim*n_heads
+        embedding_dim = projection_dim*n_heads
         self.tokenizer = tokenizer
         self.embedding = Embedding(self.tokenizer.n_tokens+3,
-                                   self.embedding_dim)
+                                   embedding_dim)
         self.dropout = Dropout(dropout)
-        self.classes = list(classes)
-        self.transformer = Transformer(n_stages, projection_dim, n_heads,
-                                       dropout=dropout, activation=activation)
+        self.transformer_encoder = TransformerEncoder(n_stages, projection_dim,
+                                                      n_heads, dropout=dropout,
+                                                      activation=activation)
         self.pooling = Pooling1d(None)
-        self.output = Linear(self.embedding_dim,
+        self.output = Linear(embedding_dim,
                              len(self.classes))
 
     def forward(self, X):
@@ -59,7 +67,7 @@ class TextClassifierModule(torch.nn.Module):
         X = self.embedding(X)
         X = positional_encoding(X)
         X = self.dropout(X.reshape(N*L, -1)).reshape(N, L, -1)
-        X = self.transformer(X)
+        X = self.transformer_encoder(X)
         X = self.pooling(X.transpose(1, 2))
         X = self.output(X)
         return X
@@ -78,9 +86,13 @@ class TextClassifierModule(torch.nn.Module):
     @property
     def dump(self):
         return {"type": type(self).__name__,
-                "embedding in": self.embedding_in.dump,
-                "embedding out": self.embedding_out.dump,
-                "transformer": self.transformer.dump,
+                "classes": self.classes,
+                "max length": self.max_length,
+                "tokenizer": self.tokenizer.dump,
+                "embedding": self.embedding.dump,
+                "dropout": self.dropout.dump,
+                "transformer encoder": self.transformer_encoder.dump,
+                "pooling": self.pooling.dump,
                 "output": self.output.dump}
 
 

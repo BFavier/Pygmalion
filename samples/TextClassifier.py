@@ -31,7 +31,7 @@ model = ml.neural_networks.TextClassifier(tokenizer, classes,
                                           optimization_method="Adam")
 train_data, val_data = ml.split(x, y, frac=0.2)
 model.train(train_data, validation_data=val_data, n_epochs=1000,
-            learning_rate=1.0E-3, batch_size=1000, n_batches=5)
+            learning_rate=1.0E-3, batch_size=500, n_batches=5)
 model.plot_history()
 
 x_val, y_val = val_data

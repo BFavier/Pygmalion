@@ -141,6 +141,11 @@ def test_Pooling():
                                       rtol=rtol, atol=atol)
 
 
+def test_TransformerEncoderStage():
+    # TODO: complete Transformer bricks
+    pass
+
+
 def test_UNet():
     for cls, dim in [(lay.UNet1d, 1), (lay.UNet2d, 2)]:
         downsampling = [[{"channels": 4}, {"channels": 8}], {"channels": 16}]

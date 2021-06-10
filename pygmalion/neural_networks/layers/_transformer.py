@@ -148,9 +148,10 @@ class TransformerDecoderStage(torch.nn.Module):
         return {"type": type(self).__name__,
                 "activation": self.activation.dump,
                 "self attention": self.masked_attention.dump,
+                "masked attention": self.masked_attention.dump,
                 "first dropout": self.first_dropout.dump,
-                "first norm": self.first_norm,
-                "masked attention": self.attention.dump,
+                "first norm": self.first_norm.dump,
+                "attention": self.attention.dump,
                 "second dropout": self.second_dropout.dump,
                 "second norm": self.second_norm.dump,
                 "expand": self.expand.dump,
@@ -237,7 +238,7 @@ class Transformer(torch.nn.Module):
         obj = cls.__new__(cls)
         torch.nn.Module.__init__(obj)
         obj.encoder = TransformerEncoder.from_dump(dump["encoder"])
-        obj.decoder = TransformerDecoder.from_dump(dump["encoder"])
+        obj.decoder = TransformerDecoder.from_dump(dump["decoder"])
         return obj
 
     def __init__(self, n_stages: int, projection_dim: int, n_heads: int,
