@@ -1,5 +1,5 @@
 import torch
-from typing import Union, List, Dict
+from typing import Union, List, Dict, Optional
 from .layers import TransformerEncoder, Embedding
 from .layers import Linear, Pooling1d, Dropout
 from ._conversions import sentences_to_tensor, tensor_to_classes
@@ -38,7 +38,7 @@ class TextClassifierModule(torch.nn.Module):
                  n_stages: int,
                  projection_dim: int,
                  n_heads: int,
-                 max_length: int = 256,
+                 max_length: Optional[int] = None,
                  activation: str = "relu",
                  dropout: Union[float, None] = None):
         """
@@ -124,10 +124,13 @@ class TextClassifier(NeuralNetworkClassifier):
         """
         if sentences is None:
             return None
-        elif issubclass(type(tokenizer), DynamicTokenizer):
+        elif (issubclass(type(tokenizer), DynamicTokenizer)
+              and tokenizer.regularize):
             return DynamicTextDataset(sentences, tokenizer, device)
         else:
-            return sentences_to_tensor(sentences, tokenizer, device)
+            max_length = self.module.max_length
+            return sentences_to_tensor(sentences, tokenizer, device,
+                                       max_sequence_length=max_length)
 
     @property
     def class_weights(self):

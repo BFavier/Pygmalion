@@ -1,9 +1,10 @@
 import torch
 from typing import List, Iterable
 from pygmalion.neural_networks._conversions import sentences_to_tensor
+from pygmalion._model import Model
 
 
-class Tokenizer:
+class Tokenizer(Model):
     """
     A text tokenizer is an object with an 'encode' and a 'decode' method
     """
@@ -38,6 +39,11 @@ class DynamicTokenizer(Tokenizer):
     at training time (sentence is segmented differently each iteration)
     """
 
+    def __init__(self, regularize: bool = False):
+        """
+        """
+        self.regularize = regularize
+
     def encode(self, sentence: str, regularize: bool = False) -> List[int]:
         raise NotImplementedError()
 
@@ -66,6 +72,9 @@ class DynamicTextDataset:
     Class emulating a torch.Tensor dataset
     for support to dynamic subword regularization
     """
+
+    def __repr__(self):
+        return "DynamicTextDataset()"
 
     def __init__(self, text: Iterable[str], tokenizer: DynamicTokenizer,
                  device: torch.device = torch.device("cpu")):

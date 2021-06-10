@@ -303,7 +303,7 @@ def tensor_to_bounding_boxes(tensors: Tuple[torch.Tensor],
 def sentences_to_tensor(sentences: Iterable[str],
                         tokenizer: object,
                         device: torch.device,
-                        max_length: Optional[int] = None,
+                        max_sequence_length: Optional[int] = None,
                         **kwargs) -> torch.Tensor:
     """
     converts a list of sentences to tensor
@@ -316,8 +316,12 @@ def sentences_to_tensor(sentences: Iterable[str],
         the tokenizer to segment sentences
     device : torch.device
         the device to host the tensor on
-    max_length : int or None
-        all sentences which are longer than max_length when encoded are droped
+    max_sequence_length : int or None
+        Sentences are stored in a tensor with one dimension corresponding to
+        the max token sequence's length, and sentences shorter are padded.
+        If max_sequence_length is specified, the size of this dimension is
+        fixed and sentences that are longer are droped.
+        Otherwise this dimension is defined by the longest encoded sentence.
     **kwargs : dict
         dict of kwargs passed to the tokenizer when encoding
 
@@ -331,12 +335,15 @@ def sentences_to_tensor(sentences: Iterable[str],
         and each scalar is the index of a word in the lexicon
     """
     sentences = [tokenizer.encode(s, **kwargs) for s in sentences]
+    if max_sequence_length is None:
+        L_max = max(len(s) for s in sentences)
+    else:
+        L_max = max_sequence_length - 2
+        sentences = [s for s in sentences if len(s) < L_max]
     n_tokens = tokenizer.n_tokens
     L_max = max(len(s) for s in sentences)
     start, end, pad = n_tokens, n_tokens+1, n_tokens+2
     data = [[start] + s + [end] + [pad]*(L_max - len(s)) for s in sentences]
-    if max_length is not None:
-        data = [d for d in data if len(d) <= max_length]
     return longs_to_tensor(data, device)
 
 

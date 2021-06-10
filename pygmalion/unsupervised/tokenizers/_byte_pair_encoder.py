@@ -22,7 +22,8 @@ class BytePairEncoder(DynamicTokenizer):
     @classmethod
     def from_dump(cls, dump: dict) -> "BytePairEncoder":
         assert dump["type"] == cls.__name__
-        return cls(code=dump["code"], dropout=dump["dropout"])
+        code = {int(k): v for k, v in dump["code"].items()}
+        return cls(code=code, dropout=dump["dropout"])
 
     def __repr__(self):
         return (f"{type(self).__name__}({len(self.vocabulary)} tokens,"
@@ -95,21 +96,24 @@ class BytePairEncoder(DynamicTokenizer):
         """
         Apply the tokenization
         """
-        sentence = list(sentence.encode("utf-8"))
-        for t, c in self.code.items():
-            sentence = list(self._contract(sentence, c, t,
-                            dropout=self.dropout if regularize else None))
+        if regularize and self.dropout is not None:
+            # TODO : improve performances
+            sentence = list(sentence.encode("utf-8"))
+            for t, c in self.code.items():
+                sentence = list(self._contract(sentence, c, t,
+                                dropout=self.dropout if regularize else None))
+        else:
+            sentence = [self._word_indexes[w] for w in
+                        re.findall(self._pattern, sentence.encode("utf-8"))]
+            # sentence = list(self._split_sentence(sentence))
         return sentence
 
     def decode(self, encoded: List[int]) -> str:
         """
         Decode a tokenized sentence
         """
-        codes = [coding for coding in self.code.items()]
-        for t, c in codes[::-1]:
-            encoded = list(self._expand(encoded, t, c))
-        encoded = [t for to in encoded if 0 <= t < 256]
-        return bytes(encoded).decode("utf-8", errors="replace")
+        decoded = b"".join([self.vocabulary[i] for i in encoded])
+        return decoded.decode("utf-8", errors="replace")
 
     @property
     def dump(self):
@@ -118,10 +122,32 @@ class BytePairEncoder(DynamicTokenizer):
                 "dropout": self.dropout}
 
     @property
-    def vocabulary(self) -> List[bytes]:
-        """returns all the single tokens"""
+    def regularize(self):
+        return self.dropout is not None
+
+    @property
+    def code(self):
+        return self._code
+
+    @code.setter
+    def code(self, other):
+        self._code = other
+        # setting vocabulary
         byte = [bytes([i]) for i in range(256)]
-        return byte + [self._bytes(t, self.code) for t in self.code.keys()]
+        self._vocabulary = byte + [self._bytes(t, self.code)
+                                   for t in self.code.keys()]
+        # setting word indexes
+        self._word_indexes = {w: i for i, w in enumerate(self.vocabulary)}
+        # lookup pattern
+        escaped_chars = [b".", b"+", b"*", b"?", b"^", b"$", b"(", b")", b"[",
+                         b"]", b"{", b"}", b"|", b"\\"]
+        vocab = sorted(self._vocabulary, key=lambda x: len(x), reverse=True)
+        vocab = [b"\\"+v if v in escaped_chars else v for v in vocab]
+        self._pattern = re.compile(b"|".join(vocab))
+
+    @property
+    def vocabulary(self) -> List[bytes]:
+        return self._vocabulary
 
     @property
     def n_tokens(self):
