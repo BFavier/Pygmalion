@@ -47,6 +47,9 @@ class SpecialToken:
     def __repr__(self):
         return f"<{self.name}>"
 
+    def __str__(self):
+        return self.__repr__()
+
     def __hash__(self):
         return hash(self.name)
 

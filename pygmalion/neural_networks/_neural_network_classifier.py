@@ -52,7 +52,8 @@ class NeuralNetworkClassifier(NeuralNetwork):
         else:
             weights = self.module.class_weights.cpu().tolist()
             classes = self.classes
-            return {c: w for c, w in zip(classes, weights)}
+            return {c: w for c, w in zip(classes, weights)
+                    if isinstance(c, (str, int, float))}
 
     @class_weights.setter
     def class_weights(self, other: Optional[Dict[object, float]]):

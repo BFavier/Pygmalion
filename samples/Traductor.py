@@ -50,7 +50,6 @@ with open(path / "tokenizer_out.pk", "rb") as file:
 n_stages = 2
 projection_dim = 16
 n_heads = 4
-hidden_layers = [{"features": 128}]
 
 model = ml.neural_networks.Traductor(tokenizer_in, tokenizer_out,
                                      n_stages, projection_dim, n_heads,

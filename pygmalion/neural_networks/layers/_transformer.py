@@ -72,11 +72,11 @@ class TransformerEncoderStage(torch.nn.Module):
                 "activation": self.activation.dump,
                 "self attention": self.self_attention.dump,
                 "intermediate norm": self.intermediate_norm.dump,
-                "intermediate_dropout": self.intermediate_dropout.dump,
+                "intermediate dropout": self.intermediate_dropout.dump,
                 "expand": self.expand.dump,
                 "contract": self.contract.dump,
-                "out_dropout": self.out_dropout.dump,
-                "out_norm": self.out_norm.dump}
+                "out dropout": self.out_dropout.dump,
+                "out norm": self.out_norm.dump}
 
 
 class TransformerDecoderStage(torch.nn.Module):

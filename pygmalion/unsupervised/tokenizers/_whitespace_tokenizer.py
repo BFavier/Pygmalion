@@ -20,7 +20,8 @@ class WhitespaceTokenizer(Tokenizer):
     @classmethod
     def from_dump(cls, dump: dict) -> "WhitespaceTokenizer":
         assert dump["type"] == cls.__name__
-        return WhitespaceTokenizer(vocabulary=dump["vocabulary"])
+        vocabulary = [cls._unknown]+dump["vocabulary"]
+        return WhitespaceTokenizer(vocabulary=vocabulary)
 
     def __repr__(self):
         return f"{type(self).__name__}({len(self.vocabulary)} words)"
@@ -57,7 +58,8 @@ class WhitespaceTokenizer(Tokenizer):
 
     def decode(self, sentence: List[int]) -> str:
         """decode a sentence"""
-        return " ".join([self.vocabulary[i] for i in sentence])
+        return " ".join([str(self.vocabulary[i]) for i in sentence
+                         if i < self.n_tokens])
 
     def _split_words(self, sentence: str) -> List[str]:
         """Split each sentence into a list of 'words'"""
@@ -83,4 +85,4 @@ class WhitespaceTokenizer(Tokenizer):
     @property
     def dump(self):
         return {"type": type(self).__name__,
-                "vocabulary": self.vocabulary}
+                "vocabulary": self.vocabulary[1:]}

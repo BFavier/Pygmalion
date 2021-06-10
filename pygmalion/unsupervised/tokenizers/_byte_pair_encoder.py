@@ -108,6 +108,7 @@ class BytePairEncoder(DynamicTokenizer):
         codes = [coding for coding in self.code.items()]
         for t, c in codes[::-1]:
             encoded = list(self._expand(encoded, t, c))
+        encoded = [t for to in encoded if 0 <= t < 256]
         return bytes(encoded).decode("utf-8", errors="replace")
 
     @property

@@ -8,6 +8,7 @@ from ._dropout import Dropout
 from ._embedding import Embedding
 from ._encoder import Encoder1d, Encoder2d
 from ._transformer import TransformerEncoderStage, TransformerDecoderStage
+from ._transformer import TransformerEncoder, TransformerDecoder
 from ._transformer import Transformer
 from ._multi_head_attention import MultiHeadAttention
 from ._padding import Padding1d, Padding2d
