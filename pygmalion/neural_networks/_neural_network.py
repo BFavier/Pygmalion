@@ -309,7 +309,7 @@ class NeuralNetwork(Model):
         return {"type": type(self).__name__,
                 "GPU": self.GPU,
                 "optimization method": self.optimization_method,
-                "residuals": self.history,
+                "history": self.history,
                 "module": self.module.dump}
 
     def _set_learning_rate(self, lr: float):
