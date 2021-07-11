@@ -38,7 +38,7 @@ class Model:
                 json.dump(self.dump, json_file)
         elif suffix == ".h5":
             f = h5py.File(file, "w", track_order=True)
-            self._save_h5(f, self.dump)
+            self._save_h5(f, "dump", self.dump)
         else:
             raise ValueError("The model must be saved as a '.json' "
                              f"or '.h5' file, but got '{suffix}'")
@@ -50,9 +50,9 @@ class Model:
                                   f"'{type(self).__name__}'")
 
     @classmethod
-    def _save_h5(cls, group: h5py.Group, obj: object):
+    def _save_h5(cls, group: h5py.Group, key: str, value: object):
         """
-        Recursively populate an hdf5 file with the object
+        Recursively populate an hdf5 file with the given object
 
         Parameters
         ----------
@@ -61,28 +61,26 @@ class Model:
         obj : object
             The python object to store in the group
         """
-        if isinstance(obj, dict):
-            group.attrs["type"] = "dict"
-            for key, value in obj.items():
-                g = group.create_group(key, track_order=True)
-                cls._save_h5(g, value)
-        elif isinstance(obj, list):
-            arr = np.array(obj)
-            if np.issubdtype(arr.dtype, np.number):
-                group.attrs["type"] = "binary"
-                group["data"] = arr
+        if isinstance(value, dict):
+            g = group.create_group(key, track_order=True)
+            g.attrs["type"] = "dict"
+            for k, v in value.items():
+                cls._save_h5(g, k, v)
+        elif any(isinstance(value, t) for t in [float, int, bool, list]):
+            arr = np.array(value)
+            if np.issubdtype(arr.dtype, np.number) or (arr.dtype == bool):
+                group[key] = arr
+                group[key].attrs["type"] = "numbers"
             else:
-                group.attrs["type"] = "list"
-                for i, value in enumerate(obj):
-                    g = group.create_group(f"{i}")
-                    cls._save_h5(g, value)
-        elif isinstance(obj, str):
-            group.attrs["type"] = "str"
-            group.attrs["data"] = obj
-        elif any(isinstance(obj, t) for t in [float, int, bool]):
-            group.attrs["type"] = "scalar"
-            group.attrs["data"] = obj
-        elif obj is None:
-            group.attrs["type"] = "None"
+                g = group.create_group(key, track_order=True)
+                g.attrs["type"] = "list"
+                for i, v in enumerate(value):
+                    cls._save_h5(g, f"{i}", v)
+        elif isinstance(value, str):
+            group[key] = value.encode("utf-8")
+            group[key].attrs["type"] = "str"
+        elif value is None:
+            g = group.create_group(key, track_order=True)
+            g.attrs["type"] = "None"
         else:
-            raise ValueError(f"Unsupported data type: {type(obj)}")
+            raise ValueError(f"Unsupported data type '{type(value)}'")

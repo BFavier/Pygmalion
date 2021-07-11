@@ -1,8 +1,9 @@
 import pathlib
 import json
 import h5py
-from . import neural_networks as nn
-from . import unsupervised as un
+from typing import Union
+import pygmalion.neural_networks as nn
+import pygmalion.unsupervised.tokenizers as tok
 
 
 def load(file: str) -> object:
@@ -15,29 +16,29 @@ def load(file: str) -> object:
         path of the file to read
     """
     file = pathlib.Path(file)
-    suffix = file.suffix.lower()
     if not file.is_file():
         raise FileNotFoundError("The file '{file}' does not exist")
+    suffix = file.suffix.lower()
     if suffix == ".json":
         with open(file) as json_file:
             dump = json.load(json_file)
     elif suffix == ".h5":
         f = h5py.File(file, "r")
-        dump = _load_h5(f)
+        dump = _load_h5(f["dump"])
     else:
         raise ValueError("The file must be '.json' or '.h5' file, "
                          f"but got a '{suffix}'")
     if "type" not in dump.keys():
         raise KeyError("The model's dump doesn't have a 'type' key")
     typename = dump["type"]
-    for subpackage in [nn, un]:
+    for subpackage in [nn, tok]:
         if hasattr(subpackage, typename):
             cls = getattr(subpackage, typename)
             return cls.from_dump(dump)
     raise ValueError(f"Unknow model type: '{typename}'")
 
 
-def _load_h5(cls, group: h5py.Group) -> dict:
+def _load_h5(group: Union[h5py.Group, h5py.Dataset]) -> dict:
     """
     Recursively load the content of an hdf5 file into a python dict.
 
@@ -56,13 +57,11 @@ def _load_h5(cls, group: h5py.Group) -> dict:
         return {name: _load_h5(group[name]) for name in group}
     elif group_type == "list":
         return [_load_h5(group[name]) for name in group]
-    elif group_type == "scalar":
-        return group.attrs["data"].tolist()
+    elif group_type == "numbers":
+        return group[...].tolist()
     elif group_type == "str":
-        return group.attrs["data"]
+        return group[...].tolist().decode("utf-8")
     elif group_type == "None":
         return None
-    elif group_type == "binary":
-        return group["data"][...].tolist()
     else:
         raise ValueError(f"Unknown group type '{group_type}'")
