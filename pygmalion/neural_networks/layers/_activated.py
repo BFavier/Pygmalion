@@ -20,7 +20,7 @@ class Activated(torch.nn.Module):
 
     @classmethod
     def from_dump(cls, dump: dict):
-        assert dump["type"] == cls.__name__
+        assert dump["type"].startswith(cls.__name__)
         obj = cls.__new__(cls)
         torch.nn.Module.__init__(obj)
         if "padding" in dump.keys():
