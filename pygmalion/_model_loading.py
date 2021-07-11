@@ -1,7 +1,8 @@
 import pathlib
 import json
 import h5py
-import pygmalion.neural_networks as nn
+from . import neural_networks as nn
+from . import unsupervised as un
 
 
 def load(file: str) -> object:
@@ -29,7 +30,7 @@ def load(file: str) -> object:
     if "type" not in dump.keys():
         raise KeyError("The model's dump doesn't have a 'type' key")
     typename = dump["type"]
-    for subpackage in [nn]:
+    for subpackage in [nn, un]:
         if hasattr(subpackage, typename):
             cls = getattr(subpackage, typename)
             return cls.from_dump(dump)
