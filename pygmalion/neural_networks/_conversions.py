@@ -130,7 +130,7 @@ def segmented_to_tensor(images: np.ndarray, colors: Iterable,
         colors = [[c] for c in colors]
     else:
         raise RuntimeError("Unexpected shape of segmented images")
-    masks = np.array([np.all(images == c, axis=3) for c in colors])
+    masks = np.stack([np.all(images == c, axis=3) for c in colors])
     if not masks.any(axis=0).all():
         raise RuntimeError("Found color associated to no class")
     return longs_to_tensor(np.argmax(masks, axis=0), device)
