@@ -46,8 +46,8 @@ class BytePairEncoder(DynamicTokenizer):
         self.dropout = dropout
 
     def train(self, sentences: List[str], max_tokens: int = 5000,
-              min_frequency: float = 1.0E-4, verbose: bool = True,
-              word_piece: bool = True):
+              min_frequency: float = 1.0E-6, verbose: bool = True,
+              word_piece: bool = True, prune: bool = False):
         """
         Trains the byte pair encoding
 
@@ -67,6 +67,8 @@ class BytePairEncoder(DynamicTokenizer):
             and subword can't cross the word boundary.
             This should be set to False for languages that are not whitespace
             separated.
+        prune : bool
+            If prune is True, unfrequent tokens are pruned from vocabulary
 
         Returns
         -------
@@ -75,22 +77,25 @@ class BytePairEncoder(DynamicTokenizer):
         """
         print("loading data ...", flush=True)
         if word_piece:
-            unique_words = Counter(self._split_words(sentences))
-            sentences = [Sentence(s, weight=c) for s, c in unique_words.items()
-                         if len(s) > 0]
+            unique_words = Counter(self._mergeables(sentences))
+            sentences = [Sentence(s, weight=c)
+                         for s, c in unique_words.items()]
         else:
             sentences = [Sentence(s) for s in sentences if len(s) > 0]
         code = dict()
         pairs_count = self._get_pair_counts(sentences)
         tokens_count = self._get_tokens_count(sentences)
-        n_tokens = sum(tokens_count.values())
+        n_tokens = sum(k*v for k, v in tokens_count.items())
         n_tokens = self._build_code(code, sentences, pairs_count, tokens_count,
                                     n_tokens, max_tokens, min_frequency,
-                                    verbose)
-        self.code, final_tokens = self._prune_code(code, tokens_count,
-                                                   n_tokens, min_frequency,
-                                                   verbose)
-        return {self._bytes(k, self.code): i for k, i in final_tokens.items()}
+                                    verbose, prune)
+        if prune:
+            code, tokens_count = self._prune_code(
+                code, tokens_count, n_tokens, min_frequency, verbose)
+        self.code = code
+        return {self._bytes(k, code): i for k, i in
+                sorted(tokens_count.items(), key=lambda x: x[1], reverse=True)
+                if i > 0}
 
     def encode(self, sentence: str, regularize: bool = True) -> List[int]:
         """
@@ -142,7 +147,8 @@ class BytePairEncoder(DynamicTokenizer):
         escaped_chars = [b".", b"+", b"*", b"?", b"^", b"$", b"(", b")", b"[",
                          b"]", b"{", b"}", b"|", b"\\"]
         vocab = sorted(self._vocabulary, key=lambda x: len(x), reverse=True)
-        vocab = [b"\\"+v if v in escaped_chars else v for v in vocab]
+        vocab = [b"".join(b"\\"+bytes([c]) if bytes([c]) in escaped_chars
+                 else bytes([c]) for c in v) for v in vocab]
         self._pattern = re.compile(b"|".join(vocab))
 
     @property
@@ -153,9 +159,18 @@ class BytePairEncoder(DynamicTokenizer):
     def n_tokens(self):
         return len(self.code) + 256
 
-    def _split_words(self, sentences: Iterable[str]) -> Iterable[str]:
-        """Split each sentence into a list of 'words'"""
-        return chain(*(re.findall(r"[\w]+|[^\w]", s) for s in sentences))
+    def _mergeables(self, sentences: Iterable[str]) -> Iterable[str]:
+        """
+        Extract all mergeables substrings
+        (series of digits or series of letters)
+
+        Example
+        -------
+        >>> list(self._mergeables(["Tökenizer2000, stârts_at 14h30..."]))
+        ['Tokenizer', '2000', ',', 'starts', 'at', '14', 'h', '30', '...']
+        """
+        return chain(*(re.findall(r"[\d]+|[^\W\d_]+|[^\w\s]+", s)
+                       for s in sentences))
 
     def _bytes(self, token_index: int, code: Dict[int, Tuple[int]]) -> bytes:
         """returns the bytes representation of a token"""
@@ -169,18 +184,22 @@ class BytePairEncoder(DynamicTokenizer):
                     sentences: List['Sentence'],
                     pairs_count: Dict[Tuple[int, int], int],
                     tokens_count: Dict[int, int], n_tokens: int,
-                    max_tokens: int, min_frequency: float, verbose: bool
-                    ) -> int:
+                    max_tokens: int, min_frequency: float,
+                    verbose: bool, prune: bool) -> int:
         """
         Fills the code dictionnary with new token until not possible anymore
         """
+        # the size in bytes of each token
+        token_sizes = {i: 1 for i in range(256)}
         for i in count(1):
             if len(pairs_count) == 0:
                 if verbose:
                     print("\nno more pairs to merge", flush=True)
                 break
-            best_pair, pair_count = max(pairs_count.items(),
-                                        key=lambda x: x[1])
+            best_pair, pair_count = max(
+                pairs_count.items(),
+                key=lambda x: (x[1], -sum(token_sizes[p] for p in x[0]))
+                )
             new_token = 256 + len(code)
             new_token_frequency = pair_count / (n_tokens - pair_count)
             if new_token_frequency < min_frequency:
@@ -188,6 +207,7 @@ class BytePairEncoder(DynamicTokenizer):
                     print("\nminimum token frequency reached", flush=True)
                 break
             code[new_token] = best_pair
+            token_sizes[new_token] = sum(token_sizes[p] for p in best_pair)
             added_pairs, removed_pairs = Counter(), Counter()
             for s in sentences:
                 s.merge(best_pair, new_token, added_pairs, removed_pairs)
@@ -197,9 +217,12 @@ class BytePairEncoder(DynamicTokenizer):
             tokens_count[best_pair[1]] -= pair_count
             tokens_count[new_token] += pair_count
             n_tokens -= pair_count
-            n_valid = sum(self._token_is_valid(token, tokens_count,
-                                               n_tokens, min_frequency)
-                          for token in code.keys()) + 256
+            if prune:
+                n_valid = sum(self._token_is_valid(token, tokens_count,
+                                                   n_tokens, min_frequency)
+                              for token in code.keys()) + 256
+            else:
+                n_valid = 256+len(code)
             if verbose:
                 print(f"\r\033[K\rMerge iteration {i}: "
                       f"{n_valid} tokens, "
@@ -236,11 +259,11 @@ class BytePairEncoder(DynamicTokenizer):
         mapping.update({i: i for i in range(256)})
         final_code = {mapping[k]: tuple(mapping[t] for t in v)
                       for k, v in code.items()}
-        final_tokens = {mapping[k]: i for k, i in tokens_count.items()
-                        if i > 0}
+        final_tokens_count = {mapping[k]: i for k, i in tokens_count.items()
+                              if i > 0}
         if verbose:
             print("")
-        return final_code, final_tokens
+        return final_code, final_tokens_count
 
     def _get_pair_counts(self, sentences: List['Sentence']) -> Counter:
         """
@@ -250,12 +273,21 @@ class BytePairEncoder(DynamicTokenizer):
                     for s in sentences)
         return sum(iterable, Counter())
 
+    def _weighted_count(self, sentence: 'Sentence') -> Counter:
+        """
+        Count unique tokens in a sentence, multiplied by the sentence's weight
+        """
+        counter = dict()
+        for token in sentence:
+            i = token.i
+            counter[i] = counter.get(i, 0) + sentence.weight
+        return Counter(counter)
+
     def _get_tokens_count(self, sentences: List['Sentence']) -> Counter:
         """
         Returns a counter of the occurences of each token in all the sentences
         """
-        iterable = (Counter({int(t): s.weight for t in s}) for s in sentences)
-        return sum(iterable, Counter())
+        return sum((self._weighted_count(s) for s in sentences), Counter())
 
     def _unmerge_tokens(self, token: int, code: Dict[int, Tuple[int]]
                         ) -> Dict[int, Tuple[int]]:
