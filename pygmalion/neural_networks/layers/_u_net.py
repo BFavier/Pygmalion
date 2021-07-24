@@ -96,7 +96,7 @@ class UNet(torch.nn.Module):
         return self.encoder.in_features(out_features)
 
     def out_features(self, in_features: int) -> int:
-        return self.decoder(in_features)
+        return self.decoder.out_features(in_features)
 
     @property
     def UpsamplingNd(self):
