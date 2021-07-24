@@ -21,14 +21,14 @@ y_test = np.array(classes)[np.load(data_path / "test_labels.npy")]
 in_features = 1
 
 # Create and train the model
-conv = [[{"window": (3, 3), "channels": 16, "dropout": 0.2, "padded": False},
-         {"window": (3, 3), "channels": 16, "dropout": 0.2}],
-        [{"window": (3, 3), "channels": 32, "dropout": 0.2, "padded": False},
-         {"window": (3, 3), "channels": 32, "dropout": 0.2}],
-        [{"window": (3, 3), "channels": 64, "dropout": 0.2, "padded": False},
-         {"window": (3, 3), "channels": 32, "dropout": 0.2}]]
+conv = [[{"window": (3, 3), "features": 16, "dropout": 0.2, "padded": False},
+         {"window": (3, 3), "features": 16, "dropout": 0.2}],
+        [{"window": (3, 3), "features": 32, "dropout": 0.2, "padded": False},
+         {"window": (3, 3), "features": 32, "dropout": 0.2}],
+        [{"window": (3, 3), "features": 64, "dropout": 0.2, "padded": False},
+         {"window": (3, 3), "features": 32, "dropout": 0.2}]]
 pooling = [(2, 2), (2, 2)]
-dense = [{"channels": 16}]
+dense = [{"features": 16}]
 model = nn.ImageClassifier(in_features, classes,
                            convolutions=conv,
                            pooling=pooling,
@@ -38,13 +38,13 @@ model = nn.ImageClassifier(in_features, classes,
 # print(model.module.shapes)
 train_data, val_data = ml.split(x_train, y_train, frac=0.2)
 model.train(train_data, val_data, n_epochs=300, batch_size=1000,
-            learning_rate=1.0E-3, minibatching=True)
+            n_batches=1, learning_rate=1.0E-3)
 
 # Plot results
-model.plot_residuals()
+model.plot_history()
 f, ax = plt.subplots()
 y_pred = sum([model(x_test[i:i+100]) for i in range(0, len(x_test), 100)], [])
-ml.plot_confusion_matrix(y_pred, y_test, ax=ax)
+ml.plot_matrix(ml.confusion_matrix(y_pred, y_test), ax=ax, color_bar=True)
 acc = ml.accuracy(y_pred, y_test)
 ax.set_title(f"Accuracy = {acc:.3g}")
 f.tight_layout()

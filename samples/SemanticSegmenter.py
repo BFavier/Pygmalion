@@ -19,20 +19,20 @@ mean = sum([w for w in class_weights.values()])
 class_weights = {k: w/mean for k, w in class_weights.items()}
 with open(data_path / "classes.json", "r") as file:
     classes = json.load(file)
-x = np.load(data_path / "train_images.npy")
-y = np.load(data_path / "train_segmented.npy")
-x_test = np.load(data_path / "test_images.npy")
-y_test = np.load(data_path / "test_segmented.npy")
+x = np.load(data_path / "train_images.npy")[::10]
+y = np.load(data_path / "train_segmented.npy")[::10]
+x_test = np.load(data_path / "test_images.npy")[::10]
+y_test = np.load(data_path / "test_segmented.npy")[::10]
 
 # Create and train the model
-downward = [{"window": (3, 3), "channels": 4},
-            {"window": (3, 3), "channels": 4},
-            {"window": (3, 3), "channels": 8},
-            {"window": (3, 3), "channels": 8},
-            {"window": (3, 3), "channels": 16},
-            {"window": (3, 3), "channels": 16},
-            {"window": (3, 3), "channels": 32},
-            {"window": (3, 3), "channels": 32}]
+downward = [{"window": (3, 3), "features": 4},
+            {"window": (3, 3), "features": 4},
+            {"window": (3, 3), "features": 8},
+            {"window": (3, 3), "features": 8},
+            {"window": (3, 3), "features": 16},
+            {"window": (3, 3), "features": 16},
+            {"window": (3, 3), "features": 32},
+            {"window": (3, 3), "features": 32}]
 pooling = [(2, 2), (2, 2), (2, 2), (2, 2), (2, 2), (2, 2), (2, 2), (2, 2)]
 upward = downward[::-1]
 model = nn.SemanticSegmenter(3, classes,
@@ -44,8 +44,8 @@ model = nn.SemanticSegmenter(3, classes,
                              GPU=0)
 # print(model.module.shapes)
 train_data, val_data = ml.split(x, y, frac=0.2)
-model.train(train_data, val_data, n_epochs=5000, batch_size=15,
-            learning_rate=1.0E-3, minibatching=True)
+model.train(train_data, val_data, n_epochs=5000, batch_size=15, n_batches=1,
+            learning_rate=1.0E-3, patience=100)
 
 # Plot metrics
 # model.plot_residuals()
