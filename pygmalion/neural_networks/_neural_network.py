@@ -3,7 +3,7 @@ import torch
 import warnings
 import matplotlib.pyplot as plt
 import torch.nn.parallel as parallel
-from typing import Union, List, Tuple, Optional, Iterator
+from typing import Union, Tuple, List, Optional, Callable
 from .._model import Model
 
 
@@ -91,24 +91,23 @@ class NeuralNetwork(Model):
         """
         torch.cuda.empty_cache()
         self.module.eval()
-        x, _, _ = self._data_to_tensor(X, None, device=self.device)
+        data, _ = self._batch_generator((X, None), None, batch_size, None,
+                                        self.device, shuffle=False)
         with torch.no_grad():
-            data = (x, None, None)
-            y = torch.cat([self.module(batch) for (batch, _, _), _ in
-                           self._as_batches(data, batch_size, None)],
+            y = torch.cat([self.module(batch) for batch, _, _ in data()],
                           dim=0)
         return self._tensor_to_y(y)
 
     def train(self, training_data: tuple,
               validation_data: Union[tuple, None] = None,
               n_epochs: int = 1000,
-              patience: int = 100,
               learning_rate: float = 1.0E-3,
-              batch_size: Union[int, None] = None,
-              n_batches: Union[int, None] = None,
-              L1: Union[float, None] = None,
-              L2: Union[float, None] = None,
-              norm_update_factor: Union[float, None] = 0.1,
+              patience: Optional[int] = None,
+              batch_size: Optional[int] = None,
+              n_batches: Optional[int] = None,
+              L1: Optional[float] = None,
+              L2: Optional[float] = None,
+              keep_best: bool = True,
               verbose: bool = True):
         """
         Trains a neural network model.
@@ -124,10 +123,12 @@ class NeuralNetwork(Model):
             Similar to training_data or None
         n_epochs : int
             The maximum number of epochs
-        patience : int
-            The number of epochs before early stopping
         learning_rate : float
             The learning rate used to update the parameters
+        patience : int or None
+            The number of epochs before early stopping
+            (if no improvement for 'patience' epochs, stops training early)
+            If None, no early stoping is performed
         batch_size : int or None
             Maximum size of the batchs
             Or None to process the full data in one go
@@ -138,21 +139,22 @@ class NeuralNetwork(Model):
             L1 regularization added to the loss function
         L2 : float or None
             L2 regularization added to the loss function
-        norm_update_factor : float or None
-            The update factor used for batch normalization
+        keep_best : bool
+            If True, the model is checkpointed at each epoch if there was
+            improvement,
+            and the best model is loaded back at the end of training
         verbose : bool
             If True the loss are displayed at each epoch
         """
         self._set_learning_rate(learning_rate)
-        self._set_norm_update_factor(norm_update_factor)
         self.module.train()
-        # Converts training/validation data to tensors
-        device = self.device if batch_size is None else torch.device("cpu")
-        shuffle = (isinstance(self.GPU, list) or batch_size is not None)
-        training_data = self._data_to_tensor(*training_data, device=device)
-        if validation_data is not None:
-            validation_data = self._data_to_tensor(*validation_data,
-                                                   device=device)
+        # Converts training/validation data to generators
+        if batch_size is None and n_batches is None:
+            device = self.device
+        else:
+            device = torch.device("cpu")
+        training_data, validation_data = self._batch_generator(
+            training_data, validation_data, batch_size, n_batches, device)
         # Wrap the module if training on multi GPU
         if isinstance(self.GPU, list):
             loss_module = parallel.DataParallel(LossModule(self),
@@ -173,10 +175,9 @@ class NeuralNetwork(Model):
                 self.history[v] = self.history[v][:i+1]
         best_state = self._get_state()
         # trains the model, stops if the user press 'ctrl+c'
-        self._training_loop(loss_module,
-                            training_data, validation_data, n_epochs,
-                            patience, verbose, batch_size, n_batches,
-                            L1, L2, best_epoch, best_loss, best_state, shuffle)
+        self._training_loop(loss_module, training_data, validation_data,
+                            n_epochs, patience, verbose, keep_best, L1, L2,
+                            best_epoch, best_loss, best_state)
 
     def plot_history(self, ax=None, log: bool = True):
         """
@@ -343,7 +344,8 @@ class NeuralNetwork(Model):
             if type(m).__name__.startswith("BatchNorm"):
                 m.momentum = f
 
-    def _data_to_tensor(self, X, Y, weights=None) -> tuple:
+    def _data_to_tensor(self, X, Y, weights=None,
+                        device=torch.device("cpu")) -> tuple:
         """
         Place holder for the method that converts input data to torch tensor
         """
@@ -400,19 +402,17 @@ class NeuralNetwork(Model):
             self.optimizer.load_state_dict(state["optim"])
 
     def _training_loop(self, loss_module: torch.nn.Module,
-                       training_data: tuple,
-                       validation_data: Union[tuple, None],
+                       training_data: Callable,
+                       validation_data: Optional[Callable],
                        n_epochs: int,
-                       patience: int,
+                       patience: Optional[int],
                        verbose: bool,
-                       batch_size: Union[int, None],
-                       n_batches: Union[int, None],
+                       keep_best: bool,
                        L1: Union[float, None],
                        L2: Union[float, None],
                        best_epoch: int,
                        best_loss: float,
-                       best_state: tuple,
-                       shuffle: bool):
+                       best_state: tuple):
         """
         Trains the model for a fixed number of epoch,
         or until validation loss has'nt decreased for 'patience' epochs,
@@ -435,24 +435,23 @@ class NeuralNetwork(Model):
         -----------
         loss_module : torch.nn.Module
             the module evaluating the loss of the model
-        training_data : tuple or Callable
-            The data provided to 'self._batch'
-        validation_data : tuple or Callbale or None
-            Same as 'training_data' or None if not using early stoping
+        training_data : Callable
+            The generator function yielding training batches
+        validation_data : Callbale or None
+            Same as 'training_data'
+            or None if not using validation data
         n_epochs : int
-            The number of epochs to performe
-        patience : int
+            The number of epochs to perform
+        patience : int or None
             The number of epochs waiting for improvement
             before early stoping
         verbose : bool
             If True prints models info while training
-        batch_size : int or None
-            The maximum number of items in a batch
-            or None to evaluate on all the data at once
-        n_batches : int or None
-            This parameter is not used if batch_size is None.
-            Number of batchs the gradient is accumulated on at each epoch.
-            If None, the whole training data is processed each epoch
+        keep_best : bool
+            If True, the model is checkpointed at each epoch,
+            and the epoch with the lowest loss is loaded back at the end
+            (validation loss is used if validation data are provided,
+            otherwise, training loss is used)
         L1 : float or None
             The L1 regularization added to the loss function
         L2 : float or None
@@ -463,44 +462,42 @@ class NeuralNetwork(Model):
             the value of the previous best validation loss
         best_state : tuple
             the snapshot of the model as returned by 'self._get_state'
-        shuffle : bool
-            if True, the data is shuffled before each epoch
         """
         try:
+            # looping on epochs
             for epoch in range(best_epoch+1, best_epoch+n_epochs+1):
+                msg = f"Epoch {epoch}: "
+                self.history["epochs"].append(epoch)
                 self.optimizer.step()
                 self.optimizer.zero_grad()
-                training_loss = self._batch_loss(loss_module,
-                                                 self._shuffle(training_data)
-                                                 if shuffle else training_data,
-                                                 batch_size, n_batches,
-                                                 L1, L2, train=True)
+                # training loss
+                loss = self._eval_loss(loss_module, training_data,
+                                       L1, L2, train=True)
+                self.history["training loss"].append(loss)
+                msg += f"train={loss:.3g}"
+                # validation loss
                 if validation_data is not None:
-                    validation_loss = self._batch_loss(loss_module,
-                                                       self._shuffle(
-                                                           validation_data)
-                                                       if shuffle
-                                                       else validation_data,
-                                                       batch_size, None,
-                                                       L1, L2, train=False)
-                    if validation_loss < best_loss:
+                    loss = self._eval_loss(loss_module, validation_data,
+                                           L1, L2, train=False)
+                    self.history["validation loss"].append(loss)
+                    msg += f" val={loss:.3g}"
+                else:
+                    self.history["validation loss"].append(None)
+                # model checkpointing
+                if keep_best:
+                    if (loss < best_loss):
                         best_epoch = epoch
-                        best_loss = validation_loss
+                        best_loss = loss
                         best_state = self._get_state()
-                    elif (epoch - best_epoch) > patience:
-                        break
+                    else:
+                        msg += " - no improvement"
                 else:
                     best_epoch = epoch
-                    validation_loss = None
-                self.history["training loss"].append(training_loss)
-                self.history["validation loss"].append(validation_loss)
-                self.history["epochs"].append(epoch)
+                # early stoping
+                if patience is not None and (epoch - best_epoch) > patience:
+                    break
+                # message printing
                 if verbose:
-                    msg = f"Epoch {epoch}: train={training_loss:.3g}"
-                    if validation_loss is not None:
-                        msg += f" val={validation_loss:.3g}"
-                        if best_epoch != epoch:
-                            msg += " - no improvement"
                     print(msg, flush=True)
         except KeyboardInterrupt:
             if verbose:
@@ -513,171 +510,16 @@ class NeuralNetwork(Model):
             best_epoch = min(self.history["epochs"][-1], best_epoch)
         finally:
             # load the best state
-            if validation_data is not None:
+            if keep_best:
                 self._set_state(best_state)
             # Save the best epoch
             self.history["best epoch"] = best_epoch
 
-    def _batch_loss(self, loss_module: torch.nn.Module,
-                    data: tuple,
-                    batch_size: Union[int, None],
-                    n_batches: Union[int, None],
-                    L1: Union[float, None],
-                    L2: Union[float, None],
-                    train: bool) -> float:
-        """
-        Compute the loss on the given data, processing it by batchs of maximum
-        size 'batch_size'.
-        If 'batch_size' is None, process in one batch.
-
-        Parameters
-        ----------
-        loss_module : torch.nn.Module
-            module evaluating the loss of the model
-        data : tuple
-            The (X, Y, weights) to evaluate the loss on,
-            each of them is a Tensor or None.
-        batch_size : int or None
-            The maximum number of observations in a batch.
-            If None the whole data is processed in one batch.
-        n_batches : int or None
-            If not None, set the number of batches processed per epoch
-            Otherwise the whole data is processed
-        L1 : float or None
-            The L1 regularization added to the loss function
-        L2 : float or None
-            The L2 regularization added to the loss function
-        train : bool
-            If True, the gradient is back propagated
-
-        Returns
-        -------
-        float :
-            The loss function averaged over the batchs
-        """
-        losses = []
-        for data, n in self._as_batches(data, batch_size, n_batches):
-            losses.append(self._eval_loss(loss_module, *data, L1, L2, train,
-                                          scale=1./n))
-        loss = sum(losses)
-        return loss
-
-    def _as_batches(self, data: tuple, batch_size: Optional[int],
-                    n_batches: Optional[int]) -> Tuple[Iterator, int]:
-        """
-        Returns an iterator over the data splited in batches, as well as
-        the total number of batches.
-
-        - If batch size is None, returns the whole data in one go
-        - If batch_size is not None and n_batches is None,
-          returns the highest possible number of equal size batches that are
-          smaller than batch_size
-        - If batch_size and n_batches are both integers, a maximum of n_batches
-          batches of size batch_size are yielded.
-          If batch_size*n_batches is superior
-
-        Parameters
-        ----------
-        data : tuple of Tensor/None
-            the tuple of (X, Y, weights) data
-        batch_size : int or None
-            the maximum batch size
-        n_batches : int or None
-            the number of batches to yield
-
-        Returns
-        -------
-        Iterator:
-            an iterator of (data, n)
-            with data a tuple of (x, y, weights)
-            and n the number of batches that will be yielded
-        """
-        if batch_size is None:
-            yield data, 1
-        else:
-            X, Y, weights = data
-            n_data = len(X)
-            if n_batches is not None and n_batches*batch_size > n_data:
-                prod = n_batches*batch_size
-                raise ValueError(f"n_batches*batch_size = {prod} is superior "
-                                 f"to the number of data {n_data}")
-            if n_batches is None:
-                n_batches = math.ceil(n_data/batch_size)
-                bounds = [int(i/(n_batches)*(n_data))
-                          for i in range(n_batches+1)]
-            else:
-                bounds = [i*batch_size for i in range(n_batches+1)]
-            for (start, end) in zip(bounds[:-1], bounds[1:]):
-                x = self._index(X, start=start, end=end)
-                y = self._index(Y, start=start, end=end)
-                w = self._index(weights, start=start, end=end)
-                yield (x, y, w), n_batches
-
-    def _shuffle(self, batch_data: Tuple[torch.Tensor]):
-        """
-        Shuffle the data of a batch.
-        This is usefull before performing minibatching on it.
-
-        Parameters
-        ----------
-        batch_data : tuple or tensors
-            The (X, Y, weights) to evaluate the loss on.
-            'X' and 'Y' are tensors, 'weights' is a tensor or None.
-
-        Returns
-        -------
-        shuffle_batch : tuple of tensors
-            The tuple of (X, Y, weights) shuffled
-        """
-        X, Y, weights = batch_data
-        p = torch.randperm(len(X))
-        X = self._index(X, at=p)
-        Y = self._index(Y, at=p)
-        weights = self._index(weights, at=p)
-        return (X, Y, weights)
-
-    def _index(self, variable: Union[torch.Tensor, None, tuple],
-               at=None, start=None, end=None, step=None):
-        """
-        Index/slice the given observations of the variable (X, Y, or weight).
-        Usefull to handle various types of 'variable' that need to be indexed
-        differently.
-
-        Parameters
-        ----------
-        variable : tuple of tensor, tensor, or None
-            the variable to split/index
-        at : None, or int, or list of int
-            The observation indexes
-            If None the variable is sliced
-        start : None, or int
-            The start of the slice
-        end : None, or int
-            The end of the slice
-        step : None, or int
-            The step of the slicing
-
-        Returns
-        -------
-        object :
-            the indexed/sliced variable
-        """
-        if variable is None:
-            return None
-        else:
-            if at is not None:
-                return variable[at]
-            else:
-                return variable[slice(start, end, step)]
-
     def _eval_loss(self, loss_module: torch.nn.Module,
-                   x: torch.Tensor, y: torch.Tensor,
-                   w: Union[List[float], None],
-                   L1: Union[float, None], L2: Union[float, None],
-                   train: bool,
-                   scale: float = 1.) -> torch.Tensor:
+                   data: Callable, L1: Union[float, None],
+                   L2: Union[float, None], train: bool) -> float:
         """
-        Evaluates the loss module on the given batch of data.
+        Evaluates the loss module on the given batches of data.
         If 'train' is True, also backpropagate the gradient.
 
         If 'train' is True, the computational graph is built.
@@ -687,44 +529,49 @@ class NeuralNetwork(Model):
         ----------
         loss_module : torch.nn.Module
             module evaluating the loss of the model
-        x : torch.Tensor
-            observations
-        y : torch.Tensor
-            target
-        w : List of float, or None
-            weights
+        data : Callable
+            function generator that yields all the (x, y, w) of an epoch
         L1 : float or None
             The L1 regularization added to the loss function
         L2 : float or None
             The L2 regularization added to the loss function
         train : bool
             If True, grad is backpropagated
-        scale : float
-            The factor by which loss is multiplied
-            For gradient accumulation with batches
 
         Returns
         -------
-        float :
+        torch.Tensor :
             scalar tensor of the evaluated loss
         """
         device = self.device
-        x = self._to(x, device)
-        y = self._to(y, device)
-        w = self._to(w, device)
+        losses = []
+        if not train:
+            # switch to eval mode
+            self.module.eval()
+        for n, (x, y, w) in enumerate(data()):
+            x = self._to(x, device)
+            y = self._to(y, device)
+            w = self._to(w, device)
+            # The '.mean()' is for multi GPU case.
+            # The DataParallel module returns a tensor of loss from each GPU
+            if train:
+                loss = loss_module(x, y, w).mean()
+                loss = self._regularization(loss, L1, L2)
+                loss.backward()
+            else:
+                with torch.no_grad():
+                    loss = loss_module(x, y, w).mean()
+                    # loss = self._regularization(loss, L1, L2)
+            losses.append(float(loss))
         if train:
-            loss = loss_module(x, y, w).mean()
-            loss = self._regularization(loss, L1, L2) * scale
-            loss.backward()
+            # Average the gradient
+            for p in self.module.parameters():
+                p.grad /= (n+1)
         else:
-            with torch.no_grad():
-                self.module.eval()
-                loss = loss_module(x, y, weights=w).mean()
-                self.module.train()
-                loss = self._regularization(loss, L1, L2) * scale
-        loss = float(loss)
+            # switch back to training mode
+            self.module.train()
         torch.cuda.empty_cache()
-        return loss
+        return sum(losses) / (n+1)
 
     def _to(self, variable: Union[torch.Tensor, None],
             device: torch.device) -> object:
@@ -767,3 +614,170 @@ class NeuralNetwork(Model):
                         for p in self.module.parameters()])
             loss = loss + L2 * norm
         return loss
+
+    def _batch_bounds(self, n_data: int, batch_size: Optional[int],
+                      n_batches: Optional[int]) -> List[int]:
+        """
+        returns the bounds segmenting the data in batches
+        """
+        # both are None
+        if (batch_size is None) and (n_batches is None):
+            bounds = [0, n_data+1]
+        # n_batches is given
+        elif (batch_size is None) and (n_batches is not None):
+            if n_batches > n_data:
+                raise ValueError(f"n_batches={n_batches} "
+                                 f"is superior to n_data={n_data}")
+            size = n_data/n_batches
+            bounds = [int(i*size) for i in range(n_batches+1)]
+        # batch_size is given
+        elif (batch_size is not None) and (n_batches is None):
+            n_batches = math.ceil(n_data/batch_size)
+            bounds = [int((i/n_batches)*(n_data))
+                      for i in range(n_batches+1)]
+        # both batch_size and n_batches are given
+        elif (batch_size is not None) and (n_batches is not None):
+            prod = n_batches*batch_size
+            if prod > n_data:
+                raise ValueError(f"n_batches*batch_size = {prod} is "
+                                 "superior to the number "
+                                 f"of data {n_data}")
+            bounds = [i*batch_size for i in range(n_batches+1)]
+        return bounds
+
+    def _static_generator(self, X: object, Y: object,
+                          W: Optional[object] = None,
+                          batch_size: Optional[int] = None,
+                          n_batches: Optional[int] = None,
+                          device: torch.device = torch.device("cpu"),
+                          shuffle: bool = True) -> Callable:
+        """
+        Returns a generator function that yields the batch of tensors
+        The data is casted to tensor only once for efficiency
+        """
+        n_data = len(X)
+        bounds = self._batch_bounds(n_data, batch_size, n_batches)
+        X, Y, W = self._data_to_tensor(X, Y, W, device=device)
+        if shuffle:
+            def generator():
+                index = torch.randperm(n_data)
+                for (lower, upper) in zip(bounds[:-1], bounds[1:]):
+                    x = X[index[lower:upper]] if X is not None else None
+                    y = Y[index[lower:upper]] if Y is not None else None
+                    w = W[index[lower:upper]] if W is not None else None
+                    yield (x, y, w)
+        else:
+            def generator():
+                for (lower, upper) in zip(bounds[:-1], bounds[1:]):
+                    x = X[lower:upper] if X is not None else None
+                    y = Y[lower:upper] if Y is not None else None
+                    w = W[lower:upper] if W is not None else None
+                    yield (x, y, w)
+        return generator
+
+    def _jit_generator(self, X: object, Y: object,
+                       W: Optional[object] = None,
+                       batch_size: Optional[int] = None,
+                       n_batches: Optional[int] = None,
+                       device: torch.device = torch.device("cpu"),
+                       shuffle: bool = True) -> Callable:
+        """
+        Returns a generator function that yields the batch of tensors
+        The X input is casted to tensor at each epoch. (jit = Just In Time)
+        (for tokenizers with subword)
+        """
+        n_data = len(X)
+        bounds = self._batch_bounds(n_data, batch_size, n_batches)
+        _, Yt, Wt = self._data_to_tensor(None, Y, W, device=device)
+        if shuffle:
+            def generator():
+                Xt, _, _ = self._data_to_tensor(X, None, device=device)
+                index = torch.randperm(n_data)
+                for (lower, upper) in zip(bounds[:-1], bounds[1:]):
+                    x = Xt[index[lower:upper]] if Xt is not None else None
+                    y = Yt[index[lower:upper]] if Yt is not None else None
+                    w = Wt[index[lower:upper]] if Wt is not None else None
+                    yield (x, y, w)
+        else:
+            def generator():
+                Xt, _, _ = self._data_to_tensor(X, None, device=device)
+                for (lower, upper) in zip(bounds[:-1], bounds[1:]):
+                    x = Xt[lower:upper] if Xt is not None else None
+                    y = Yt[lower:upper] if Yt is not None else None
+                    w = Wt[lower:upper] if Wt is not None else None
+                    yield (x, y, w)
+        return generator
+
+    def _generator_wrapper(self, generator: Callable, device: torch.device
+                           ) -> Callable:
+        """
+        Wrap a generator function provided by the user,
+        converting data to tensor at each batch
+
+        Parameters
+        ----------
+        generator : Callable
+            generator function that yields the (x, y, [weights]) data
+            of the model
+        device : torch.device
+            the device to store the tensor on
+
+        Returns
+        -------
+        Callable :
+            a generator function that yields (x, y, w) tensors/Nonetypes
+        """
+        def loader():
+            for data in generator():
+                yield self._data_to_tensor(*data, device=device)
+        return loader
+
+    def _as_generator(self, data: Union[Tuple, Callable, None],
+                      default_generator: Callable,
+                      batch_size: Optional[int], n_batches: Optional[int],
+                      device: torch.device, shuffle: bool = True) -> Callable:
+        """
+        Create a generator function from the training/validation data
+        """
+        if isinstance(data, Callable):
+            return self._generator_wrapper(data)
+        elif data is None:
+            return None
+        else:
+            return default_generator(*data, batch_size=batch_size,
+                                     n_batches=n_batches, device=device,
+                                     shuffle=shuffle)
+
+    def _batch_generator(self, training_data: Tuple,
+                         validation_data: Optional[Tuple],
+                         batch_size: Optional[int], n_batches: Optional[int],
+                         device: torch.device, shuffle: bool = True
+                         ) -> Tuple[Callable, Callable]:
+        """
+        Returns a generator function that yields the data as tensors
+
+        Parameters
+        ----------
+        training_data : Tuple
+            tuple of (x, y, [weights])
+        validation_data : Tuple
+            tuple of (x, y, [weights]) or None
+        batch_size : int or None
+            the size of the batches to yield
+        n_batches : int or None
+            the number of batches to yield
+        device : torch.device
+            the device to store the tensors on
+        shuffle : bool
+            if False, the data is not shuffled at each epoch
+
+        Returns
+        -------
+        Callable :
+            a generator function that yields (x, y, w) tensors/Nonetypes
+        """
+        training = self._as_generator(training_data, self._static_generator,
+                                      batch_size, n_batches, device, shuffle)
+        val = self._as_generator(validation_data, self._static_generator,
+                                 batch_size, n_batches, device, shuffle)
+        return training, val
