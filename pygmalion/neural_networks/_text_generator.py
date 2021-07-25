@@ -1,6 +1,6 @@
 import torch
 import random
-from typing import Union, List, Dict, Optional
+from typing import Union, List, Dict, Tuple, Optional, Callable
 from .layers import TransformerEncoder, Embedding
 from .layers import Linear, Dropout
 from .layers import mask_chronological
@@ -10,8 +10,7 @@ from ._neural_network_classifier import NeuralNetworkClassifier
 from ._loss_functions import cross_entropy
 from .layers._functional import positional_encoding
 from pygmalion.unsupervised import tokenizers
-from pygmalion.unsupervised.tokenizers import DynamicTokenizer, Tokenizer
-from pygmalion.unsupervised.tokenizers import SpecialToken, DynamicTextDataset
+from pygmalion.unsupervised.tokenizers import SpecialToken, Tokenizer
 from pygmalion.utilities import document
 
 
@@ -89,7 +88,6 @@ class TextGeneratorModule(torch.nn.Module):
         return torch.softmax(self(X)[0, -1, :], dim=-1)
 
     def forward(self, X):
-        X = self._as_tensor(X)
         N, L = X.shape
         X = self.embedding(X)
         X = positional_encoding(X)
@@ -100,16 +98,9 @@ class TextGeneratorModule(torch.nn.Module):
         return X
 
     def loss(self, y_pred, y_target, weights=None):
-        y_target = self._as_tensor(y_target)
         return cross_entropy(y_pred[:, :-1, :].transpose(1, 2),
                              y_target[:, 1:],
                              weights, self.class_weights)
-
-    def _as_tensor(self, X: Union[torch.Tensor, DynamicTextDataset]):
-        """Converts to tensor if X is a DynamicTextDataset"""
-        if issubclass(type(X), DynamicTextDataset):
-            X = X.as_tensor(self.training, self.max_length)
-        return X
 
     @property
     def dump(self):
@@ -137,7 +128,8 @@ class TextGenerator(NeuralNetworkClassifier):
         At each step, a random token is added from the p most probable tokens
         """
         self.module.eval()
-        x, _, _ = self._data_to_tensor([sentence], None, device=self.device)
+        x, _, _ = self._data_to_tensor([sentence], None, None,
+                                       device=self.device)
         y = self.module.complete(x[:, :-1], p=p, max_tokens=max_tokens)
         return self._tensor_to_y(y)[0]
 
@@ -150,31 +142,39 @@ class TextGenerator(NeuralNetworkClassifier):
         vocab = self.classes
         return {v: p for v, p in zip(vocab, proba)}
 
-    def _data_to_tensor(self, X: List[str],
+    def _data_to_tensor(self, X: List[str], Y: List[str],
                         weights: None = None,
                         device: torch.device = torch.device("cpu")) -> tuple:
-        x = self._as_trainable(X, self.module.tokenizer, device)
-        y = self._as_trainable(X, self.module.tokenizer, device)
+        if X is not None:
+            x = sentences_to_tensor(X, self.module.tokenizer, device,
+                                    max_sequence_length=self.module.max_length)
+        else:
+            x = None
+        if Y is not None:
+            y = sentences_to_tensor(Y, self.module.tokenizer, device,
+                                    max_sequence_length=self.module.max_length)
+        else:
+            y = None
         w = None if weights is None else floats_to_tensor(weights, device)
         return x, y, w
 
     def _tensor_to_y(self, tensor: torch.Tensor) -> List[str]:
         return tensor_to_sentences(tensor, self.module.tokenizer)
 
-    def _as_trainable(self, sentences: List[str], tokenizer: Tokenizer, device
-                      ) -> object:
-        """
-        Returns sentences as a DynamicTextDataset or torch.Tensor
-        """
-        if sentences is None:
-            return None
-        elif (issubclass(type(tokenizer), DynamicTokenizer)
-              and tokenizer.regularize):
-            return DynamicTextDataset(sentences, tokenizer, device)
+    def _batch_generator(self, training_data: Tuple,
+                         validation_data: Optional[Tuple],
+                         batch_size: Optional[int], n_batches: Optional[int],
+                         device: torch.device, shuffle: bool = True
+                         ) -> Tuple[Callable, Callable]:
+        if self.module.tokenizer.jit:
+            generator = self._jit_generator
         else:
-            max_length = self.module.max_length
-            return sentences_to_tensor(sentences, tokenizer, device,
-                                       max_sequence_length=max_length)
+            generator = self._static_generator
+        training = self._as_generator(training_data*2, generator,
+                                      batch_size, n_batches, device, shuffle)
+        val = self._as_generator(validation_data*2, self._static_generator,
+                                 batch_size, n_batches, device, shuffle)
+        return training, val
 
     @property
     def classes(self):

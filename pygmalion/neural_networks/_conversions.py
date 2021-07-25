@@ -304,7 +304,7 @@ def sentences_to_tensor(sentences: Iterable[str],
                         tokenizer: object,
                         device: torch.device,
                         max_sequence_length: Optional[int] = None,
-                        **kwargs) -> torch.Tensor:
+                        regularize: bool = False) -> torch.Tensor:
     """
     converts a list of sentences to tensor
 
@@ -334,7 +334,7 @@ def sentences_to_tensor(sentences: Iterable[str],
         * L is the length of longest sentence
         and each scalar is the index of a word in the lexicon
     """
-    sentences = [tokenizer.encode(s, **kwargs) for s in sentences]
+    sentences = [tokenizer.encode(s, regularize=regularize) for s in sentences]
     if max_sequence_length is None:
         L_max = max(len(s) for s in sentences)
     else:

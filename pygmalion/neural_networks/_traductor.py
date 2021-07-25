@@ -1,5 +1,5 @@
 import torch
-from typing import Union, List, Dict, Optional
+from typing import Union, List, Dict, Tuple, Optional, Callable
 from .layers import Transformer, Embedding
 from .layers import Linear, Dropout
 from .layers import mask_chronological
@@ -9,8 +9,7 @@ from ._neural_network_classifier import NeuralNetworkClassifier
 from ._loss_functions import cross_entropy
 from .layers._functional import positional_encoding
 from pygmalion.unsupervised import tokenizers
-from pygmalion.unsupervised.tokenizers import DynamicTokenizer, Tokenizer
-from pygmalion.unsupervised.tokenizers import SpecialToken, DynamicTextDataset
+from pygmalion.unsupervised.tokenizers import Tokenizer, SpecialToken
 from pygmalion.utilities import document
 
 
@@ -89,7 +88,6 @@ class TraductorModule(torch.nn.Module):
         torch.Tensor :
             tensor of floats of shape (N, L, D) with D the embedding dimension
         """
-        X = self._as_tensor(X)
         N, L = X.shape
         X = self.embedding_in(X)
         X = positional_encoding(X)
@@ -119,7 +117,6 @@ class TraductorModule(torch.nn.Module):
         torch.Tensor :
             tensor of floats of shape (N, Ly, D)
         """
-        Y = self._as_tensor(Y)
         N, L = Y.shape
         Y = self.embedding_out(Y)
         Y = positional_encoding(Y)
@@ -129,7 +126,6 @@ class TraductorModule(torch.nn.Module):
         return self.output(Y)
 
     def loss(self, encoded, y_target, weights=None):
-        y_target = self._as_tensor(y_target)
         y_pred = self.decode(encoded, y_target[:, :-1])
         return cross_entropy(y_pred.transpose(1, 2), y_target[:, 1:],
                              weights, self.class_weights)
@@ -154,12 +150,6 @@ class TraductorModule(torch.nn.Module):
             Y = torch.cat([Y, index], dim=-1)
         return Y
 
-    def _as_tensor(self, X: Union[torch.Tensor, DynamicTextDataset]):
-        """Converts to tensor if X is a DynamicTextDataset"""
-        if issubclass(type(X), DynamicTextDataset):
-            X = X.as_tensor(self.training, self.max_length)
-        return X
-
     @property
     def dump(self):
         return {"type": type(self).__name__,
@@ -183,7 +173,8 @@ class Traductor(NeuralNetworkClassifier):
 
     def __call__(self, sentence: str, max_words: int = 100):
         self.module.eval()
-        x, _, _ = self._data_to_tensor([sentence], None, device=self.device)
+        x, _, _ = self._data_to_tensor([sentence], None, None,
+                                       device=self.device)
         y = self.module.predict(x, max_words=max_words)
         return self._tensor_to_y(y)[0]
 
@@ -191,28 +182,36 @@ class Traductor(NeuralNetworkClassifier):
                         Y: Union[None, List[str]],
                         weights: None = None,
                         device: torch.device = torch.device("cpu")) -> tuple:
-        x = self._as_trainable(X, self.module.tokenizer_in, device)
-        y = self._as_trainable(Y, self.module.tokenizer_out, device)
+        if X is not None:
+            x = sentences_to_tensor(X, self.module.tokenizer_in, device,
+                                    max_sequence_length=self.module.max_length)
+        else:
+            x = None
+        if Y is not None:
+            y = sentences_to_tensor(Y, self.module.tokenizer_out, device,
+                                    max_sequence_length=self.module.max_length)
+        else:
+            y = None
         w = None if weights is None else floats_to_tensor(weights, device)
         return x, y, w
 
     def _tensor_to_y(self, tensor: torch.Tensor) -> List[str]:
         return tensor_to_sentences(tensor, self.module.tokenizer_out)
 
-    def _as_trainable(self, sentences: List[str], tokenizer: Tokenizer, device
-                      ) -> object:
-        """
-        Returns sentences as a DynamicTextDataset or torch.Tensor
-        """
-        if sentences is None:
-            return None
-        elif (issubclass(type(tokenizer), DynamicTokenizer)
-              and tokenizer.regularize):
-            return DynamicTextDataset(sentences, tokenizer, device)
+    def _batch_generator(self, training_data: Tuple,
+                         validation_data: Optional[Tuple],
+                         batch_size: Optional[int], n_batches: Optional[int],
+                         device: torch.device, shuffle: bool = True
+                         ) -> Tuple[Callable, Callable]:
+        if self.module.tokenizer_in.jit:
+            generator = self._jit_generator
         else:
-            max_length = self.module.max_length
-            return sentences_to_tensor(sentences, tokenizer, device,
-                                       max_sequence_length=max_length)
+            generator = self._static_generator
+        training = self._as_generator(training_data, generator,
+                                      batch_size, n_batches, device, shuffle)
+        val = self._as_generator(validation_data, self._static_generator,
+                                 batch_size, n_batches, device, shuffle)
+        return training, val
 
     @property
     def classes(self):

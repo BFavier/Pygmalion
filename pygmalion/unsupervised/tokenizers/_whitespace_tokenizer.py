@@ -51,7 +51,7 @@ class WhitespaceTokenizer(Tokenizer):
                                  vocab_count.items()))
         return vocab_count
 
-    def encode(self, sentence: str) -> List[int]:
+    def encode(self, sentence: str, regularize: bool = False) -> List[int]:
         """encode a sentence"""
         return [self._word_indexes.get(w, 0)
                 for w in self._split_words(sentence)]

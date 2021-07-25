@@ -14,10 +14,10 @@ df = pd.read_csv(data_path / "airline_tweets.csv")
 x = df["text"].str.lower()
 
 tokenizer = ml.unsupervised.tokenizers.WhitespaceTokenizer()
-c = tokenizer.train(x, max_tokens=1000)
+c = tokenizer.train(x, max_tokens=10000)
 
-n_stages = 3
-projection_dim = 16
+n_stages = 2
+projection_dim = 32
 n_heads = 4
 
 model = ml.neural_networks.TextGenerator(tokenizer, n_stages, projection_dim,
@@ -25,7 +25,7 @@ model = ml.neural_networks.TextGenerator(tokenizer, n_stages, projection_dim,
                                          optimization_method="Adam")
 train_data, val_data = ml.split(x, frac=0.2)
 model.train(train_data, validation_data=val_data, n_epochs=1000,
-            learning_rate=1.0E-3, batch_size=100, n_batches=5)
+            learning_rate=1.0E-3, batch_size=50, n_batches=1, keep_best=False)
 model.plot_history()
 plt.show()
 

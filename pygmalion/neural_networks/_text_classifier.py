@@ -1,5 +1,5 @@
 import torch
-from typing import Union, List, Dict, Optional
+from typing import Union, List, Dict, Tuple, Optional, Callable
 from .layers import TransformerEncoder, Embedding
 from .layers import Linear, Pooling1d, Dropout
 from ._conversions import sentences_to_tensor, tensor_to_classes
@@ -8,8 +8,7 @@ from ._neural_network_classifier import NeuralNetworkClassifier
 from ._loss_functions import cross_entropy
 from .layers._functional import positional_encoding
 from pygmalion.unsupervised import tokenizers
-from pygmalion.unsupervised.tokenizers import DynamicTokenizer, Tokenizer
-from pygmalion.unsupervised.tokenizers import SpecialToken, DynamicTextDataset
+from pygmalion.unsupervised.tokenizers import Tokenizer, SpecialToken
 from pygmalion.utilities import document
 
 
@@ -62,7 +61,6 @@ class TextClassifierModule(torch.nn.Module):
                              len(self.classes))
 
     def forward(self, X):
-        X = self._as_tensor(X)
         N, L = X.shape
         X = self.embedding(X)
         X = positional_encoding(X)
@@ -73,15 +71,8 @@ class TextClassifierModule(torch.nn.Module):
         return X
 
     def loss(self, y_pred, y_target, weights=None):
-        y_target = self._as_tensor(y_target)
         return cross_entropy(y_pred, y_target,
                              weights, self.class_weights)
-
-    def _as_tensor(self, X: Union[torch.Tensor, DynamicTextDataset]):
-        """Converts to tensor if X is a DynamicTextDataset"""
-        if issubclass(type(X), DynamicTextDataset):
-            X = X.as_tensor(self.training, self.max_length)
-        return X
 
     @property
     def dump(self):
@@ -108,29 +99,36 @@ class TextClassifier(NeuralNetworkClassifier):
                         Y: Union[None, List[str]],
                         weights: None = None,
                         device: torch.device = torch.device("cpu")) -> tuple:
-        x = self._as_trainable(X, self.module.tokenizer, device)
-        y = None if Y is None else classes_to_tensor(Y, self.classes,
-                                                     device)
+        if X is not None:
+            x = sentences_to_tensor(X, self.module.tokenizer, device,
+                                    max_sequence_length=self.module.max_length)
+        else:
+            x = None
+        if Y is not None:
+            y = None if Y is None else classes_to_tensor(Y, self.classes,
+                                                        device)
+        else:
+            y = None
         w = None if weights is None else floats_to_tensor(weights, device)
         return x, y, w
 
     def _tensor_to_y(self, tensor: torch.Tensor) -> List[str]:
         return tensor_to_classes(tensor, self.module.classes)
 
-    def _as_trainable(self, sentences: List[str], tokenizer: Tokenizer, device
-                      ) -> object:
-        """
-        Returns sentences as a DynamicTextDataset or torch.Tensor
-        """
-        if sentences is None:
-            return None
-        elif (issubclass(type(tokenizer), DynamicTokenizer)
-              and tokenizer.regularize):
-            return DynamicTextDataset(sentences, tokenizer, device)
+    def _batch_generator(self, training_data: Tuple,
+                         validation_data: Optional[Tuple],
+                         batch_size: Optional[int], n_batches: Optional[int],
+                         device: torch.device, shuffle: bool = True
+                         ) -> Tuple[Callable, Callable]:
+        if self.module.tokenizer.jit:
+            generator = self._jit_generator
         else:
-            max_length = self.module.max_length
-            return sentences_to_tensor(sentences, tokenizer, device,
-                                       max_sequence_length=max_length)
+            generator = self._static_generator
+        training = self._as_generator(training_data, generator,
+                                      batch_size, n_batches, device, shuffle)
+        val = self._as_generator(validation_data, self._static_generator,
+                                 batch_size, n_batches, device, shuffle)
+        return training, val
 
     @property
     def class_weights(self):

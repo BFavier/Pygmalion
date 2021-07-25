@@ -28,7 +28,7 @@ hidden_layers = [{"features": 16},
 model = ml.neural_networks.DenseRegressor(inputs, hidden_layers,
                                           activation="elu")
 train_data, val_data, test_data = ml.split(x, y, frac=(0.2, 0.1))
-model.train(train_data, val_data, patience=500)
+model.train(train_data, val_data, patience=500, L2=1.0E-1)
 
 # Plot results
 model.plot_history()

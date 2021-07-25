@@ -3,10 +3,10 @@ from random import random
 from itertools import count, chain
 from collections import Counter, deque
 from typing import List, Tuple, Iterable, Iterator, Dict, Optional
-from ._tokenizer import DynamicTokenizer
+from ._tokenizer import Tokenizer
 
 
-class BytePairEncoder(DynamicTokenizer):
+class BytePairEncoder(Tokenizer):
     """
     byte level Byte Pair Encoding (BPE) is a method of subword tokenization
 
@@ -158,6 +158,10 @@ class BytePairEncoder(DynamicTokenizer):
     @property
     def n_tokens(self):
         return len(self.code) + 256
+
+    @property
+    def jit(self):
+        return self.dropout is not None
 
     def _mergeables(self, sentences: Iterable[str]) -> Iterable[str]:
         """
