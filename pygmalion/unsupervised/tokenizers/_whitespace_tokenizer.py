@@ -1,8 +1,7 @@
-import re
 from itertools import chain
 from collections import Counter
 from typing import Iterable, List, Dict
-from ._tokenizer import Tokenizer, SpecialToken
+from ._tokenizer import Tokenizer, SpecialToken, split
 
 
 class WhitespaceTokenizer(Tokenizer):
@@ -45,6 +44,9 @@ class WhitespaceTokenizer(Tokenizer):
                        key=lambda w: words_count[w], reverse=True)
         vocab = vocab[:max_tokens]
         vocab_count = {k: words_count[k] for k in vocab}
+        vocab_count = dict(sorted(vocab_count.items(),
+                                  key=lambda item: item[1],
+                                  reverse=True))
         self.vocabulary = [self._unknown] + vocab
         n_unknowns = n_words - sum(vocab_count.values())
         vocab_count = dict(chain([(self._unknown, n_unknowns)],
@@ -63,7 +65,8 @@ class WhitespaceTokenizer(Tokenizer):
 
     def _split_words(self, sentence: str) -> List[str]:
         """Split each sentence into a list of 'words'"""
-        return re.findall(r"[\w]+|[^\s\w]", sentence)
+        # return re.findall(r"[\w]+|[^\s\w]", sentence)
+        return split(r"[\d]+|[^\W\d_]+|[^\w\s]+", sentence)
 
     @property
     def vocabulary(self):
@@ -73,10 +76,6 @@ class WhitespaceTokenizer(Tokenizer):
     def vocabulary(self, other):
         self._vocabulary = other
         self._word_indexes = {w: i for i, w in enumerate(self.vocabulary)}
-
-    @property
-    def word_indexes(self):
-        return self._word_indexes
 
     @property
     def n_tokens(self):

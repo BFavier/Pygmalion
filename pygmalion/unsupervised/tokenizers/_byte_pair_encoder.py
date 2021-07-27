@@ -3,7 +3,7 @@ from random import random
 from itertools import count, chain
 from collections import Counter, deque
 from typing import List, Tuple, Iterable, Iterator, Dict, Optional
-from ._tokenizer import Tokenizer
+from ._tokenizer import Tokenizer, split
 
 
 class BytePairEncoder(Tokenizer):
@@ -166,15 +166,14 @@ class BytePairEncoder(Tokenizer):
     def _mergeables(self, sentences: Iterable[str]) -> Iterable[str]:
         """
         Extract all mergeables substrings
-        (series of digits or series of letters)
+        (digits, letters, or punctuation separately)
 
         Example
         -------
         >>> list(self._mergeables(["Tökenizer2000, stârts_at 14h30..."]))
         ['Tokenizer', '2000', ',', 'starts', 'at', '14', 'h', '30', '...']
         """
-        return chain(*(re.findall(r"[\d]+|[^\W\d_]+|[^\w\s]+", s)
-                       for s in sentences))
+        return chain(*(split(s) for s in sentences))
 
     def _bytes(self, token_index: int, code: Dict[int, Tuple[int]]) -> bytes:
         """returns the bytes representation of a token"""

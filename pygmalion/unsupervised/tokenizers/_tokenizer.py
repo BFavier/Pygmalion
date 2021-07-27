@@ -1,7 +1,6 @@
-# import torch
-# from pygmalion.neural_networks._conversions import sentences_to_tensor
+import re
 from pygmalion._model import Model
-from typing import List
+from typing import List, Iterable, Optional
 
 
 class Tokenizer(Model):
@@ -17,10 +16,13 @@ class Tokenizer(Model):
         """decode an encoded sentence"""
         raise NotImplementedError()
 
-    def split(self, sentence: str, regularize: bool = False) -> List[str]:
+    def split(self, sentence: str, mask: Optional[Iterable[str]] = None,
+              regularize: bool = False) -> List[str]:
         """Returns the sentence splited token by token"""
         vocab = self.vocabulary
-        return [vocab[i] for i in self.encode(sentence, regularize)]
+        split = [vocab[i] for i in self.encode(sentence, regularize)]
+        # TODO : handle mask
+        return split
 
     @property
     def vocabulary(self):
@@ -61,3 +63,11 @@ class SpecialToken:
 
     def __init__(self, name: str):
         self.name = name
+
+
+def split(sentence: str) -> List[str]:
+    """
+    Split a string by whitespaces, but also by groups of letters,
+    groups of digits, and groups of punctuation
+    """
+    return re.findall(r"[\d]+|[^\W\d_]+|[^\w\s]+", sentence)
