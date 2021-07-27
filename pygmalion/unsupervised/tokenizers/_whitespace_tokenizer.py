@@ -1,7 +1,8 @@
+import re
 from itertools import chain
 from collections import Counter
 from typing import Iterable, List, Dict
-from ._tokenizer import Tokenizer, SpecialToken, split
+from ._tokenizer import Tokenizer, SpecialToken
 
 
 class WhitespaceTokenizer(Tokenizer):
@@ -65,8 +66,7 @@ class WhitespaceTokenizer(Tokenizer):
 
     def _split_words(self, sentence: str) -> List[str]:
         """Split each sentence into a list of 'words'"""
-        # return re.findall(r"[\w]+|[^\s\w]", sentence)
-        return split(r"[\d]+|[^\W\d_]+|[^\w\s]+", sentence)
+        return re.findall(r"[\w]+|[^\s\w]", sentence)
 
     @property
     def vocabulary(self):
