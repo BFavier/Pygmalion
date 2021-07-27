@@ -67,7 +67,7 @@ class SpecialToken:
 
 def split(sentence: str) -> List[str]:
     """
-    Split a string by whitespaces, but also by groups of letters,
-    groups of digits, and groups of punctuation
+    Split a string by groups of letters, groups of digits,
+    and groups of punctuation. Spaces are not returned.
     """
     return re.findall(r"[\d]+|[^\W\d_]+|[^\w\s]+", sentence)
