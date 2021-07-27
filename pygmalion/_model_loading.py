@@ -20,7 +20,7 @@ def load(file: str) -> object:
         raise FileNotFoundError("The file '{file}' does not exist")
     suffix = file.suffix.lower()
     if suffix == ".json":
-        with open(file) as json_file:
+        with open(file, "r", encoding="utf-8") as json_file:
             dump = json.load(json_file)
     elif suffix == ".h5":
         f = h5py.File(file, "r")

@@ -34,7 +34,7 @@ class Model:
             raise FileExistsError(f"The file '{file}' already exists,"
                                   " set 'overwrite=True' to overwrite.")
         if suffix == ".json":
-            with open(file, "w") as json_file:
+            with open(file, "w", encoding="utf-8") as json_file:
                 json.dump(self.dump, json_file)
         elif suffix == ".h5":
             f = h5py.File(file, "w", track_order=True)
