@@ -170,9 +170,9 @@ class TextGenerator(NeuralNetworkClassifier):
             generator = self._jit_generator
         else:
             generator = self._static_generator
-        training = self._as_generator(training_data*2, generator,
+        training = self._as_generator(training_data, generator,
                                       batch_size, n_batches, device, shuffle)
-        val = self._as_generator(validation_data*2, self._static_generator,
+        val = self._as_generator(validation_data, self._static_generator,
                                  batch_size, n_batches, device, shuffle)
         return training, val
 

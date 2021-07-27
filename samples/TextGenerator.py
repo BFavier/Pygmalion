@@ -23,7 +23,7 @@ n_heads = 4
 model = ml.neural_networks.TextGenerator(tokenizer, n_stages, projection_dim,
                                          n_heads, GPU=0,
                                          optimization_method="Adam")
-train_data, val_data = ml.split(x, frac=0.2)
+train_data, val_data = ml.split(x, x, frac=0.2)
 model.train(train_data, validation_data=val_data, n_epochs=1000,
             learning_rate=1.0E-3, batch_size=50, n_batches=1, keep_best=False)
 model.plot_history()
