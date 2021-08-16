@@ -99,7 +99,8 @@ class MultiHeadAttention(torch.nn.Module):
         return attention
 
     def _linear_complexity_attention(self, q: torch.Tensor, k: torch.Tensor,
-                                     v: torch.Tensor, mask: bool = False
+                                     v: torch.Tensor, mask: bool = False,
+                                     RPE: Optional[torch.Tensor] = None
                                      ) -> Tuple[torch.Tensor, None]:
         """
         This is an alternative attention function.
@@ -141,29 +142,151 @@ class MultiHeadAttention(torch.nn.Module):
         _, _, Lq, D = q.shape
         _, _, Lk, _ = k.shape
         q = torch.softmax(q, dim=-1)
-        kt = torch.softmax(k, dim=-1).transpose(-2, -1)
-        # check the most costly operation order between (q*kt)*v and q*(kt*v)
-        left_first = Lq*Lk <= D**2
-        # perform operations
+        k = torch.softmax(k, dim=-1)
         if mask:
-            if left_first:
-                left = torch.matmul(q, kt)
+            left_cost = Lq * Lk
+            right_cost = D**2 * Lk
+            if left_cost <= right_cost:
+                left = torch.matmul(q, k.transpose(-2, -1))
                 mask = mask_chronological(Lq, Lk, left.device)
                 left = left.masked_fill(mask, 0.)
                 result = torch.matmul(left, v)
-                return result, None
             else:
                 right = torch.cumsum(
-                    torch.einsum("...ik, ...kj -> ...kij", kt, v), dim=-3)
+                    torch.einsum("...ki, ...kj -> ...kij", k, v), dim=-3)
                 result = torch.matmul(q.unsqueeze(-2), right).squeeze(-2)
                 return result, None
         else:
-            if left_first:
-                left = torch.matmul(q, kt)
-                return torch.matmul(left, v), None
-            else:
-                right = torch.matmul(kt, v)
-                return torch.matmul(q, right), None
+            # slower than 2 matrix products, but less intermediate memory used
+            result = torch.einsum("...aq, ...cq, ...cb -> ...ab", q, k, v)
+            # # check the most costly operation order between
+            # # (q*kt)*v and q*(kt*v)
+            # kt = k.transpose(-1, -2)
+            # left_cost = Lq*Lk
+            # right_cost = D**2
+            # if left_cost <= right_cost:
+            #     left = torch.matmul(q, kt)
+            #     return torch.matmul(left, v), None
+            # else:
+            #     right = torch.matmul(kt, v)
+            #     return torch.matmul(q, right), None
+        return result, None
+
+    def _linear_RPE(self, q: torch.Tensor, RPE_matrix: torch.Tensor,
+                    v: torch.Tensor, masked: bool = False) -> torch.Tensor:
+        """
+        Performs the 'Relative Positional Encoding' part of the attention
+        as described in:
+
+        'Self-Attention with Relative Position Representations'
+        https://arxiv.org/pdf/1803.02155.pdf
+
+
+        implementation is adapted from the second strategy described in:
+        'Translational Equivariance in Kernelizable Attention'
+        https://arxiv.org/pdf/2102.07680.pdf
+
+        Parameters
+        ----------
+        q : torch.Tensor
+            tensor of shape (N, H, Lq, D)
+        RPE_matrix : torch.Tensor
+            tensor of shape (2*R+1, D)
+        v : torch.Tensor
+            tensor of shape (N, H, Lk, D)
+
+        Returns
+        -------
+        torch.Tensor :
+            tensor of shape (N, H, Lq, 2*R+1)
+        """
+        N, H, Lq, D = q.shape
+        E, D = RPE_matrix.shape
+        N, H, Lk, D = v.shape
+        R = (E-1)//2
+        assert E % 2 == 1 and R > 0
+        # compute the dot product between each query and each RPE embedding
+        # 'scores' is of shape (N, H, Lq, 2*R+1)
+        scores = torch.matmul(q.reshape(N, H, Lq, 1, 1, D),
+                              RPE_matrix.reshape(1, 1, 1, E, D, 1)
+                              ).squeeze(-2).squeeze(-1)
+        # split the scores
+        before = scores[..., 0:1]  # the score of distance -R and lower
+        after = scores[..., -1:]  # the score of the distance R and upper
+        if masked:
+            # The score of the distances -(R-1) to 0
+            window = scores[..., 1:R+2].unsqueeze(-2)
+        else:
+            # The scores of the distances -(R-1) to (R-1)
+            window = scores[..., 1:-1].unsqueeze(-2)
+        # sum of the value vectors on the left of the RPE horizon
+        head = torch.zeros((N, H, R, D), device=q.device)
+        core = v[..., :min(Lq-R, Lk), :].cumsum(dim=-2)
+        content = [head, core]
+        if Lq-Lk-R > 0:
+            bottom = core[..., -1:, :].repeat(1, 1, max(0, Lq-Lk-R), 1)
+            content.append(bottom)
+        left = torch.cat(content, dim=-2)
+        if masked:
+            # weighted sum of the values in the first half of the window
+            slider = torch.cat([torch.zeros((N, H, max(0, R-1), D),
+                                            device=q.device),
+                                v, torch.zeros((N, H, max(0, Lq-Lk), D),
+                                               device=q.device)],
+                               dim=-2)
+            L = slider.shape[-2]
+            slider = slider.as_strided((N, H, Lq, R+1, D),
+                                       (H*L*D, L*D, D, D, 1))
+            center = torch.matmul(window, slider).squeeze(-2)
+            # returns the weighted sum of value vectors
+            return before*left + center
+        else:
+            # sum of the value vectors on the right of the RPE horizon
+            stop = min(Lq+R, Lk)
+            core = (v[..., R-1:stop, :].sum(dim=-2).unsqueeze(-2)
+                    - v[..., R-1:stop-1, :].cumsum(dim=-2))
+            bottom = torch.zeros((N, H, max(0, Lq-(Lk-R)), D), device=q.device)
+            right = torch.cat([core, bottom], dim=-2)
+            # weighted sum of the values in the horizon
+            slider = torch.cat([torch.zeros((N, H, max(0, R-1), D),
+                                            device=q.device),
+                                v, torch.zeros((N, H, max(0, Lq-(Lk-R)), D),
+                                               device=q.device)],
+                               dim=-2)
+            L = slider.shape[-2]
+            slider = slider.as_strided((N, H, Lq, E-2, D),
+                                       (H*L*D, L*D, D, D, 1))
+            center = torch.matmul(window, slider).squeeze(-2)
+            # returns the weighted sum of value vectors
+            return before*left + center + after*right
+
+    def _naive_RPE(self, q: torch.Tensor, RPE_matrix: torch.Tensor,
+                   v: torch.Tensor, masked: bool = False) -> torch.Tensor:
+        """
+        naive implementation of _linear_RPE
+        for testing only
+        """
+        N, H, Lq, D = q.shape
+        E, D = RPE_matrix.shape
+        N, H, Lk, D = v.shape
+        R = (E-1)//2
+        assert R >= 0
+        # compute the dot product between each query and each RPE embedding
+        # 'scores' is of shape (N, H, Lq, 2*R+1)
+        scores = torch.matmul(q.reshape(N, H, Lq, 1, 1, D),
+                              RPE_matrix.reshape(1, 1, 1, E, D, 1)
+                              ).squeeze(-2).squeeze(-1)
+        # expands score matrix of shape (N, H, Lq, Lk)
+        indexes = torch.tensor([[R-i+j for j in range(Lk)] for i in range(Lq)],
+                               dtype=torch.long, device=q.device).clip(0, 2*R)
+        indexes = indexes.reshape(1, 1, Lq, Lk).expand(N, H, Lq, Lk)
+        scores = torch.gather(scores, -1, indexes)
+        # masks the top right corner of the matrix if needed
+        if masked:
+            mask = mask_chronological(Lq, Lk, q.device)
+            scores = scores.masked_fill(mask, 0.)
+        # returns the weighted sum of value vectors
+        return torch.matmul(scores, v)
 
     def _scaled_dot_product_attention(self, q: torch.Tensor, k: torch.Tensor,
                                       v: torch.Tensor,
@@ -198,7 +321,7 @@ class MultiHeadAttention(torch.nn.Module):
         Lk = k.shape[-2]
         score = torch.matmul(q, k.transpose(-2, -1)) / math.sqrt(Lk)
         if mask is not None:
-            score = score.masked_fill(mask, -1.0E300)
+            score = score.masked_fill(mask, -1.0E10)
         score = torch.softmax(score, dim=-1)
         attention = torch.matmul(score, v)
         return attention, score
