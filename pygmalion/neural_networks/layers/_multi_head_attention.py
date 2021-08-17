@@ -245,7 +245,8 @@ class MultiHeadAttention(torch.nn.Module):
             stop = min(Lq+R, Lk)
             core = (v[..., R-1:stop, :].sum(dim=-2).unsqueeze(-2)
                     - v[..., R-1:stop-1, :].cumsum(dim=-2))
-            bottom = torch.zeros((N, H, max(0, Lq-max(0, Lk-R)), D), device=q.device)
+            bottom = torch.zeros((N, H, max(0, Lq-max(0, Lk-R)), D),
+                                 device=q.device)
             right = torch.cat([core, bottom], dim=-2)
             # weighted sum of the values in the horizon
             slider = torch.cat([torch.zeros((N, H, max(0, R-1), D),
