@@ -215,13 +215,13 @@ class MultiHeadAttention(torch.nn.Module):
         after = scores[..., -1:]  # the score of the distance R and upper
         if masked:
             # The score of the distances -(R-1) to 0
-            window = scores[..., 1:R+2].unsqueeze(-2)
+            window = scores[..., 1:R+1].unsqueeze(-2)
         else:
             # The scores of the distances -(R-1) to (R-1)
             window = scores[..., 1:-1].unsqueeze(-2)
         # sum of the value vectors on the left of the RPE horizon
-        head = torch.zeros((N, H, R, D), device=q.device)
-        core = v[..., :min(Lq-R, Lk), :].cumsum(dim=-2)
+        head = torch.zeros((N, H, min(R, Lq), D), device=q.device)
+        core = v[..., :min(max(0, Lq-R), Lk), :].cumsum(dim=-2)
         content = [head, core]
         if Lq-Lk-R > 0:
             bottom = core[..., -1:, :].repeat(1, 1, max(0, Lq-Lk-R), 1)
@@ -235,7 +235,7 @@ class MultiHeadAttention(torch.nn.Module):
                                                device=q.device)],
                                dim=-2)
             L = slider.shape[-2]
-            slider = slider.as_strided((N, H, Lq, R+1, D),
+            slider = slider.as_strided((N, H, Lq, R, D),
                                        (H*L*D, L*D, D, D, 1))
             center = torch.matmul(window, slider).squeeze(-2)
             # returns the weighted sum of value vectors
@@ -245,7 +245,7 @@ class MultiHeadAttention(torch.nn.Module):
             stop = min(Lq+R, Lk)
             core = (v[..., R-1:stop, :].sum(dim=-2).unsqueeze(-2)
                     - v[..., R-1:stop-1, :].cumsum(dim=-2))
-            bottom = torch.zeros((N, H, max(0, Lq-(Lk-R)), D), device=q.device)
+            bottom = torch.zeros((N, H, max(0, Lq-max(0, Lk-R)), D), device=q.device)
             right = torch.cat([core, bottom], dim=-2)
             # weighted sum of the values in the horizon
             slider = torch.cat([torch.zeros((N, H, max(0, R-1), D),
