@@ -7,8 +7,8 @@ from typing import Iterable, Union, Optional
 
 
 def plot_fitting(x: Iterable[float], y: Iterable[float],
-                 ax: Union[None, matplotlib.axes.Axes] = None,
-                 label: str = "_",
+                 ax: Optional[matplotlib.axes.Axes] = None,
+                 label: Optional[str] = None,
                  **kwargs):
     """
     Plots the correlation between prediction and target of a regressor

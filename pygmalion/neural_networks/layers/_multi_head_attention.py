@@ -1,6 +1,5 @@
 import torch
 import math
-from ._weighting import Linear
 import torch.nn.functional as F
 from typing import Optional, Tuple
 
@@ -20,21 +19,9 @@ class MultiHeadAttention(torch.nn.Module):
         self.n_heads = n_heads
         self.projection_dim = projection_dim
         dim = projection_dim*n_heads
-        self.query = Linear(dim, dim, bias=False)
-        self.key = Linear(dim, dim, bias=False)
-        self.value = Linear(dim, dim, bias=False)
-
-    @classmethod
-    def from_dump(cls, dump: dict) -> 'MultiHeadAttention':
-        assert dump["type"] == cls.__name__
-        obj = cls.__new__(cls)
-        torch.nn.Module.__init__(obj)
-        obj.n_heads = dump["n heads"]
-        obj.projection_dim = dump["projection dim"]
-        obj.query = Linear.from_dump(dump["query"])
-        obj.key = Linear.from_dump(dump["key"])
-        obj.value = Linear.from_dump(dump["value"])
-        return obj
+        self.query = torch.nn.Linear(dim, dim, bias=False)
+        self.key = torch.nn.Linear(dim, dim, bias=False)
+        self.value = torch.nn.Linear(dim, dim, bias=False)
 
     def forward(self, query: torch.Tensor, key: torch.Tensor,
                 mask: Optional[torch.Tensor] = None):
@@ -160,12 +147,3 @@ class MultiHeadAttention(torch.nn.Module):
     def out_features(self):
         return self.value.out_features
 
-    @property
-    def dump(self) -> dict:
-        return {"type": type(self).__name__,
-                "n heads": self.n_heads,
-                "projection dim": self.projection_dim,
-                "linear complexity": self.linear_complexity,
-                "query": self.query.dump,
-                "key": self.key.dump,
-                "value": self.value.dump}

@@ -1,7 +1,9 @@
 import torch
 import torch.nn.functional as F
-from typing import Union, Tuple
+from typing import Union, Tuple, Literal
 
+
+METHOD = Literal["nearest", "bilinear"]
 
 class Unpooling(torch.nn.Module):
     """
@@ -21,8 +23,7 @@ class Unpooling(torch.nn.Module):
         obj.method = dump["method"]
         return obj
 
-    def __init__(self, factor: Union[int, Tuple[int]],
-                 method: str):
+    def __init__(self, factor: Union[int, Tuple[int, int]], method: str):
         """
         Parameters:
         -----------
@@ -31,25 +32,16 @@ class Unpooling(torch.nn.Module):
         method : one of {'nearest', 'interpolate'}
             the method used to
         """
-        assert method in ["nearest", "interpolate"]
+        assert method in METHOD.__args__
         super().__init__()
         self.factor = factor
         self.method = method
-
-    @property
-    def dump(self):
-        factor = self.factor
-        if hasattr(factor, "__iter__"):
-            factor = list(factor)
-        return {"type": type(self).__name__,
-                "factor": factor,
-                "method": self.method}
 
 
 class Unpooling1d(Unpooling):
 
     def __init__(self, factor: int = 2,
-                 method: str = "nearest"):
+                 method: METHOD = "nearest"):
         super().__init__(factor, method)
 
     def forward(self, X):
@@ -63,7 +55,7 @@ class Unpooling1d(Unpooling):
 class Unpooling2d(Unpooling):
 
     def __init__(self, factor: Tuple[int, int] = (2, 2),
-                 method: str = "nearest"):
+                 method: METHOD = "nearest"):
         super().__init__(factor, method)
 
     def forward(self, X):

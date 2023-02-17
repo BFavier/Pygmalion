@@ -5,7 +5,21 @@ import numpy as np
 from typing import List, Iterable, Optional, Union, Tuple
 
 
-def floats_to_tensor(arr: Iterable, device: torch.device) -> torch.Tensor:
+def named_to_tensor(data: Union[pd.DataFrame, dict, Iterable],
+                    names: List[str], device: Optional[torch.device]=None
+                    ) -> torch.Tensor:
+    """converts named variables to tensors"""
+    if isinstance(data, dict):
+        data = pd.DataFrame.from_dict(data)
+    if isinstance(data, pd.DataFrame):
+        data = data[names].to_numpy()
+    data = torch.tensor(data, dtype=torch.float32, device=device)
+    if len(data.shape) == 1:
+        data = data.unsqueeze(0)
+    return data
+
+
+def floats_to_tensor(arr: Iterable, device: Optional[torch.device] = None) -> torch.Tensor:
     """converts an array of numerical values to a tensor of floats"""
     if isinstance(arr, pd.Series):
         arr = arr.to_numpy()
@@ -17,10 +31,10 @@ def floats_to_tensor(arr: Iterable, device: torch.device) -> torch.Tensor:
 def tensor_to_floats(tensor: torch.Tensor) -> np.ndarray:
     """converts a torch.Tensor to a numpy.ndarray of doubles"""
     assert tensor.dtype == torch.float
-    return tensor.detach().cpu().numpy().astype(np.float64)
+    return tensor.detach().cpu().numpy()
 
 
-def longs_to_tensor(arr: Iterable, device: torch.device) -> torch.Tensor:
+def longs_to_tensor(arr: Iterable, device: Optional[torch.device] = None) -> torch.Tensor:
     """converts an array of numerical values to a tensor of longs"""
     if isinstance(arr, pd.Series):
         arr = arr.to_numpy()
@@ -30,23 +44,22 @@ def longs_to_tensor(arr: Iterable, device: torch.device) -> torch.Tensor:
 
 
 def tensor_to_longs(tensor: torch.Tensor) -> list:
-    """converts an array of numerical values to a tensor of longs"""
+    """converts a tensor of longs to numpy"""
     assert tensor.dtype == torch.long
     return tensor.detach().cpu().numpy()
 
 
 def images_to_tensor(images: Iterable[np.ndarray],
-                     device: torch.device) -> torch.Tensor:
+                     device: Optional[torch.device] = None) -> torch.Tensor:
     """Converts a list of images to a tensor"""
-    if not isinstance(images, np.ndarray):
-        images = np.array(images)
-    # Numpy images are of shape (height, width, channel) or (height, width)
-    # but pytorch expects (channels, height width)
+    assert ((isinstance(images, np.ndarray) and images.dtype == np.uint8)
+            or all(im.dtype == np.uint8 for im in images))
+    images = floats_to_tensor(images, device)/255
     if len(images.shape) == 3:  # Grayscale images
-        images = np.expand_dims(images, 1)
-    else:
-        images = np.moveaxis(images, -1, 1)
-    return floats_to_tensor(images, device)
+        images = images.unsqueeze(1)  # (N, H, W) --> (N, 1, H, W)
+    else:  # RGB/RGBA images
+        images = images.permute(0, 3, 1, 2)  # (N, H, W, C) --> (N, C, H, W)
+    return images
 
 
 def tensor_to_images(tensor: torch.Tensor,
@@ -80,7 +93,7 @@ def tensor_to_index(tensor: torch.tensor, dim=1) -> np.ndarray:
 
 def classes_to_tensor(input: Iterable[str],
                       classes: Iterable[str],
-                      device: torch.device) -> torch.Tensor:
+                      device: Optional[torch.device] = None) -> torch.Tensor:
     """
     converts a list of classes to tensor
     'classes' must be a list of unique possible classes.
@@ -88,23 +101,20 @@ def classes_to_tensor(input: Iterable[str],
     """
     indexes = {c: i for i, c in enumerate(classes)}
     return longs_to_tensor([indexes[c] for c in input],
-                           device)
+                           device=device)
 
 
 def tensor_to_classes(tensor: torch.Tensor,
                       classes: List[str]) -> List[str]:
     """Converts a tensor of category indexes to str category"""
     indexes = tensor_to_index(tensor)
-    return np.array(classes)[indexes]
+    return [classes[i] for i in [indexes]]
 
 
-def dataframe_to_tensor(df: pd.DataFrame,
-                        x: List[str],
-                        device: torch.device) -> torch.Tensor:
-    """Converts a dataframe of numerical values to tensor"""
-    assert all(np.issubdtype(df[var].dtype, np.number) for var in x)
-    arr = df[x].to_numpy(dtype=np.float32)
-    return floats_to_tensor(arr, device)
+def tensor_to_dataframe(tensor: torch.Tensor,
+                        names: List[str]) -> pd.DataFrame:
+    """converts a tensor to dataframe with named columns"""
+    return pd.DataFrame(data=tensor_to_floats(tensor), columns=names)
 
 
 def tensor_to_probabilities(tensor: torch.Tensor,
@@ -113,8 +123,7 @@ def tensor_to_probabilities(tensor: torch.Tensor,
     Converts the raw output of a classifier neural network
     to a dataframe of class probability for each observation
     """
-    arr = tensor_to_floats(torch.softmax(tensor, dim=-1))
-    return pd.DataFrame(data=arr, columns=classes)
+    return tensor_to_dataframe(torch.softmax(tensor, dim=-1), classes)
 
 
 def segmented_to_tensor(images: np.ndarray, colors: Iterable,

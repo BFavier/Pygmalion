@@ -1,7 +1,7 @@
 import torch
 import numpy as np
 import pandas as pd
-from typing import Iterable, List, Optional, Union
+from typing import Iterable, List, Optional
 
 
 def MSE(predicted: np.ndarray, target: np.ndarray, weights=None) -> float:
@@ -68,7 +68,7 @@ def recall(predicted: Iterable, target: Iterable) -> dict:
 
 
 def confusion_matrix(target: Iterable[str], predicted: Iterable[str],
-                     classes: Union[None, List[str]] = None):
+                     classes: Optional[List[str]] = None):
     """
     Returns the confusion matrix between prediction and target
     of a classifier
