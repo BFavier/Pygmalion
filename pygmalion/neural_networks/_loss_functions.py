@@ -4,8 +4,7 @@ from typing import Union, Tuple
 
 
 def MSE(y_pred: torch.Tensor, y_target: torch.Tensor,
-        weights: Union[None, torch.Tensor] = None,
-        target_norm: Union[None, torch.nn.Module] = None) -> torch.Tensor:
+        weights: Union[None, torch.Tensor] = None) -> torch.Tensor:
     """
     Returns the Root Mean Squared Error of the model.
     Each observation can optionnaly be weighted
@@ -22,17 +21,12 @@ def MSE(y_pred: torch.Tensor, y_target: torch.Tensor,
         If None all observations are equally weighted
         Otherwise the squared error of each observation
         is multiplied by the given factor
-    target_norm : torch.nn.Module
-        A BatchNormNd module applied to the y_target
-        before calculating the loss
 
     Returns
     -------
     torch.Tensor :
         the scalar value of the loss
     """
-    if target_norm is not None:
-        y_target = target_norm(y_target)
     if weights is None:
         return F.mse_loss(y_pred, y_target)
     else:
@@ -88,7 +82,7 @@ def cross_entropy(y_pred: torch.Tensor, y_target: torch.Tensor,
     else:
         return (F.nll_loss(F.log_softmax(y_pred, dim=1), y_target,
                            weight=class_weights, reduction="none")
-                * weights) / (weights.mean() + 1.0E-9)
+                * weights) / weights.mean()
 
 
 def soft_dice_loss(y_pred: torch.Tensor, y_target: torch.Tensor,

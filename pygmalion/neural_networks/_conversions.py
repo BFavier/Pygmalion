@@ -10,13 +10,13 @@ def named_to_tensor(data: Union[pd.DataFrame, dict, Iterable],
                     ) -> torch.Tensor:
     """converts named variables to tensors"""
     if isinstance(data, dict):
-        data = {k: v if hasattr(v, "__iter__") else [v] for k, v in data.items()}
+        data = {k: v if hasattr(v, "__iter__") else [v] for k, v in zip(names, (data[n] for n in names))}
         data = pd.DataFrame.from_dict(data)
     if isinstance(data, pd.DataFrame):
         data = data[names].to_numpy()
-    data = torch.tensor(data, dtype=torch.float32, device=device)
+    data = floats_to_tensor(data, device=device)
     if len(data.shape) == 1:
-        data = data.unsqueeze(0)
+        data = data.unsqueeze(-1)
     return data
 
 
@@ -109,7 +109,7 @@ def tensor_to_classes(tensor: torch.Tensor,
                       classes: List[str]) -> List[str]:
     """Converts a tensor of category indexes to str category"""
     indexes = tensor_to_index(tensor)
-    return [classes[i] for i in [indexes]]
+    return [classes[i] for i in indexes]
 
 
 def tensor_to_dataframe(tensor: torch.Tensor,

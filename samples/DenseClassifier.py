@@ -9,32 +9,36 @@ data_path = pathlib.Path(__file__).parent / "data"
 
 # Download the data
 ml.datasets.iris(data_path)
-
-# Load the data
 df = pd.read_csv(data_path / "iris.csv")
+df_train, df_val, df_test = ml.split(df, weights=(0.7, 0.2, 0.1))
 target = "variety"
 inputs = [c for c in df.columns if c != "variety"]
-x = df[inputs]
-y = df[target]
-classes = y.unique()
+classes = df[target].unique()
+
+# Defines the batch loader
+class Batchifyer:
+
+    def __init__(self, df: pd.DataFrame):
+        self.data = model.data_to_tensor(df[inputs], df[target])
+
+    def __iter__(self):
+        # returns the whole dataset as a single batch at each optimization step
+        return iter([self.data])
 
 # Create and train the model
-hidden_layers = [{"features": 8},
-                 {"features": 8},
-                 {"features": 8}]
-model = nn.DenseClassifier(inputs, classes, hidden_layers,
+hidden_layers = [8, 8, 8]
+model = nn.DenseClassifier(inputs, target, classes, hidden_layers,
                            activation="elu")
-train_data, val_data, test_data = ml.split(x, y, frac=(0.1, 0.2))
-model.train(train_data, val_data, n_epochs=3000, patience=200, L2=0.001)
+train_data, val_data = Batchifyer(df_train), Batchifyer(df_val)
+train_losses, val_losses, best_step = model.fit(train_data, val_data, n_steps=3000, patience=200, L2=0.001)
 
 # Plot results
-model.plot_history()
-x_test, y_test = test_data
-y_pred = model(x_test)
+ml.plot_losses(train_losses, val_losses, best_step)
+y_pred, p = model.predict(df_test), model.probabilities(df_test)
 f, ax = plt.subplots()
-ml.plot_matrix(ml.confusion_matrix(y_test, y_pred, classes=classes), ax=ax,
-               cmap="Greens", write_values=True, format=".2%")
-acc = ml.accuracy(y_pred, y_test)
+conf = ml.confusion_matrix(df_test[target], y_pred, classes=classes)
+ml.plot_matrix(conf, ax=ax, cmap="Greens", write_values=True, format=".2%")
+acc = ml.accuracy(y_pred, df_test[target])
 ax.set_title(f"Accuracy: {acc:.2%}")
 ax.set_ylabel("predicted")
 ax.set_xlabel("target")

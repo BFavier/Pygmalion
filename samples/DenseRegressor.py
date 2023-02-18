@@ -11,28 +11,34 @@ ml.datasets.boston_housing(data_path)
 df = pd.read_csv(data_path / "boston_housing.csv")
 df_train, df_val, df_test = ml.split(df, weights=(0.7, 0.2, 0.1))
 
+# Plot the correlation matrix between data
 f, ax = plt.subplots()
 ml.plot_matrix(df.corr(), ax=ax, cmap="coolwarm", color_bar=True,
                write_values=True, fontsize=5., vmin=-1., vmax=1., format=".2f")
 ax.set_title("Correlation matrix")
 plt.show()
 
+# Defines the batch loader
+class Batchifyer:
+
+    def __init__(self, df: pd.DataFrame):
+        self.data = model.data_to_tensor(df[inputs], df[target])
+
+    def __iter__(self):
+        # returns the whole dataset as a single batch at each optimization step
+        return iter([self.data])
+
 # Create and train the model
 target = "medv"
 inputs = [c for c in df.columns if c != target]
 model = ml.neural_networks.DenseRegressor(inputs, target, hidden_layers=[16, 16],
                                           activation="elu")
-train_data = model.data_to_tensor(df_train)
-val_data = model.data_to_tensor(df_val)
-train_losses, val_losses, best_step = model.fit([train_data], [val_data], patience=500)
+train_data = Batchifyer(df_train)
+val_data = Batchifyer(df_val)
+train_losses, val_losses, best_step = model.fit(train_data, val_data, patience=500)
 
 # Plot losses
-f, ax = plt.subplots()
-ax.scatter(range(len(train_losses)), train_losses, label="train")
-ax.scatter(range(len(val_losses)), val_losses, label="val")
-ax.axvline(best_step, 0, 1, color="k", label="best step")
-ax.set_yscale("log")
-f.legend()
+ml.plot_losses(train_losses, val_losses, best_step)
 # Plot results
 f, ax = plt.subplots()
 ml.plot_fitting(df_train[target], model.predict(df_train), ax=ax, label="training")

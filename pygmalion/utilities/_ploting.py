@@ -3,7 +3,23 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
-from typing import Iterable, Union, Optional
+from typing import Iterable, Union, Optional, List
+
+
+def plot_losses(train_losses: List[float], val_losses: List[float],
+                best_step: int, ax: Optional[matplotlib.axes.Axes] = None):
+    """
+    plot the losses
+    """
+    if ax is None:
+        f, ax = plt.subplots()
+    ax.scatter(range(len(train_losses)), train_losses, label="training")
+    ax.scatter(range(len(val_losses)), val_losses, label="validation")
+    ax.axvline(best_step, 0, 1, color="k", label="best step")
+    ax.set_xlabel("steps")
+    ax.set_ylabel("loss")
+    ax.set_yscale("log")
+    ax.legend()
 
 
 def plot_fitting(x: Iterable[float], y: Iterable[float],

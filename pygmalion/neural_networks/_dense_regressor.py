@@ -1,16 +1,25 @@
 import torch
-import torch.nn.functional as F
 import pandas as pd
 import numpy as np
 from typing import Sequence, Union, Iterable, Optional
 from ._conversions import floats_to_tensor, tensor_to_floats
 from ._conversions import named_to_tensor, tensor_to_dataframe
 from ._neural_network import NeuralNetwork
-from ._loss_functions import RMSE
+from ._loss_functions import MSE
 from .layers import Activation
 
 
 class DenseRegressor(NeuralNetwork):
+    """
+    DenseRegressor is an implementation of a fully connected NeuralNetwork
+    for tabular regression.
+
+    The data type of input 'x' and target 'y' are both a pd.DataFrame, 
+    or a dictionary, or a np.ndarray of shape (n_observations, n_classes)
+
+    The prediction output is a np.ndarray of shape (n_observations,)
+    if there is a single target, and a pd.DataFrame if there are several
+    """
 
     def __init__(self, inputs: Iterable[str],
                  target: Union[str, Iterable[str]],
@@ -24,7 +33,13 @@ class DenseRegressor(NeuralNetwork):
         inputs : Iterable of str
             the column names of the input variables in a dataframe
         target : str or Iterable of str
-
+            the column name(s) of the variable(s) to predict
+        activation : str or Callable or torch.nn.Module
+            the activation function
+        batch_norm : bool
+            whether or not to add batch norm
+        dropout : float or None
+            the dropout after each hidden layer if provided
         """
         super().__init__()
         self.inputs = tuple(inputs)
@@ -32,7 +47,7 @@ class DenseRegressor(NeuralNetwork):
         self.layers = torch.nn.ModuleList()
         in_features = len(inputs)
         if batch_norm:
-            self.layers.append(torch.nn.BatchNorm1d(in_features))
+            self.layers.append(torch.nn.BatchNorm1d(in_features, affine=False))
         for out_features in hidden_layers:
             self.layers.append(torch.nn.Linear(in_features, out_features))
             if batch_norm:
@@ -53,23 +68,12 @@ class DenseRegressor(NeuralNetwork):
             X = layer(X)
         return self.output(X)
 
-    def loss(self, x: torch.Tensor, y_target: torch.Tensor):
+    def loss(self, x: torch.Tensor, y_target: torch.Tensor,
+             weights: Optional[torch.Tensor] = None):
         y_pred = self(x)
         if self.target_norm is not None:
             y_target = self.target_norm(y_target)
-        return F.mse_loss(y_pred, y_target)
-
-    def data_to_tensor(self, df: Union[pd.DataFrame, dict],
-                        weights: Optional[Sequence[float]] = None,
-                        device: Optional[torch.device] = None) -> tuple:
-        x = self._x_to_tensor(df, device=device)
-        y = self._y_to_tensor(df, device=device)
-        if weights is not None:
-            w = floats_to_tensor(weights, device)
-            data = (x, y, w/w.mean())
-        else:
-            data = (x, y)
-        return data
+        return MSE(y_pred, y_target, weights)
 
     def _x_to_tensor(self, x: Union[pd.DataFrame, dict, Iterable],
                      device: Optional[torch.device] = None):
@@ -77,10 +81,8 @@ class DenseRegressor(NeuralNetwork):
 
     def _y_to_tensor(self, y: Union[pd.DataFrame, dict, Iterable],
                      device: Optional[torch.device] = None) -> torch.Tensor:
-        if isinstance(self.target, str):
-            return floats_to_tensor(y[self.target], device=device).unsqueeze(-1)
-        else:
-            return named_to_tensor(y, list(self.target), device=device)
+        target = [self.target] if isinstance(self.target, str) else list(self.target)
+        return named_to_tensor(y, target, device=device)
 
     def _tensor_to_y(self, tensor: torch.Tensor) -> np.ndarray:
         if self.target_norm is not None:

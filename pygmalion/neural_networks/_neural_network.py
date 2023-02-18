@@ -1,24 +1,17 @@
-import math
 import torch
-import warnings
 import copy
-import matplotlib.pyplot as plt
-from typing import Union, Tuple, Sequence, Optional, Callable, Iterable
+from typing import Union, Sequence, Optional, Callable, Iterable
 from ._conversions import floats_to_tensor
 
 
 class NeuralNetwork(torch.nn.Module):
+    """
+    Abstract class for neural networks
+    Implemented as a simple wrapper around torch.nn.Module
+    with 'fit' and 'predict' methods
+    """
 
     def __init__(self):
-        """
-        NeuralNetwork parameters
-        ------------------------
-        GPU : None or int or list of int
-            The indice of the GPU to evaluate the model on
-            Set None to evaluate on cpu
-        optimization_method : str
-            The name of the optimization method ("Adam", "SGD", ...)
-        """
         super().__init__()
 
     def fit(self, training_data: Iterable,
@@ -29,6 +22,8 @@ class NeuralNetwork(torch.nn.Module):
             patience: Optional[int] = None,
             keep_best: bool = True,
             loss: Optional[Callable] = None,
+            L1: Optional[float] = None,
+            L2: Optional[float] = None,
             metric: Optional[Callable] = None,
             verbose: bool = True):
         """
@@ -123,6 +118,11 @@ class NeuralNetwork(torch.nn.Module):
             if keep_best:
                 self.load_state_dict(best_state)
         return train_losses, val_losses, best_step
+    
+    # def norm(tensors: Iterable[torch.Tensor]) -> torch.Tensor:
+    #     """
+    #     """
+    #     return 0
 
     def data_to_tensor(self, x: object, y: object,
                         weights: Optional[Sequence[float]] = None,
@@ -150,4 +150,25 @@ class NeuralNetwork(torch.nn.Module):
         raise NotImplementedError()
 
     def _tensor_to_y(self, T: torch.Tensor) -> object:
+        raise NotImplementedError()
+
+
+class NeuralNetworkClassifier(NeuralNetwork):
+    """
+    Abstract class for classifier neural networks
+    Implement a 'probabilities' method in addition to the 'NeuralNetwork'
+    class methods
+    """
+
+    def __init__(self):
+        super().__init__()
+    
+    def probabilities(self, *args):
+        self.eval()
+        x = self._x_to_tensor(*args)
+        with torch.no_grad():
+            y_pred = self(x)
+        return self._tensor_to_proba(y_pred)
+    
+    def _tensor_to_proba(self, T: torch.Tensor) -> object:
         raise NotImplementedError()
