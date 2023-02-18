@@ -10,6 +10,7 @@ def named_to_tensor(data: Union[pd.DataFrame, dict, Iterable],
                     ) -> torch.Tensor:
     """converts named variables to tensors"""
     if isinstance(data, dict):
+        data = {k: v if hasattr(v, "__iter__") else [v] for k, v in data.items()}
         data = pd.DataFrame.from_dict(data)
     if isinstance(data, pd.DataFrame):
         data = data[names].to_numpy()
