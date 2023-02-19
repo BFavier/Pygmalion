@@ -1,4 +1,5 @@
 from ._activation import Activation
+from ._conv_block import ConvBlock
 # from ._transformer import TransformerEncoderStage, TransformerDecoderStage
 # from ._transformer import TransformerEncoder, TransformerDecoder
 # from ._transformer import Transformer
