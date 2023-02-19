@@ -4,8 +4,7 @@ from ._activation import Activation
 
 class ConvBlock(torch.nn.Module):
     """
-    A convolution block of the type of ResNet buolding block
-    https://arxiv.org/abs/1512.03385
+    A convolution block with one or more convolutions, and optional shortcut
     """
 
     def __init__(self, in_features: int, out_features: int,
@@ -32,8 +31,6 @@ class ConvBlock(torch.nn.Module):
         super().__init__()
         self.layers = torch.nn.ModuleList()
         self.shortcut = torch.nn.Conv2d(in_features, out_features, (1, 1), stride) if residuals else None
-        self.batch_norm = torch.nn.BatchNorm2d(out_features) if batch_norm else None
-        self.activation = Activation(activation)
         self.dropout = None if dropout is None else torch.nn.Dropout2d(dropout)
         for i in range(1, n_convolutions+1):
             self.layers.append(
@@ -41,21 +38,21 @@ class ConvBlock(torch.nn.Module):
                                 stride, padding="same"))
             stride = (1, 1)
             in_features = out_features
-            if i == n_convolutions:
-                break
             if batch_norm:
                 self.layers.append(torch.nn.BatchNorm2d(out_features))
             self.layers.append(Activation(activation))
 
     def forward(self, X):
+        X = X.to(self.device)
         input = X
         for layer in self.layers:
             X = layer(X)
         if self.shortcut is not None:
             X = X + self.shortcut(input)
-        if self.batch_norm is not None:
-            X = self.batch_norm(X)
-        X = self.activation(X)
         if self.dropout is not None:
             X = self.dropout(X)
         return X
+
+    @property
+    def device(self) -> torch.device:
+        return next(layer for layer in self.layers if isinstance(layer, torch.nn.Conv2d)).weight.device

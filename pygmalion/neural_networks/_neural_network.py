@@ -109,7 +109,7 @@ class NeuralNetwork(torch.nn.Module):
                     break
                 # message printing
                 if verbose:
-                    print(f"Step {step}: train loss = {train_loss:.3g}, val loss = {metric}")
+                    print(f"Step {step}: train loss = {train_loss:.3g}, val loss = {metric:.3g}")
         except KeyboardInterrupt:
             if verbose:
                 print("Training interrupted by the user")
