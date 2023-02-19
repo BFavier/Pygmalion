@@ -1,5 +1,4 @@
 import torch
-from ._weighting import Linear
 from ._functional import mask_chronological
 import torch.nn.functional as F
 from typing import Optional, Tuple
@@ -23,9 +22,9 @@ class ScalableAttention(torch.nn.Module):
         self.n_heads = n_heads
         self.projection_dim = projection_dim
         dim = projection_dim*n_heads
-        self.query = Linear(dim, dim, bias=False)
-        self.key = Linear(dim, dim, bias=False)
-        self.value = Linear(dim, dim, bias=False)
+        self.query = torch.nn.Linear(dim, dim, bias=False)
+        self.key = torch.nn.Linear(dim, dim, bias=False)
+        self.value = torch.nn.Linear(dim, dim, bias=False)
 
     @classmethod
     def from_dump(cls, dump: dict) -> 'ScalableAttention':
@@ -34,9 +33,9 @@ class ScalableAttention(torch.nn.Module):
         torch.nn.Module.__init__(obj)
         obj.n_heads = dump["n heads"]
         obj.projection_dim = dump["projection dim"]
-        obj.query = Linear.from_dump(dump["query"])
-        obj.key = Linear.from_dump(dump["key"])
-        obj.value = Linear.from_dump(dump["value"])
+        obj.query = torch.nn.Linear.from_dump(dump["query"])
+        obj.key = torch.nn.Linear.from_dump(dump["key"])
+        obj.value = torch.nn.Linear.from_dump(dump["value"])
         return obj
 
     def forward(self, query: torch.Tensor, key: torch.Tensor,
@@ -100,7 +99,7 @@ class ScalableAttention(torch.nn.Module):
 
 
         This implementation reproduces this paper :
-            'Efficient Attention: Attention with Linear Complexities'
+            'Efficient Attention: Attention with linear Complexities'
             https://arxiv.org/pdf/1812.01243.pdf
         The masking for causal-attention is inspired from the paper :
             'Rethinking Attention with Performers', Annexe B.1

@@ -6,35 +6,18 @@ from ._multi_head_attention import MultiHeadAttention as MHA
 
 class TransformerEncoderStage(torch.nn.Module):
 
-    @classmethod
-    def from_dump(cls, dump: dict) -> 'TransformerEncoderStage':
-        assert dump["type"] == cls.__name__
-        obj = cls.__new__(cls)
-        torch.nn.Module.__init__(obj)
-        obj.activation = Activation.from_dump(dump["activation"])
-        obj.self_attention = MHA.from_dump(dump["self attention"])
-        obj.intermediate_norm = BatchNorm0d.from_dump(
-            dump["intermediate norm"])
-        obj.intermediate_dropout = Dropout.from_dump(
-            dump["intermediate dropout"])
-        obj.expand = Linear.from_dump(dump["expand"])
-        obj.contract = Linear.from_dump(dump["contract"])
-        obj.out_dropout = Dropout.from_dump(dump["out dropout"])
-        obj.out_norm = BatchNorm0d.from_dump(dump["out norm"])
-        return obj
-
     def __init__(self, projection_dim: int, n_heads: int,
                  dropout: Optional[float] = None, activation: str = "relu"):
         super().__init__()
         dim = projection_dim * n_heads
         self.activation = Activation(activation)
         self.self_attention = MHA(projection_dim, n_heads)
-        self.intermediate_norm = BatchNorm0d(dim)
-        self.intermediate_dropout = Dropout(dropout)
-        self.expand = Linear(dim, dim*2)
-        self.contract = Linear(dim*2, dim)
-        self.out_dropout = Dropout(dropout)
-        self.out_norm = BatchNorm0d(dim)
+        self.intermediate_norm = torch.nn.BatchNorm1d(dim)
+        self.intermediate_dropout = torch.nn.Dropout(dropout)
+        self.expand = torch.nn.Linear(dim, dim*2)
+        self.contract = torch.nn.Linear(dim*2, dim)
+        self.out_dropout = torch.nn.Dropout(dropout)
+        self.out_norm = torch.nn.BatchNorm1d(dim)
 
     def forward(self, X, mask: Optional[torch.Tensor] = None):
         """
@@ -63,38 +46,8 @@ class TransformerEncoderStage(torch.nn.Module):
         X = self.out_norm(X + input)
         return X.view(N, L, -1)
 
-    @property
-    def dump(self) -> dict:
-        return {"type": type(self).__name__,
-                "activation": self.activation.dump,
-                "self attention": self.self_attention.dump,
-                "intermediate norm": self.intermediate_norm.dump,
-                "intermediate dropout": self.intermediate_dropout.dump,
-                "expand": self.expand.dump,
-                "contract": self.contract.dump,
-                "out dropout": self.out_dropout.dump,
-                "out norm": self.out_norm.dump}
-
 
 class TransformerDecoderStage(torch.nn.Module):
-
-    @classmethod
-    def from_dump(cls, dump: dict) -> 'TransformerEncoderStage':
-        assert dump["type"] == cls.__name__
-        obj = cls.__new__(cls)
-        torch.nn.Module.__init__(obj)
-        obj.activation = Activation.from_dump(dump["activation"])
-        obj.masked_attention = MHA.from_dump(dump["masked attention"])
-        obj.first_dropout = Dropout.from_dump(dump["first dropout"])
-        obj.first_norm = BatchNorm0d.from_dump(dump["first norm"])
-        obj.attention = MHA.from_dump(dump["attention"])
-        obj.second_dropout = Dropout.from_dump(dump["second dropout"])
-        obj.second_norm = BatchNorm0d.from_dump(dump["second norm"])
-        obj.expand = Linear.from_dump(dump["expand"])
-        obj.contract = Linear.from_dump(dump["contract"])
-        obj.out_dropout = Dropout.from_dump(dump["out dropout"])
-        obj.out_norm = BatchNorm0d.from_dump(dump["out norm"])
-        return obj
 
     def __init__(self, projection_dim: int, n_heads: int,
                  dropout: Optional[float] = None, activation: str = "relu"):
@@ -102,15 +55,15 @@ class TransformerDecoderStage(torch.nn.Module):
         dim = projection_dim * n_heads
         self.activation = Activation(activation)
         self.masked_attention = MHA(projection_dim, n_heads)
-        self.first_dropout = Dropout(dropout)
-        self.first_norm = BatchNorm0d(dim)
+        self.first_dropout = torch.nn.Dropout(dropout)
+        self.first_norm = torch.nn.BatchNorm1d(dim)
         self.attention = MHA(projection_dim, n_heads)
-        self.second_dropout = Dropout(dropout)
-        self.second_norm = BatchNorm0d(dim)
-        self.expand = Linear(dim, 2*dim)
-        self.contract = Linear(2*dim, dim)
-        self.out_dropout = Dropout(dropout)
-        self.out_norm = BatchNorm0d(dim)
+        self.second_dropout = torch.nn.Dropout(dropout)
+        self.second_norm = torch.nn.BatchNorm1d(dim)
+        self.expand = torch.nn.Linear(dim, 2*dim)
+        self.contract = torch.nn.Linear(2*dim, dim)
+        self.out_dropout = torch.nn.Dropout(dropout)
+        self.out_norm = torch.nn.BatchNorm1d(dim)
 
     def forward(self, encoded, Y, mask: Optional[torch.Tensor] = None):
         """
@@ -140,42 +93,8 @@ class TransformerDecoderStage(torch.nn.Module):
         Y = self.out_norm(Y + input)
         return Y.view(N, L, -1)
 
-    @property
-    def dump(self) -> dict:
-        return {"type": type(self).__name__,
-                "activation": self.activation.dump,
-                "self attention": self.masked_attention.dump,
-                "masked attention": self.masked_attention.dump,
-                "first dropout": self.first_dropout.dump,
-                "first norm": self.first_norm.dump,
-                "attention": self.attention.dump,
-                "second dropout": self.second_dropout.dump,
-                "second norm": self.second_norm.dump,
-                "expand": self.expand.dump,
-                "contract": self.contract.dump,
-                "out dropout": self.out_dropout.dump,
-                "out norm": self.out_norm.dump}
-
-    @property
-    def in_features(self):
-        return self.projection_dim * self.n_heads
-
-    @property
-    def out_features(self):
-        return self.projection_dim * self.n_heads
-
 
 class TransformerEncoder(torch.nn.Module):
-
-    @classmethod
-    def from_dump(cls, dump: dict) -> 'TransformerEncoder':
-        assert dump["type"] == cls.__name__
-        obj = cls.__new__(cls)
-        torch.nn.Module.__init__(obj)
-        obj.stages = torch.nn.ModuleList()
-        for stage in dump["stages"]:
-            obj.stages.append(TransformerEncoderStage.from_dump(stage))
-        return obj
 
     def __init__(self, n_stages: int, projection_dim: int, n_heads: int,
                  dropout: Optional[float] = None, activation: str = "relu"):
@@ -190,23 +109,8 @@ class TransformerEncoder(torch.nn.Module):
             X = stage(X, mask=mask)
         return X
 
-    @property
-    def dump(self) -> dict:
-        return {"type": type(self).__name__,
-                "stages": [stage.dump for stage in self.stages]}
-
 
 class TransformerDecoder(torch.nn.Module):
-
-    @classmethod
-    def from_dump(cls, dump: dict) -> 'TransformerDecoder':
-        assert dump["type"] == cls.__name__
-        obj = cls.__new__(cls)
-        torch.nn.Module.__init__(obj)
-        obj.stages = torch.nn.ModuleList()
-        for stage in dump["stages"]:
-            obj.stages.append(TransformerDecoderStage.from_dump(stage))
-        return obj
 
     def __init__(self, n_stages: int, projection_dim: int, n_heads: int,
                  dropout: Optional[float] = None, activation: str = "relu"):
@@ -221,22 +125,8 @@ class TransformerDecoder(torch.nn.Module):
             Y = stage(encoded, Y, mask=mask)
         return Y
 
-    @property
-    def dump(self) -> dict:
-        return {"type": type(self).__name__,
-                "stages": [stage.dump for stage in self.stages]}
-
 
 class Transformer(torch.nn.Module):
-
-    @classmethod
-    def from_dump(cls, dump: dict) -> 'Transformer':
-        assert dump["type"] == cls.__name__
-        obj = cls.__new__(cls)
-        torch.nn.Module.__init__(obj)
-        obj.encoder = TransformerEncoder.from_dump(dump["encoder"])
-        obj.decoder = TransformerDecoder.from_dump(dump["decoder"])
-        return obj
 
     def __init__(self, n_stages: int, projection_dim: int, n_heads: int,
                  dropout: Optional[float] = None, activation: str = "relu"):
@@ -299,9 +189,3 @@ class Transformer(torch.nn.Module):
         """
         Y = self.decoder(encoded, Y, mask=mask)
         return Y
-
-    @property
-    def dump(self) -> dict:
-        return {"type": type(self).__name__,
-                "encoder": self.encoder.dump,
-                "decoder": self.decoder.dump}
