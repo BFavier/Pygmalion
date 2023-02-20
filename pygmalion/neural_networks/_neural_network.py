@@ -172,3 +172,27 @@ class NeuralNetworkClassifier(NeuralNetwork):
     
     def _tensor_to_proba(self, T: torch.Tensor) -> object:
         raise NotImplementedError()
+
+    def data_to_tensor(self, x: object, y: object,
+                        weights: Optional[Sequence[float]] = None,
+                        class_weights: Optional[Sequence[float]] = None,
+                        device: Optional[torch.device] = None) -> tuple:
+        x = self._x_to_tensor(x, device)
+        y = self._y_to_tensor(y, device)
+        if weights is not None:
+            w = floats_to_tensor(weights, device)
+            w = w/w.mean()
+        else:
+            w = None
+        if class_weights is not None:
+            wc = floats_to_tensor(class_weights, device)
+            wc = wc/wc.mean()
+        else:
+            wc = None
+        if wc is not None:
+            data = (x, y, w, wc)
+        elif w is not None:
+            data = (x, y, w)
+        else:
+            data = (x, y)
+        return data

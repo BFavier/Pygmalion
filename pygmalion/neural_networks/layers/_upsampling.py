@@ -2,26 +2,14 @@ import torch
 import torch.nn.functional as F
 from typing import Union, Tuple, Literal
 
-
 METHOD = Literal["nearest", "bilinear"]
 
-class Unpooling(torch.nn.Module):
+
+class _Upsampling(torch.nn.Module):
     """
     An unpooling layer increases spatial dimensions of a feature map
     by upscaling it using linear/bilinear interpolation
     """
-
-    @classmethod
-    def from_dump(cls, dump: dict) -> object:
-        cls = globals()[dump["type"]]
-        obj = cls.__new__(cls)
-        torch.nn.Module.__init__(obj)
-        factor = dump["factor"]
-        if hasattr(factor, "__iter__"):
-            factor = tuple(factor)
-        obj.factor = factor
-        obj.method = dump["method"]
-        return obj
 
     def __init__(self, factor: Union[int, Tuple[int, int]], method: str):
         """
@@ -38,7 +26,7 @@ class Unpooling(torch.nn.Module):
         self.method = method
 
 
-class Unpooling1d(Unpooling):
+class Upsampling1d(_Upsampling):
 
     def __init__(self, factor: int = 2,
                  method: METHOD = "nearest"):
@@ -52,7 +40,7 @@ class Unpooling1d(Unpooling):
                              align_corners=align)
 
 
-class Unpooling2d(Unpooling):
+class Upsampling2d(_Upsampling):
 
     def __init__(self, factor: Tuple[int, int] = (2, 2),
                  method: METHOD = "nearest"):

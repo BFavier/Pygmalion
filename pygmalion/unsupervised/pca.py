@@ -1,11 +1,10 @@
-from pygmalion._model import Model
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 from typing import Dict, Tuple, Optional
 
 
-class PCA(Model):
+class PCA:
 
     @classmethod
     def from_dump(cls, dump: dict):
@@ -39,7 +38,7 @@ class PCA(Model):
         pca = x.to_numpy() @ matrix
         return pd.DataFrame(data=pca, columns=columns)
 
-    def train(self, df: pd.DataFrame, scale: bool = True):
+    def fit(self, df: pd.DataFrame, scale: bool = True):
         """
         Compute the principal components of a points cloud
 
