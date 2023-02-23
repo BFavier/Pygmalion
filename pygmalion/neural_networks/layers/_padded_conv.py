@@ -40,7 +40,7 @@ class AdaptativePad2d(torch.nn.Module):
             tensor of shape (N, C, H+dh, W+dw) padded with zeros
         """
         _, _, h, w = X.shape
-        delta = [((L-1)*s + d*(k-1) + 1 - L)//2 for L, k, s, d
+        delta = [((L-1)*s - L + d*(k-1) + 1) for L, k, s, d
                  in zip((h, w), self.kernel, self.stride, self.dilation)]
         padding = [p for dim in delta[::-1] for p in (dim//2, dim//2)]
         if any(p > 0 for p in padding):
