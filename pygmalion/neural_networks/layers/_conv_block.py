@@ -1,6 +1,7 @@
 import torch
 from typing import Tuple, Optional
 from ._activation import Activation
+from ._padded_conv import PaddedConv2d
 
 class ConvBlock(torch.nn.Module):
     """
@@ -33,9 +34,7 @@ class ConvBlock(torch.nn.Module):
         self.shortcut = torch.nn.Conv2d(in_features, out_features, (1, 1), stride) if residuals else None
         self.dropout = None if dropout is None else torch.nn.Dropout2d(dropout)
         for i in range(1, n_convolutions+1):
-            self.layers.append(
-                torch.nn.Conv2d(in_features, out_features, kernel_size,
-                                stride, padding="same"))
+            self.layers.append(PaddedConv2d(in_features, out_features, kernel_size, stride, padding="same"))
             stride = (1, 1)
             in_features = out_features
             if batch_norm:
