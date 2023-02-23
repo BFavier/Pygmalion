@@ -24,8 +24,7 @@ y_test = np.load(data_path / "test_segmented.npy")[::10]
 
 # Create and train the model
 device = "cuda:0"
-model = nn.ImageSegmenter(3, classes, [8, 16, 32, 64], pooling_size=(2, 2),
-                          stride=(2, 2), n_convs_per_block=2)
+model = nn.ImageSegmenter(3, classes, [8, 16, 32, 64, 128], pooling_size=(2, 2), n_convs_per_block=2)
 model.to(device)
 
 class Batchifyer:
@@ -45,8 +44,8 @@ class Batchifyer:
                                        class_weights=class_weights,
                                        device=self.device)
 
-train_split, val_split = ml.split(x, y, frac=(0.8, 0.2))
-train_data, val_data = Batchifyer(train_split), Batchifyer(val_split)
+train_split, val_split = ml.split(x, y, weights=(0.8, 0.2))
+train_data, val_data = Batchifyer(*train_split), Batchifyer(*val_split)
 train_losses, val_losses, best_step = model.fit(train_data, val_data,
     n_steps=5000, learning_rate=1.0E-3, patience=100)
 
