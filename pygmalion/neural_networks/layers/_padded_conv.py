@@ -66,7 +66,7 @@ class PaddedConv2d(torch.nn.Module):
         conv = torch.nn.Conv2d(in_channels, out_channels, kernel_size,
             stride=stride, dilation=dilation, groups=groups, bias=bias,
             device=device, dtype=dtype)
-        self.padding = torch.nn.AdaptativePad2d(conv.kernel_size, conv.stride, conv.dilation)
+        self.padding = AdaptativePad2d(conv.kernel_size, conv.stride, conv.dilation)
         self.conv = conv
 
     def _forward(self, X):
