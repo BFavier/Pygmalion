@@ -15,6 +15,7 @@ ml.datasets.cityscapes(data_path)
 data = dict(np.load(data_path / "cityscapes.npz"))
 classes = [c.decode("utf-8") for c in data["classes"].tolist()]
 fractions = data["fractions"]
+colors = data["colors"]
 class_weights = (1/fractions)**0.5
 x = data["train_images"][::10]
 y = data["train_segmented"][::10]
@@ -46,16 +47,22 @@ class Batchifyer:
 train_split, val_split = ml.split(x, y, weights=(0.8, 0.2))
 train_data, val_data = Batchifyer(*train_split, class_weights), Batchifyer(*val_split, class_weights)
 train_losses, val_losses, best_step = model.fit(train_data, val_data,
-    n_steps=5000, learning_rate=1.0E-3, patience=100)
+    n_steps=5000, learning_rate=1.0E-4, patience=100)
 
 # Plot results
 ml.plot_losses(train_losses, val_losses, best_step)
 x_train, y_train = train_split
-for x, y_t in zip(x_train[:5], y_train[:5]):
-    y_p = model([x])[0]
+x_train, y_train = x_train[:5], y_train[:5]
+y_predicted = model.predict(x_train)
+for x, y_t, y_p in zip(x_train, y_train, y_predicted):
     f, axes = plt.subplots(figsize=[15, 5], ncols=3)
     for im, ax, title in zip([x, y_p, y_t], axes,
                              ["image", "segmented", "target"]):
+        if len(im.shape) == 2:
+            h, w = im.shape
+            n, c = colors.shape
+            im = np.take_along_axis(colors.reshape(1, 1, n, c),
+                                    im.reshape(h, w, 1, 1), axis=-2).reshape(h, w, c)
         ax.imshow(im)
         ax.set_title(title)
         ax.set_xticks([])
