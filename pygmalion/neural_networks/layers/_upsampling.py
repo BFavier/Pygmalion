@@ -2,7 +2,7 @@ import torch
 import torch.nn.functional as F
 from typing import Union, Tuple, Literal
 
-METHOD = Literal["nearest", "bilinear"]
+UPSAMPLING_METHOD = Literal["nearest", "interpolate"]
 
 
 class _Upsampling(torch.nn.Module):
@@ -20,7 +20,7 @@ class _Upsampling(torch.nn.Module):
         method : one of {'nearest', 'interpolate'}
             the method used to
         """
-        assert method in METHOD.__args__
+        assert method in UPSAMPLING_METHOD.__args__
         super().__init__()
         self.factor = factor
         self.method = method
@@ -29,7 +29,7 @@ class _Upsampling(torch.nn.Module):
 class Upsampling1d(_Upsampling):
 
     def __init__(self, factor: int = 2,
-                 method: METHOD = "nearest"):
+                 method: UPSAMPLING_METHOD = "nearest"):
         super().__init__(factor, method)
 
     def forward(self, X):
@@ -43,7 +43,7 @@ class Upsampling1d(_Upsampling):
 class Upsampling2d(_Upsampling):
 
     def __init__(self, factor: Tuple[int, int] = (2, 2),
-                 method: METHOD = "nearest"):
+                 method: UPSAMPLING_METHOD = "nearest"):
         super().__init__(factor, method)
 
     def forward(self, X):

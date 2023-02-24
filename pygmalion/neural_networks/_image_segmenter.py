@@ -1,8 +1,8 @@
 import torch
 import pandas as pd
 import numpy as np
-from typing import Union, List, Iterable, Tuple, Optional
-from .layers import ConvBlock, Upsampling2d
+from typing import List, Iterable, Tuple, Optional
+from .layers import ConvBlock, Upsampling2d, UPSAMPLING_METHOD
 from ._conversions import tensor_to_index
 from ._conversions import longs_to_tensor, images_to_tensor
 from ._conversions import tensor_to_floats
@@ -22,6 +22,7 @@ class ImageSegmenter(NeuralNetworkClassifier):
                  n_convs_per_block: int = 1,
                  batch_norm: bool = True,
                  residuals: bool = True,
+                 upsampling_method: UPSAMPLING_METHOD = "nearest",
                  dropout: Optional[float] = None):
         """
         Parameters
@@ -46,7 +47,7 @@ class ImageSegmenter(NeuralNetworkClassifier):
                                      kernel_size, (1, 1), activation, batch_norm,
                                      residuals, n_convs_per_block, dropout)
             layer = torch.nn.ModuleDict(
-                {"upsampling": Upsampling2d(scale_factor) if scale_factor != (1, 1) else None,
+                {"upsampling": Upsampling2d(scale_factor, method=upsampling_method) if scale_factor != (1, 1) else None,
                  "convolutions": convolutions})
             self.decoder.append(layer)
             in_features = out_features

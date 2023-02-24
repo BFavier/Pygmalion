@@ -24,7 +24,7 @@ y_test = data["test_segmented"][:10]
 
 # Create and train the model
 device = "cuda:0"
-model = nn.ImageSegmenter(3, classes, [16, 32, 64, 128], pooling_size=(2, 2), stride=(2, 2), n_convs_per_block=3)
+model = nn.ImageSegmenter(3, classes, [16, 32, 64, 128], pooling_size=(4, 4), n_convs_per_block=3)
 model.to(device)
 
 class Batchifyer:
