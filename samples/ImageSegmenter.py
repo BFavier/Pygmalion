@@ -6,32 +6,31 @@ import pygmalion as ml
 import pygmalion.neural_networks as nn
 import matplotlib.pyplot as plt
 plt.style.use("bmh")
-data_path = pathlib.Path(__file__).parent / "data" / "cityscapes"
+data_path = pathlib.Path(__file__).parent / "data"
 
 # Download the data
-ml.datasets.cityscapes(data_path.parent)
+ml.datasets.cityscapes(data_path)
 
 # Load data
-with open(data_path / "class_fractions.json", "r") as file:
-    fractions = json.load(file)
-class_weights = {k: (1/f)**0.5 if f > 0 else 0. for k, f in fractions.items()}
-with open(data_path / "classes.json", "r") as file:
-    classes = json.load(file)
-x = np.load(data_path / "train_images.npy")[::10]
-y = np.load(data_path / "train_segmented.npy")[::10]
-x_test = np.load(data_path / "test_images.npy")[::10]
-y_test = np.load(data_path / "test_segmented.npy")[::10]
+data = dict(np.load(data_path / "cityscapes.npz"))
+classes = [c.decode("utf-8") for c in data["classes"].tolist()]
+fractions = data["fractions"]
+class_weights = (1/fractions)**0.5
+x = data["train_images"][::10]
+y = data["train_segmented"][::10]
+x_test = data["test_images"][::10]
+y_test = data["test_segmented"][::10]
 
 # Create and train the model
 device = "cuda:0"
-model = nn.ImageSegmenter(3, classes, [8, 16, 32, 64, 128], pooling_size=(2, 2), n_convs_per_block=2)
+model = nn.ImageSegmenter(3, classes, [8, 16, 32, 64], pooling_size=(2, 2), stride=(2, 2), n_convs_per_block=2)
 model.to(device)
 
 class Batchifyer:
 
-    def __init__(self, x: np.ndarray, y: np.ndarray,
+    def __init__(self, x: np.ndarray, y: np.ndarray, class_weights: np.ndarray,
                  n_batches: int=1, batch_size: int=10, device: str=device):
-        self.x, self.y = x, y
+        self.x, self.y, self.class_weights = x, y, class_weights
         self.batch_size = batch_size
         self.n_batches = n_batches
         self.device = device
@@ -41,11 +40,11 @@ class Batchifyer:
         for i in range(self.n_batches):
             idx = shuffle[i*self.batch_size:(i+1)*self.batch_size]
             yield model.data_to_tensor(self.x[idx], self.y[idx],
-                                       class_weights=class_weights,
+                                       class_weights=self.class_weights,
                                        device=self.device)
 
 train_split, val_split = ml.split(x, y, weights=(0.8, 0.2))
-train_data, val_data = Batchifyer(*train_split), Batchifyer(*val_split)
+train_data, val_data = Batchifyer(*train_split, class_weights), Batchifyer(*val_split, class_weights)
 train_losses, val_losses, best_step = model.fit(train_data, val_data,
     n_steps=5000, learning_rate=1.0E-3, patience=100)
 

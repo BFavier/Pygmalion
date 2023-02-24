@@ -4,7 +4,7 @@ import numpy as np
 from typing import Union, List, Iterable, Tuple, Optional
 from .layers import ConvBlock, Upsampling2d
 from ._conversions import tensor_to_classes
-from ._conversions import classes_to_tensor, images_to_tensor
+from ._conversions import longs_to_tensor, images_to_tensor
 from ._conversions import tensor_to_probabilities
 from ._neural_network import NeuralNetworkClassifier
 from ._loss_functions import cross_entropy
@@ -73,7 +73,7 @@ class ImageSegmenter(NeuralNetworkClassifier):
 
     def _y_to_tensor(self, y: Iterable[str],
                      device: Optional[torch.device] = None) -> torch.Tensor:
-        return classes_to_tensor(y, self.classes, device=device)
+        return longs_to_tensor(y, device=device)
 
     def _tensor_to_y(self, tensor: torch.Tensor) -> List[str]:
         return tensor_to_classes(tensor, self.classes)

@@ -49,8 +49,7 @@ def download(directory: str, file_name: str, url: str):
     # test if path are valid
     directory = pathlib.Path(directory)
     if not directory.is_dir():
-        raise NotADirectoryError(f"The path '{directory}' "
-                                 "is not an existing directory")
+        raise NotADirectoryError(f"The directory '{directory}' does not exists")
     path = directory / file_name
     if path.is_file():
         print(f"skipping file '{file_name}' as it already exists", flush=True)
@@ -74,9 +73,9 @@ def download(directory: str, file_name: str, url: str):
             f.write(chunk)
             n_bytes = (i+1)*CHUNK_SIZE / 8.
             for j, unit in enumerate(['Bytes', 'kB', 'MB', 'GB', 'TB']):
-                if n_bytes < 10**(3*(j+1)):
+                if n_bytes < 1024**(j+1):
                     break
-            progress = n_bytes / 10**(3*j)
+            progress = n_bytes / 10024**j
             print(f"\r{file_name}: {progress:.1f} {unit}"+" "*10,
                   end="", flush=True)
     print()
