@@ -54,4 +54,4 @@ class ConvBlock(torch.nn.Module):
 
     @property
     def device(self) -> torch.device:
-        return next(layer for layer in self.children() if isinstance(layer, torch.nn.Conv2d)).weight.device
+        return next(layer for layer in self.modules() if isinstance(layer, torch.nn.Conv2d)).weight.device
