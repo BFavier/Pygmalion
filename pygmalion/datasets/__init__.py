@@ -1,3 +1,4 @@
+from . import generators
 from ._aquarium import aquarium
 from ._boston_housing import boston_housing
 from ._cityscapes import cityscapes
