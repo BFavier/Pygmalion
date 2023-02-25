@@ -42,6 +42,7 @@ class ImageClassifier(NeuralNetworkClassifier):
         self.output = torch.nn.Linear(out_features, len(self.classes))
 
     def forward(self, X: torch.Tensor):
+        X = X.to(self.device)
         for layer in self.layers:
             X = layer(X)
         N, C, H, W = X.shape
@@ -53,6 +54,10 @@ class ImageClassifier(NeuralNetworkClassifier):
              class_weights: Optional[torch.Tensor] = None):
         y_pred = self(x)
         return cross_entropy(y_pred, y_target, weights, class_weights)
+
+    @property
+    def device(self) -> torch.device:
+        return self.output.weight.device
 
     def _x_to_tensor(self, x: np.ndarray,
                      device: Optional[torch.device] = None):
