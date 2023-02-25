@@ -46,6 +46,7 @@ class DenseClassifier(NeuralNetworkClassifier):
         self.output = torch.nn.Linear(in_features, out_features)
 
     def forward(self, X: torch.Tensor):
+        X = X.to(self.device)
         for layer in self.layers:
             X = layer(X)
         return self.output(X)
@@ -54,6 +55,10 @@ class DenseClassifier(NeuralNetworkClassifier):
              weights: Optional[torch.Tensor] = None):
         y_pred = self(x)
         return cross_entropy(y_pred, y_target, weights)
+
+    @property
+    def device(self) -> torch.device:
+        return self.output.weight.device
 
     def _x_to_tensor(self, x: Union[pd.DataFrame, dict, Iterable],
                      device: Optional[torch.device] = None):

@@ -64,6 +64,7 @@ class DenseRegressor(NeuralNetwork):
             self.target_norm = None
 
     def forward(self, X: torch.Tensor):
+        X = X.to(self.device)
         for layer in self.layers:
             X = layer(X)
         return self.output(X)
@@ -74,6 +75,10 @@ class DenseRegressor(NeuralNetwork):
         if self.target_norm is not None:
             y_target = self.target_norm(y_target)
         return MSE(y_pred, y_target, weights)
+    
+    @property
+    def device(self) -> torch.device:
+        return self.output.weight.device
 
     def _x_to_tensor(self, x: Union[pd.DataFrame, dict, Iterable],
                      device: Optional[torch.device] = None):
