@@ -1,5 +1,4 @@
 from typing import Optional, List, Tuple, Union, Iterable
-from warnings import warn
 from unidecode import unidecode
 from pygmalion._model_base import ModelBase
 from ._special_token import SpecialToken
@@ -30,6 +29,10 @@ class TokenizerBase(ModelBase):
         self._special_token_names = special_token_names
         self._vocabulary = tuple()
         self._token_indexes = dict()
+
+    def __repr__(self) -> str:
+        n_tokens = f"{len(self.vocabulary):,}".replace(",", " ")
+        return f"{type(self).__name__}({n_tokens} tokens, ascii={self.ascii}, lowercase={self.lowercase}, special={self.special_tokens})"
 
     def __getattr__(self, attr):
         """
@@ -79,8 +82,6 @@ class TokenizerBase(ModelBase):
 
     @special_tokens.setter
     def special_tokens(self, other: Iterable[Union[str, SpecialToken]]):
-        if any(a != b for a, b in zip(self.special_tokens, other)):
-            warn(f"Order of special tokens have changed.")
         self._special_token_names = tuple(token if isinstance(token, str) else token.name for token in other)
 
     @property

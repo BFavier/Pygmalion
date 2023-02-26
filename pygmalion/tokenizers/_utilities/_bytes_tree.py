@@ -1,5 +1,6 @@
 import random
-from typing import Iterable, Optional, Tuple, List
+from itertools import chain
+from typing import Iterable, Optional, Tuple, List, Union
 
 
 class BytesTree:
@@ -8,9 +9,18 @@ class BytesTree:
     """
 
     def __init__(self, vocabulary: Iterable[bytes]=[bytes([i]) for i in range(256)]):
-        self._data = {}
+        self.data = {}
         for v in vocabulary:
             self.push(v)
+    
+    def __str__(self) -> str:
+        return "\n".join(str(b) for b in self.vocabulary)
+
+    def __repr__(self) -> str:
+        return f"{type(self).__name__}()"
+    
+    def __iter__(self):
+        return iter(self.vocabulary)
 
     def split(self, item: bytes, p_dropout: Optional[float]=None) -> List[bytes]:
         """
@@ -24,7 +34,7 @@ class BytesTree:
         learn a new token
         """
         assert isinstance(item, bytes)
-        prefix, suffix, leaf = self._propagate(self._data, item, None)
+        prefix, suffix, leaf = self._propagate(self.data, item, None)
         if suffix != b"":
             leaf[suffix] = {}
 
@@ -33,7 +43,7 @@ class BytesTree:
         """
         returns the list of known tokens
         """
-        return tuple(self._vocabulary(self._data, b""))
+        return tuple(self._get_vocabulary(self.data, b""))
 
     def _propagate(self, data: dict, value: bytes, p_dropout: Optional[None]) -> Tuple[bytes, list]:
         """
@@ -43,7 +53,7 @@ class BytesTree:
             'suffix' the bytes that did not match
             'leaf' the dictionary where the suffix should be appended
         """
-        if (p_dropout is None) or (data is self._data) or (random.random() >= p_dropout):
+        if (p_dropout is None) or (data is self.data) or (random.random() >= p_dropout):
             for k, v in data.items():
                 if value.startswith(k):
                     prefix, suffix, leaf = self._propagate(v, value[len(k):], p_dropout)
@@ -55,16 +65,16 @@ class BytesTree:
         split a bytes object by known sequence
         """
         while len(item) > 0:
-            prefix, suffix, leaf = self._propagate(self._data, item, p_dropout)
+            prefix, suffix, leaf = self._propagate(self.data, item, p_dropout)
             item = suffix
             yield prefix
 
-    def _vocabulary(self, data: dict, prefix: bytes) -> Iterable[str]:
+    def _get_vocabulary(self, data: dict, prefix: bytes) -> Iterable[str]:
         """
         recursively returns all the tokens contained in the given data
         """
-        if data is not self._data:
+        if data is not self.data:
             yield prefix
         for k, v in data.items():
-            for b in self._vocabulary(v, prefix+k):
+            for b in self._get_vocabulary(v, prefix+k):
                 yield b

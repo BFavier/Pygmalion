@@ -44,7 +44,8 @@ class BytePairEncoder(TokenizerBase):
         self.code = dict(code)
 
     def __repr__(self):
-        return f"{type(self).__name__}({len(self.vocabulary)} words, dropout={self.dropout})"
+        n_tokens = f"{len(self.vocabulary):,}".replace(",", " ")
+        return f"{type(self).__name__}({n_tokens} tokens, ascii={self.ascii}, lowercase={self.lowercase}, dropout={self.dropout}, special={self.special_tokens})"
 
     def fit(self, batch_generator: Iterable[List[str]], max_vocabulary_size: int = 5000,
             min_frequency: float = 1.0E-6, verbose: bool = True, 
@@ -72,13 +73,15 @@ class BytePairEncoder(TokenizerBase):
         count_duplicates : bool
             Count occurence of each unique string in the batch to speed up the
             algorithm if some strings are repeated many times.
-            Usefull if tokenizing with 'pre_tokenize=True'.
+            Usefull if tokenizing with 'pre_tokenize=True', or if some string
+            are expected to be often repeated.
         """
         code = dict(self.code)
-        word_indexes = dict(self._token_indexes)
-        bytes_tree = BytesTree(bytes_tree)
+        token_indexes = dict(self._token_indexes)
         try:
             for i, batch in enumerate(batch_generator):
+                if isinstance(batch, str):
+                    raise ValueError("'batch_generator' is must yield iterables of str when iterated over")
                 if len(code) >= max_vocabulary_size:
                     if verbose:
                         print("\nmaximum number of tokens reached", end="", flush=True)
@@ -105,13 +108,13 @@ class BytePairEncoder(TokenizerBase):
                     if verbose:
                         print("\nminimum token frequency reached", end="", flush=True)
                     break
-                code[new_token] = [word_indexes[b] for b in best_pair]
+                code[new_token] = [token_indexes[b] for b in best_pair]
                 new_token_bytes = b"".join(best_pair)
-                bytes_tree.push(new_token_bytes)
-                word_indexes[new_token_bytes] = new_token
+                self._bytes_tree.push(new_token_bytes)
+                token_indexes[new_token_bytes] = new_token
                 if verbose:
                     print(f"\r\033[K\rMerge iteration {i}: "
-                          f"{len(self.code)} tokens, "
+                          f"{len(code)} tokens, "
                           f"new token frequency={new_token_frequency:.3g}",
                           end="", flush=True)
         except KeyboardInterrupt:
@@ -175,7 +178,7 @@ class BytePairEncoder(TokenizerBase):
                 else:
                     tmp[i] = c
             not_represented = tmp
-        self._vocabulary = tuple(code_bytes.values()) + self.special_tokens
+        self._vocabulary = tuple(code_bytes.values())
         # setting word indexes
         self._token_indexes = {w: i for i, w in enumerate(self.vocabulary)}
         # setting the BytesTree
