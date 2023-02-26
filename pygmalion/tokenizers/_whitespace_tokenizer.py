@@ -3,9 +3,10 @@ from itertools import chain
 from collections import Counter
 from typing import Iterable, List, Dict
 from ._utilities import SpecialToken
+from pygmalion._model_base import ModelBase
 
 
-class WhitespaceTokenizer:
+class WhitespaceTokenizer(ModelBase):
     """
     Tokenizer for whitespace separated words
 
@@ -20,7 +21,7 @@ class WhitespaceTokenizer:
     @classmethod
     def from_dump(cls, dump: dict) -> "WhitespaceTokenizer":
         assert dump["type"] == cls.__name__
-        vocabulary = [cls._unknown]+dump["vocabulary"]
+        vocabulary = tuple(dump["vocabulary"]) + (cls._unknown,)
         return WhitespaceTokenizer(vocabulary=vocabulary)
 
     def __repr__(self):
@@ -32,8 +33,8 @@ class WhitespaceTokenizer:
             vocabulary += [self._unknown]
         self.vocabulary = vocabulary
 
-    def train(self, corpus: Iterable[str], max_tokens: int = 20000,
-              min_frequency: float = 1.0E-6) -> Dict[str, int]:
+    def fit(self, corpus: Iterable[str], max_tokens: int = 20000,
+            min_frequency: float = 1.0E-6) -> Dict[str, int]:
         """
         find all unique words from a corpus of whitespace separated sentences
         """
@@ -54,19 +55,15 @@ class WhitespaceTokenizer:
                                  vocab_count.items()))
         return vocab_count
 
-    def encode(self, sentence: str, regularize: bool = False) -> List[int]:
-        """encode a sentence"""
+    def encode(self, string: str) -> List[int]:
+        """encode a string"""
         return [self._word_indexes.get(w, 0)
-                for w in self._split_words(sentence)]
+                for w in self._split_words(string)]
 
-    def decode(self, sentence: List[int]) -> str:
+    def decode(self, encoded: List[int]) -> str:
         """decode a sentence"""
-        return " ".join([str(self.vocabulary[i]) for i in sentence
+        return " ".join([str(self.vocabulary[i]) for i in encoded
                          if i < self.n_tokens])
-
-    def _split_words(self, sentence: str) -> List[str]:
-        """Split each sentence into a list of 'words'"""
-        return re.findall(r"[\w]+|[^\s\w]", sentence)
 
     @property
     def vocabulary(self):
@@ -84,4 +81,4 @@ class WhitespaceTokenizer:
     @property
     def dump(self):
         return {"type": type(self).__name__,
-                "vocabulary": self.vocabulary[1:]}
+                "vocabulary": self._vocabulary}

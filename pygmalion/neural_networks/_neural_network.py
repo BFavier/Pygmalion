@@ -1,10 +1,13 @@
-import torch
+import io
 import copy
+import pathlib
+import torch
 from typing import Union, Sequence, Optional, Callable, Iterable
 from ._conversions import floats_to_tensor
+from pygmalion._model_base import ModelBase
 
 
-class NeuralNetwork(torch.nn.Module):
+class NeuralNetwork(torch.nn.Module, ModelBase):
     """
     Abstract class for neural networks
     Implemented as a simple wrapper around torch.nn.Module
@@ -12,7 +15,47 @@ class NeuralNetwork(torch.nn.Module):
     """
 
     def __init__(self):
-        super().__init__()
+        super(torch.nn.Module).__init__()
+    
+    @classmethod
+    def load(cls, file_path: Union[str, pathlib.Path, io.IOBase]) -> "NeuralNetwork":
+        model = torch.load(file_path, map_location="cpu")
+        assert isinstance(model, cls)
+        return model
+
+    def save(self, file_path: Union[str, pathlib.Path, io.IOBase],
+             overwrite: bool = False, create_dir: bool = False):
+        """
+        Saves the model to the disk as '.pth' file
+
+        Parameters
+        ----------
+        file : str or pathlib.Path or file like
+            The path where the file must be created
+        overwritte : bool
+            If True, the file is overwritten
+        create_dir : bool
+            If True, the directory to the file's path is created
+            if it does not exist already
+        """
+        if not isinstance(file_path, io.IOBase):
+            file_path = pathlib.Path(file_path)
+            path = file_path.parent
+            suffix = file_path.suffix.lower()
+            if suffix != ".pth":
+                raise ValueError(
+                    f"The model must be saved as a '.pth' file, but got '{suffix}'")
+            if not(create_dir) and not path.is_dir():
+                raise ValueError(f"The directory '{path}' does not exist")
+            else:
+                path.mkdir(exist_ok=True)
+            if not(overwrite) and file_path.exists():
+                raise FileExistsError(
+                    f"The file '{file_path}' already exists, set 'overwrite=True' to overwrite.")
+            with open(file_path, "w", encoding="utf-8") as json_file:
+                torch.save(self, json_file)
+        else:
+            torch.save(self, file_path)
 
     def fit(self, training_data: Iterable,
             validation_data: Optional[Iterable] = None,

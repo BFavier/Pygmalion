@@ -1,36 +1,12 @@
 from typing import Any, Tuple, List, Iterable, Optional, Dict, Union
 from collections import Counter
 from unidecode import unidecode
-import random
-import pathlib
-import re
-import json
-from ._utilities import SpecialToken, zip_pairs, BytesTree
+from warnings import warn
+from ._utilities import SpecialToken, zip_pairs, split_wordpiece, BytesTree
+from pygmalion._model_base import ModelBase
 
 
-class BytePairEncoder:
-
-    @classmethod
-    def load(cls, file: str) -> 'BytePairEncoder':
-        """
-        Load a model from the disk (must be a .json)
-
-        Parameters
-        ----------
-        file : str
-            path of the file to read
-        """
-        file = pathlib.Path(file)
-        if not file.is_file():
-            raise FileNotFoundError(f"The file '{file}' does not exist")
-        suffix = file.suffix.lower()
-        if suffix == ".json":
-            with open(file) as json_file:
-                dump = json.load(json_file)
-        else:
-            raise ValueError("The file must be '.json' file, "
-                             f"but got a '{suffix}'")
-        return cls.from_dump(dump)
+class BytePairEncoder(ModelBase):
 
     @classmethod
     def from_dump(cls, dump: dict) -> "BytePairEncoder":
@@ -40,26 +16,16 @@ class BytePairEncoder:
         code = {int(k): v for k, v in kwargs.pop("code").items()}
         return cls(code=code, **kwargs)
 
-    def __getattr__(self, attr):
-        if attr in object.__getattribute__(self, "_special_token_names"):
-            return object.__getattribute__(self, "_word_indexes")[SpecialToken(attr)]
-        else:
-            return object.__getattribute__(self, attr)
-
-    def __repr__(self):
-        return (f"{type(self).__name__}({len(self._vocabulary)} tokens,"
-                f" dropout={self.dropout})")
-
     def __init__(self, code: Dict[int, Tuple[int, ...]] = {i: [i] for i in range(256)},
                  dropout: Optional[float] = None, ascii: bool = False,
-                 lowercase: bool = False, special_tokens: Iterable[str] = ["PAD"]):
+                 lowercase: bool = False, special_tokens: Iterable[str] = ["START", "PAD", "END"]):
         """
         Build a BytePairEncoder tokenizer
 
         Parameters
         ----------
         code : dict of {int: tuple of int}
-            a dict of {token: subtokens}
+            a dict of {token: subtokens} token pair merges
         dropout : float or None
             either None (no dropout used) or a float between 0 and 1
             the dropout is the probability of a byte pair merge to be skipped
@@ -79,6 +45,18 @@ class BytePairEncoder:
         self.special_tokens = special_tokens
         self.code = dict(code)
 
+    def __getattr__(self, attr):
+        """
+        indexes of special tokens in the vocabulary can be accessed as attributes
+        """
+        if attr in object.__getattribute__(self, "_special_token_names"):
+            return object.__getattribute__(self, "_word_indexes")[SpecialToken(attr)]
+        else:
+            return object.__getattribute__(self, attr)
+
+    def __repr__(self):
+        return f"{type(self).__name__}({len(self.vocabulary)} words, dropout={self.dropout})"
+
     def fit(self, batch_generator: Iterable[List[str]], max_vocabulary_size: int = 5000,
             min_frequency: float = 1.0E-6, verbose: bool = True, 
             pre_tokenize: bool = False, count_duplicates: bool = False):
@@ -87,35 +65,37 @@ class BytePairEncoder:
 
         Parameters
         ----------
-        batch_generator : list of str
-            A generator that yields batches of list of strings.
-            Each string is a string to tokenize
-            Each list yielded is a sample batch to compute byte pair frequencies on
+        batch_generator : Iterable of list of str
+            A generator that yields a list of strings when iterated over.
+            The training stops when there is no more item to iterate over.
+            For common usage, this should be an iterable that yields random
+            subsamples of all the sentences in the corpus indefinitely.
         max_vocabulary_size : int
             the maximum number of tokens in the resulting vocabulary
         min_frequency : float
             the minimum frequency of each new token in the corpus to be valid
         verbose : bool
-            If True, display progression
+            If True, display progress
         pre_tokenize : bool
             If True, each string is splited into
-            single words/white spaces/punctuation,
-            and subword can't cross the word boundary.
-            This should be set to False for languages that are not whitespace
-            separated.
+            single words/numbers/punctuation with trailing white spaces in a
+            wordpiece fashion. Subwords can't cross the white space boundaries.
         count_duplicates : bool
-            Usefull if tokenizing at word level in a "word piece" fashion.
             Count occurence of each unique string in the batch to speed up the
-            algorithm if some strings are repeated many times in a batch.
+            algorithm if some strings are repeated many times.
+            Usefull if tokenizing with 'pre_tokenize=True'.
         """
+        code = dict(self.code)
+        word_indexes = dict(self._word_indexes)
+        bytes_tree = BytesTree(bytes_tree)
         try:
             for i, batch in enumerate(batch_generator):
-                if len(self.code) >= max_vocabulary_size:
+                if len(code) >= max_vocabulary_size:
                     if verbose:
-                        print("\nmaximum number of tokens reached", flush=True)
+                        print("\nmaximum number of tokens reached", end="", flush=True)
                     break
                 if pre_tokenize:
-                    batch = self._pre_tokenize(batch)
+                    batch = (chunk for string in batch for chunk in split_wordpiece(string))
                 if count_duplicates:
                     sequences_count = Counter(batch)
                     sequences = [self.split(unique, with_dropout=True) for unique in sequences_count.keys()]
@@ -127,29 +107,29 @@ class BytePairEncoder:
                 pairs = self._pairs_count(sequences, weights)
                 if len(pairs) == 0:
                     if verbose:
-                        print("\nno more pairs to merge", flush=True)
+                        print("\nno more pairs to merge", end="", flush=True)
                     break
                 best_pair, pair_count = max(pairs.items(), key=lambda x: x[1])
-                new_token = len(self.code)
+                new_token = len(code)
                 new_token_frequency = pair_count / (n_tokens - pair_count)
                 if new_token_frequency < min_frequency:
                     if verbose:
-                        print("\nminimum token frequency reached", flush=True)
+                        print("\nminimum token frequency reached", end="", flush=True)
                     break
-                self.code[new_token] = [self._word_indexes[b] for b in best_pair]
+                code[new_token] = [word_indexes[b] for b in best_pair]
                 new_token_bytes = b"".join(best_pair)
-                self._vocabulary.append(new_token_bytes)
-                self._word_indexes[new_token_bytes] = len(self._vocabulary) - 1
-                self._bytes_tree.push(new_token_bytes)
+                bytes_tree.push(new_token_bytes)
+                word_indexes[new_token_bytes] = new_token
                 if verbose:
                     print(f"\r\033[K\rMerge iteration {i}: "
                           f"{len(self.code)} tokens, "
                           f"new token frequency={new_token_frequency:.3g}",
                           end="", flush=True)
         except KeyboardInterrupt:
-            print("\nInterupted by the user")
-        self.code = self.code  # update all hidden attributes in case the user cut some
-
+            print("\nInterupted by the user", end="")
+        finally:
+            print("")
+        self.code = code
 
     def encode(self, string: str, with_dropout: bool = True,
                start_token: bool = False, end_token: bool = False,
@@ -179,47 +159,14 @@ class BytePairEncoder:
         return decoded.decode("utf-8", errors="replace")
 
     def split(self, string: str, with_dropout: bool = True) -> List[bytes]:
-        """Returns the string splited token by token"""
+        """
+        Returns the string splited token by token
+        """
         if self.ascii:
             string = unidecode(string)
         if self.lowercase:
             string = string.lower()
         return self._bytes_tree.split(string.encode("utf-8"), p_dropout=self.dropout if with_dropout else None)
-
-    def save(self, file: str, overwrite: bool = True):
-        """
-        Saves a model to the disk (as .json)
-
-        Parameters
-        ----------
-        file : str
-            The path where the file must be created
-        overwritte : bool
-            If True, the file is overwritten
-        """
-        file = pathlib.Path(file)
-        path = file.parent
-        suffix = file.suffix.lower()
-        if not path.is_dir():
-            raise ValueError(f"The directory '{path}' does not exist")
-        if not(overwrite) and file.exists():
-            raise FileExistsError(f"The file '{file}' already exists,"
-                                  " set 'overwrite=True' to overwrite.")
-        if suffix == ".json":
-            with open(file, "w") as json_file:
-                json.dump(self.dump, json_file)
-        else:
-            raise ValueError("The model must be saved as a '.json' "
-                             f" file, but got '{suffix}'")
-
-    @property
-    def dump(self):
-        return {"type": type(self).__name__,
-                "code": self.code,
-                "dropout": self.dropout,
-                "ascii": self.ascii,
-                "lowercase": self.lowercase,
-                "special_tokens": self._special_token_names}
 
     @property
     def code(self) -> Dict[int: List[int]]:
@@ -239,7 +186,6 @@ class BytePairEncoder:
                 else:
                     tmp[i] = c
             not_represented = tmp
-
         self._vocabulary = tuple(code_bytes.values()) + self.special_tokens
         # setting word indexes
         self._word_indexes = {w: i for i, w in enumerate(self.vocabulary)}
@@ -253,15 +199,13 @@ class BytePairEncoder:
     @property
     def special_tokens(self) -> Tuple[SpecialToken, ...]:
         return tuple(SpecialToken(name) for name in self._special_token_names)
-    
+
     @special_tokens.setter
     def special_tokens(self, other: Iterable[Union[str, SpecialToken]]):
+        if any(a != b for a, b in zip(self.special_tokens, other)):
+            warn(f"Order of special tokens have changed.")
         self._special_token_names = tuple(token if isinstance(token, str) else token.name for token in other)
         self._vocabulary = tuple(bytes(k) for k in self.code.keys()) + self.special_tokens
-
-    @property
-    def n_tokens(self):
-        return len(self.code) + len(self._special_token_names)
 
     @property
     def ascii(self) -> bool:
@@ -270,19 +214,15 @@ class BytePairEncoder:
     @property
     def lowercase(self) -> int:
         return self._lowercase
-    
-    @staticmethod
-    def _pre_tokenize(batch: Iterable[str]) -> Iterable[str]:
-        """
-        Extract all series of digits or series of letters from each string
 
-        Example
-        -------
-        >>> list(self._pre_tokenize(["Tökenizer2000, stârts_at 14h30..."]))
-        ['Tökenizer', '2000', ',', 'stârts', 'at', '14', 'h', '30', '...']
-        """
-        return (token for string in batch for token in
-                re.findall(r"[\d]+ ?|[^\W\d]+ ?|[^\w\s]+ ?", string))
+    @property
+    def dump(self):
+        return {"type": type(self).__name__,
+                "code": self.code,
+                "dropout": self.dropout,
+                "ascii": self.ascii,
+                "lowercase": self.lowercase,
+                "special_tokens": self._special_token_names}
 
     def _bytes(self, token_index: int, code: Dict[int, Tuple[int]]) -> bytes:
         """

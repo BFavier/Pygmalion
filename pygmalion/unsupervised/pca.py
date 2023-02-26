@@ -2,9 +2,10 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 from typing import Dict, Tuple, Optional
+from pygmalion._model_base import ModelBase
 
 
-class PCA:
+class PCA(ModelBase):
 
     @classmethod
     def from_dump(cls, dump: dict):

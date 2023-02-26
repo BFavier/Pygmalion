@@ -1,10 +1,12 @@
 from typing import List
+from pygmalion._model_base import ModelBase
 
 
-class CharTokenizer:
+class CharTokenizer(ModelBase):
     """
-    Tokenizer that split text into single bytes chunks
-    (using UTF-8 encoding)
+    Tokenizer that split text into single bytes tokens (using UTF-8 encoding)
+    This dummy tokenizer does not compress information
+    but also does not require training
     """
 
     @classmethod
@@ -12,27 +14,24 @@ class CharTokenizer:
         assert dump["type"] == cls.__name__
         return CharTokenizer()
 
-    def __repr__(self):
-        return f"{type(self).__name__}()"
-
     def __init__(self):
         pass
 
-    def encode(self, sentence: str, regularize: bool = False) -> List[int]:
-        """encode a sentence"""
-        return list(sentence.encode("utf-8"))
+    def encode(self, string: str) -> List[int]:
+        """encode a string"""
+        return list(self.split(string))
 
-    def decode(self, sentence: List[int]) -> str:
-        """decode a sentence"""
-        return bytes(sentence).decode("utf-8", errors="ignore")
+    def decode(self, encoded: List[int]) -> str:
+        """decode an encoded string"""
+        return bytes(encoded).decode("utf-8", errors="ignore")
+    
+    def split(self, string: str) -> bytes:
+        """split a string in bytes"""
+        return string.encode("utf-8")
 
     @property
     def vocabulary(self):
-        return [bytes([i]) for i in range(256)]
-
-    @property
-    def n_tokens(self):
-        return 256
+        return tuple(bytes([i]) for i in range(256))
 
     @property
     def dump(self):
