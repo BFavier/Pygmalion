@@ -5,7 +5,7 @@ import pygmalion.neural_networks as nn
 import pandas as pd
 import matplotlib.pyplot as plt
 plt.style.use("bmh")
-data_path = pathlib.Path(__file__).parent / "data"
+data_path = pathlib.Path(__file__).parents[1] / "data"
 
 # Download the data
 ml.datasets.iris(data_path)

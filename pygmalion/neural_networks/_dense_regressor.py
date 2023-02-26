@@ -75,7 +75,7 @@ class DenseRegressor(NeuralNetwork):
         if self.target_norm is not None:
             y_target = self.target_norm(y_target)
         return MSE(y_pred, y_target, weights)
-    
+
     @property
     def device(self) -> torch.device:
         return self.output.weight.device

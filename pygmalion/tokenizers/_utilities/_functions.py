@@ -16,7 +16,22 @@ def zip_pairs(iterable: Iterable[Any]) -> Iterable[Tuple[Any, Any]]:
     return zip(first, second)
 
 
-_wordpiece_pattern = re.compile(r"[\d]+ ?|[^\W\d]+ ?|[^\w\s]+ ?")
+_split_words_pattern = re.compile(r"(\d+|[^\W\d]+|([^\s\w])\2*)")
+
+
+def split_words(string: str) -> List[str]:
+    """
+    Extract all sequences of letters/digits/same punctuation while ignoring spaces
+
+    Example
+    -------
+    >>> split_words("horizon@hotmail.fr 14h30(+20m) ...")
+    ['horizon', '@', 'hotmail', '.', 'fr', '14', 'h', '30', '(', '+', '20', 'm', ')', '...']
+    """
+    return [m[0] for m in _split_words_pattern.findall(string)]
+
+
+_split_wordpiece_pattern = re.compile(r"\S+\s?")
 
 
 def split_wordpiece(string: str) -> List[str]:
@@ -25,7 +40,12 @@ def split_wordpiece(string: str) -> List[str]:
 
     Example
     -------
-    >>> split_string("stârts_at 14h30 ...")
-    ['stârts_at ', '14', 'h', '30 ', '...']
+    >>> split_wordpiece("horizon@hotmail.fr 14h30(+20m) ...")
+    ['horizon@hotmail.fr ', '14h30(+20m) ', '...']
     """
-    return _wordpiece_pattern.findall(string)
+    return _split_wordpiece_pattern.findall(string)
+
+
+if __name__ == "__main__":
+    import IPython
+    IPython.embed()

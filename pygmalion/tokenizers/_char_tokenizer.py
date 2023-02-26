@@ -1,8 +1,7 @@
 from typing import List
-from pygmalion._model_base import ModelBase
+from ._utilities import TokenizerBase
 
-
-class CharTokenizer(ModelBase):
+class CharTokenizer(TokenizerBase):
     """
     Tokenizer that split text into single bytes tokens (using UTF-8 encoding)
     This dummy tokenizer does not compress information
@@ -14,20 +13,27 @@ class CharTokenizer(ModelBase):
         assert dump["type"] == cls.__name__
         return CharTokenizer()
 
-    def __init__(self):
-        pass
+    def __init__(self, ascii: bool, lowercase: bool,
+                 special_tokens: List[str]=["START", "END", "PAD"]):
+        super().__init__(ascii, lowercase, special_tokens)
 
     def encode(self, string: str) -> List[int]:
-        """encode a string"""
-        return list(self.split(string))
+        """
+        encode a string
+        """
+        return list(self._preprocess(string).encode("utf-8"))
 
     def decode(self, encoded: List[int]) -> str:
-        """decode an encoded string"""
+        """
+        decode an encoded string
+        """
         return bytes(encoded).decode("utf-8", errors="ignore")
-    
-    def split(self, string: str) -> bytes:
-        """split a string in bytes"""
-        return string.encode("utf-8")
+
+    def split(self, string: str) -> List[bytes]:
+        """
+        split a string in bytes, with each byte beeing a token
+        """
+        return [b for b in self._preprocess(string).encode("utf-8")]
 
     @property
     def vocabulary(self):

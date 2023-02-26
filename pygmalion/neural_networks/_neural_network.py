@@ -15,8 +15,9 @@ class NeuralNetwork(torch.nn.Module, ModelBase):
     """
 
     def __init__(self):
-        super(torch.nn.Module).__init__()
-    
+        torch.nn.Module.__init__(self)
+        ModelBase.__init__(self)
+
     @classmethod
     def load(cls, file_path: Union[str, pathlib.Path, io.IOBase]) -> "NeuralNetwork":
         model = torch.load(file_path, map_location="cpu")

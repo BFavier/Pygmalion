@@ -1,12 +1,10 @@
-from typing import Any, Tuple, List, Iterable, Optional, Dict, Union
+from typing import Tuple, List, Iterable, Optional, Dict
 from collections import Counter
 from unidecode import unidecode
-from warnings import warn
-from ._utilities import SpecialToken, zip_pairs, split_wordpiece, BytesTree
-from pygmalion._model_base import ModelBase
+from ._utilities import zip_pairs, split_wordpiece, BytesTree, TokenizerBase
 
 
-class BytePairEncoder(ModelBase):
+class BytePairEncoder(TokenizerBase):
 
     @classmethod
     def from_dump(cls, dump: dict) -> "BytePairEncoder":
@@ -45,15 +43,6 @@ class BytePairEncoder(ModelBase):
         self.special_tokens = special_tokens
         self.code = dict(code)
 
-    def __getattr__(self, attr):
-        """
-        indexes of special tokens in the vocabulary can be accessed as attributes
-        """
-        if attr in object.__getattribute__(self, "_special_token_names"):
-            return object.__getattribute__(self, "_word_indexes")[SpecialToken(attr)]
-        else:
-            return object.__getattribute__(self, attr)
-
     def __repr__(self):
         return f"{type(self).__name__}({len(self.vocabulary)} words, dropout={self.dropout})"
 
@@ -86,7 +75,7 @@ class BytePairEncoder(ModelBase):
             Usefull if tokenizing with 'pre_tokenize=True'.
         """
         code = dict(self.code)
-        word_indexes = dict(self._word_indexes)
+        word_indexes = dict(self._token_indexes)
         bytes_tree = BytesTree(bytes_tree)
         try:
             for i, batch in enumerate(batch_generator):
@@ -137,7 +126,7 @@ class BytePairEncoder(ModelBase):
         """
         Apply the tokenization
         """
-        string = [self._word_indexes[token] for token in self.split(string, with_dropout)]
+        string = [self._token_indexes[token] for token in self.split(string, with_dropout)]
         if start_token:
             string.insert(0, self.START)
         if end_token:
@@ -169,7 +158,7 @@ class BytePairEncoder(ModelBase):
         return self._bytes_tree.split(string.encode("utf-8"), p_dropout=self.dropout if with_dropout else None)
 
     @property
-    def code(self) -> Dict[int: List[int]]:
+    def code(self) -> Dict[int, List[int]]:
         return self._code
 
     @code.setter
@@ -188,32 +177,9 @@ class BytePairEncoder(ModelBase):
             not_represented = tmp
         self._vocabulary = tuple(code_bytes.values()) + self.special_tokens
         # setting word indexes
-        self._word_indexes = {w: i for i, w in enumerate(self.vocabulary)}
+        self._token_indexes = {w: i for i, w in enumerate(self.vocabulary)}
         # setting the BytesTree
         self._bytes_tree = BytesTree(sorted(self._vocabulary, key=lambda x: len(x)))
-
-    @property
-    def vocabulary(self) -> Tuple[Union[bytes, SpecialToken], ...]:
-        return self._vocabulary
-
-    @property
-    def special_tokens(self) -> Tuple[SpecialToken, ...]:
-        return tuple(SpecialToken(name) for name in self._special_token_names)
-
-    @special_tokens.setter
-    def special_tokens(self, other: Iterable[Union[str, SpecialToken]]):
-        if any(a != b for a, b in zip(self.special_tokens, other)):
-            warn(f"Order of special tokens have changed.")
-        self._special_token_names = tuple(token if isinstance(token, str) else token.name for token in other)
-        self._vocabulary = tuple(bytes(k) for k in self.code.keys()) + self.special_tokens
-
-    @property
-    def ascii(self) -> bool:
-        return self._ascii
-
-    @property
-    def lowercase(self) -> int:
-        return self._lowercase
 
     @property
     def dump(self):

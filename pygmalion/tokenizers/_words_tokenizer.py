@@ -2,13 +2,12 @@ import re
 from itertools import chain
 from collections import Counter
 from typing import Iterable, List, Dict
-from ._utilities import SpecialToken
-from pygmalion._model_base import ModelBase
+from ._utilities import split_words, TokenizerBase
 
 
-class WhitespaceTokenizer(ModelBase):
+class WordsTokenizer(TokenizerBase):
     """
-    Tokenizer for whitespace separated words
+    Tokenizer for whitespace separated words, with additional
 
     Attributes
     ----------
@@ -16,21 +15,19 @@ class WhitespaceTokenizer(ModelBase):
         set of unique possible words, including '#UNKNOWN#' for unknow words
     """
 
-    _unknown = SpecialToken("UNKNOWN")
-
     @classmethod
-    def from_dump(cls, dump: dict) -> "WhitespaceTokenizer":
+    def from_dump(cls, dump: dict) -> "WordsTokenizer":
         assert dump["type"] == cls.__name__
         vocabulary = tuple(dump["vocabulary"]) + (cls._unknown,)
-        return WhitespaceTokenizer(vocabulary=vocabulary)
+        return WordsTokenizer(vocabulary=vocabulary)
 
     def __repr__(self):
         return f"{type(self).__name__}({len(self.vocabulary)} words)"
 
-    def __init__(self, vocabulary: List[str] = []):
-        """build a tokenizer from the given vocabulary"""
-        if self._unknown not in vocabulary:
-            vocabulary += [self._unknown]
+    def __init__(self, vocabulary: List[str] = [],
+                 ascii: bool=False, lowercase: bool=False,
+                 special_tokens: List[str]=["UNKNOWN", "START", "END", "PAD"]):
+        super().__init__(ascii, lowercase, special_tokens)
         self.vocabulary = vocabulary
 
     def fit(self, corpus: Iterable[str], max_tokens: int = 20000,
@@ -57,13 +54,17 @@ class WhitespaceTokenizer(ModelBase):
 
     def encode(self, string: str) -> List[int]:
         """encode a string"""
-        return [self._word_indexes.get(w, 0)
-                for w in self._split_words(string)]
+        return [self._token_indexes.get(w, self.UNKNOWN)
+                for w in self.split(string)]
 
     def decode(self, encoded: List[int]) -> str:
         """decode a sentence"""
         return " ".join([str(self.vocabulary[i]) for i in encoded
                          if i < self.n_tokens])
+
+    def split(self, string: str) -> List[str]:
+        """ """
+        return split_words(self._preprocess(string))
 
     @property
     def vocabulary(self):
@@ -71,12 +72,8 @@ class WhitespaceTokenizer(ModelBase):
 
     @vocabulary.setter
     def vocabulary(self, other):
-        self._vocabulary = other
-        self._word_indexes = {w: i for i, w in enumerate(self.vocabulary)}
-
-    @property
-    def n_tokens(self):
-        return len(self.vocabulary)
+        self._vocabulary = tuple(other)
+        self._token_indexes = {w: i for i, w in enumerate(self.vocabulary)}
 
     @property
     def dump(self):
