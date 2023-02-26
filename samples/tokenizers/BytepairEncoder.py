@@ -21,7 +21,7 @@ class Batchifyer:
 
 
 
-tokenizer = ml.tokenizers.BytePairEncoder(dropout=0.1, lowercase=True)
-count = tokenizer.fit(Batchifyer(df.text, batch_size=100), min_frequency=1.0E-6)
+tokenizer = ml.tokenizers.BytePairEncoder(dropout=None, lowercase=True)
+count = tokenizer.fit(Batchifyer(df.text, batch_size=100), min_frequency=1.0E-6, pre_tokenize=False)
 
 IPython.embed()

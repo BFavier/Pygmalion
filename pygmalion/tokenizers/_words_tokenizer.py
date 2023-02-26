@@ -2,7 +2,7 @@ import re
 from itertools import chain
 from collections import Counter
 from typing import Iterable, List, Dict
-from ._utilities import split_words, TokenizerBase
+from ._utilities import split_words, TokenizerBase, SpecialToken
 
 
 class WordsTokenizer(TokenizerBase):
@@ -21,9 +21,6 @@ class WordsTokenizer(TokenizerBase):
         vocabulary = tuple(dump["vocabulary"]) + (cls._unknown,)
         return WordsTokenizer(vocabulary=vocabulary)
 
-    def __repr__(self):
-        return f"{type(self).__name__}({len(self.vocabulary)} words)"
-
     def __init__(self, vocabulary: List[str] = [],
                  ascii: bool=False, lowercase: bool=False,
                  special_tokens: List[str]=["UNKNOWN", "START", "END", "PAD"]):
@@ -35,7 +32,7 @@ class WordsTokenizer(TokenizerBase):
         """
         find all unique words from a corpus of whitespace separated sentences
         """
-        words = (self._split_words(s) for s in corpus)
+        words = (split_words(s) for s in corpus)
         words_count = Counter(chain(*words))
         n_words = sum(words_count.values())
         vocab = sorted((w for w, c in words_count.items()
@@ -46,33 +43,30 @@ class WordsTokenizer(TokenizerBase):
         vocab_count = dict(sorted(vocab_count.items(),
                                   key=lambda item: item[1],
                                   reverse=True))
-        self.vocabulary = [self._unknown] + vocab
+        self.vocabulary = vocab
         n_unknowns = n_words - sum(vocab_count.values())
-        vocab_count = dict(chain([(self._unknown, n_unknowns)],
+        vocab_count = dict(chain([(self.UNKNOWN, n_unknowns)],
                                  vocab_count.items()))
         return vocab_count
 
     def encode(self, string: str) -> List[int]:
         """encode a string"""
         return [self._token_indexes.get(w, self.UNKNOWN)
-                for w in self.split(string)]
+                for w in split_words(self._preprocess(string))]
 
     def decode(self, encoded: List[int]) -> str:
-        """decode a sentence"""
-        return " ".join([str(self.vocabulary[i]) for i in encoded
-                         if i < self.n_tokens])
+        """decode an encoded string"""
+        vocab = self.vocabulary
+        return " ".join([str(vocab[i]) for i in encoded])
 
     def split(self, string: str) -> List[str]:
-        """ """
-        return split_words(self._preprocess(string))
+        """split a string"""
+        return [w if w in self._token_indexes.keys() else SpecialToken("UNKNOWN")
+                for w in split_words(self._preprocess(string))]
 
-    @property
-    def vocabulary(self):
-        return self._vocabulary
-
-    @vocabulary.setter
+    @TokenizerBase.vocabulary.setter
     def vocabulary(self, other):
-        self._vocabulary = tuple(other)
+        self._vocabulary = tuple(t for t in other if isinstance(t, str))
         self._token_indexes = {w: i for i, w in enumerate(self.vocabulary)}
 
     @property
