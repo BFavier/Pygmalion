@@ -8,13 +8,13 @@ path = pathlib.Path(__file__).parent
 data_path = path / "data"
 
 # Download the data
-train_data = ml.datasets.generators.OperationsGenerator()
+ml.datasets.sentence_pairs(data_path)
 
 df = pd.read_csv(data_path / "sentence_pairs.txt", header=None,
                  names=["en", "fr"], sep="\t")
 en, fr = df["en"].str.lower(), df["fr"].str.lower()
 
-tokenizer_in = ml.tokenizers.WhitespaceTokenizer()
+tokenizer_in = ml.unsupervised.tokenizers.WhitespaceTokenizer()
 c1 = tokenizer_in.train(fr)
 tokenizer_out = ml.unsupervised.tokenizers.WhitespaceTokenizer()
 c2 = tokenizer_out.train(en)

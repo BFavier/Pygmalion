@@ -1,8 +1,7 @@
 from typing import List
-from ._tokenizer import Tokenizer
 
 
-class CharTokenizer(Tokenizer):
+class CharTokenizer:
     """
     Tokenizer that split text into single bytes chunks
     (using UTF-8 encoding)

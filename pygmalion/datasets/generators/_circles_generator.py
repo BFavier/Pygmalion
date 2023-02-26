@@ -5,7 +5,7 @@ import numpy as np
 
 class CirclesGenerator:
     """
-    A circles generator that generates on the fly batches of (image, segmentation)
+    A generator that generates on the fly batches of (image, segmentation)
     with 'image' grayscale images of circles boundaries
     and 'segmentation' the binary image of circle interiors
     """
