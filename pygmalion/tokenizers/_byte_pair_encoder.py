@@ -47,7 +47,7 @@ class BytePairEncoder(TokenizerBase):
         n_tokens = f"{len(self.vocabulary):,}".replace(",", " ")
         return f"{type(self).__name__}({n_tokens} tokens, ascii={self.ascii}, lowercase={self.lowercase}, dropout={self.dropout}, special={self.special_tokens})"
 
-    def fit(self, batch_generator: Iterable[List[str]], max_vocabulary_size: int = 5000,
+    def fit(self, batch_generator: Iterable[List[str]], max_vocabulary_size: int = 20000,
             min_frequency: float = 1.0E-6, verbose: bool = True, 
             pre_tokenize: bool = False, count_duplicates: bool = False):
         """

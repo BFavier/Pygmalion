@@ -45,7 +45,7 @@ class BytesTree:
         """
         return tuple(self._get_vocabulary(self.data, b""))
 
-    def _propagate(self, data: dict, value: bytes, p_dropout: Optional[None]) -> Tuple[bytes, list]:
+    def _propagate(self, data: dict, value: bytes, p_dropout: Optional[float]) -> Tuple[bytes, bytes, dict]:
         """
         recursively returns a (prefix, suffix, leaf) tuple
         with:
