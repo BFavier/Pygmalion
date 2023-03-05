@@ -1,3 +1,4 @@
+import torch
 import pathlib
 import IPython
 import numpy as np
@@ -32,15 +33,15 @@ class Batchifyer:
 
     def __init__(self, x: np.ndarray, y: np.ndarray,
                  n_batches: int=1, batch_size: int=1000):
-        self.x, self.y = x, y
+        self.x, self.y = model.data_to_tensor(x, y)
         self.batch_size = batch_size
         self.n_batches = n_batches
     
     def __iter__(self):
-        shuffle = np.random.permutation(len(self.x))
+        shuffle = torch.randperm(len(self.x))
         for i in range(self.n_batches):
             idx = shuffle[i*self.batch_size:(i+1)*self.batch_size]
-            yield model.data_to_tensor(self.x[idx], self.y[idx])
+            yield (self.x[idx], self.y[idx])
 
 train_data, val_data = (Batchifyer(*data) for data in ml.split(x_train, y_train, weights=(0.8, 0.2)))
 train_losses, val_losses, best_step = model.fit(train_data, val_data, n_steps=1000)
