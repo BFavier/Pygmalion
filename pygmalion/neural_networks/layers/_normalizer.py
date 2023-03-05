@@ -25,6 +25,11 @@ class Normalizer(torch.nn.Module):
         ----------
         X : torch.Tensor
             tensor of floats of shape (N, D, *)
+        
+        Returns
+        -------
+        torch.Tensor :
+            tensor of floats of shape (N, D, *) normalized along 1st dimension
         """
         if X.shape[1] != self.num_features:
             raise ValueError(f"Expected tensor of shape (N, {self.num_features}, *) but got {tuple(X.shape)}")
@@ -35,5 +40,16 @@ class Normalizer(torch.nn.Module):
                 self.running_mean = self.momentum * mean + (1 - self.momentum) * self.running_mean
                 var = x.var(dim=1, unbiased=False)
                 self.running_var = self.momentum * var + (1 - self.momentum) * self.running_var
-        pass
-        
+        shape = [self.num_features if i == 1 else 1 for i, _ in enumerate(X.shape)]
+        X = (X - self.running_mean.reshape(shape)) / (self.running_var.reshape(shape) + self.eps)**0.5
+        if self.weight is not None:
+            X = X * self.weight.reshape(shape)
+        if self.bias is not None:
+            X = X + self.bias.reshape(shape)
+    
+    def unapply(self, Y: torch.Tensor) -> torch.Tensor:
+        """
+        Unapply normalization
+        """
+        shape = [self.num_features if i == 1 else 1 for i, _ in enumerate(Y.shape)]
+        return Y * (self.running_var.reshape(shape) + self.eps)**0.5 + self.running_mean.reshape(shape)
