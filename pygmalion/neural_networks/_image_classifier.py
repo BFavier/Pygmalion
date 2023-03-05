@@ -20,7 +20,7 @@ class ImageClassifier(NeuralNetworkClassifier):
                  stride: Tuple[int, int] = (1, 1),
                  activation: str = "relu",
                  n_convs_per_block: int = 1,
-                 batch_norm: bool = True,
+                 normalize: bool = True,
                  residuals: bool = True,
                  dropout: Optional[float] = None):
         """
@@ -35,7 +35,7 @@ class ImageClassifier(NeuralNetworkClassifier):
         for out_features in features:
             self.layers.append(
                 ConvBlock(in_features, out_features, kernel_size, stride, activation,
-                          batch_norm, residuals, n_convs_per_block, dropout))
+                          normalize, residuals, n_convs_per_block, dropout))
             if pooling_size is not None:
                 self.layers.append(torch.nn.MaxPool2d(pooling_size))
             in_features = out_features

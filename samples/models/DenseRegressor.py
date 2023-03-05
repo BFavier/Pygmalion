@@ -31,11 +31,11 @@ class Batchifyer:
 # Create and train the model
 target = "medv"
 inputs = [c for c in df.columns if c != target]
-model = ml.neural_networks.DenseRegressor(inputs, target, hidden_layers=[16, 16],
-                                          activation="elu")
+model = ml.neural_networks.DenseRegressor(inputs, target, hidden_layers=[32, 32],
+                                          activation="elu", normalize=True, dropout=0.1)
 train_data = Batchifyer(df_train)
 val_data = Batchifyer(df_val)
-train_losses, val_losses, best_step = model.fit(train_data, val_data, patience=500)
+train_losses, val_losses, best_step = model.fit(train_data, val_data, n_steps=5000, patience=500)
 
 # Plot losses
 ml.plot_losses(train_losses, val_losses, best_step)

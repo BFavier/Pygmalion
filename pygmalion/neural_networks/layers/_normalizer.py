@@ -67,8 +67,9 @@ class Normalizer(torch.nn.Module):
             X = X * self.weight.reshape(shape)
         if self.bias is not None:
             X = X + self.bias.reshape(shape)
-    
-    def unapply(self, Y: torch.Tensor) -> torch.Tensor:
+        return X
+
+    def unscale(self, Y: torch.Tensor) -> torch.Tensor:
         """
         Unapply normalization
         """

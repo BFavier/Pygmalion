@@ -1,6 +1,7 @@
 import torch
 from typing import Tuple, Optional
 from ._activation import Activation
+from ._normalizer import Normalizer
 from ._padded_conv import PaddedConv2d
 
 class ConvBlock(torch.nn.Module):
@@ -10,7 +11,7 @@ class ConvBlock(torch.nn.Module):
 
     def __init__(self, in_features: int, out_features: int,
                  kernel_size: Tuple[int, int], stride: Tuple[int, int] = (1, 1),
-                 activation: str = "relu", batch_norm: bool=True,
+                 activation: str = "relu", normalize: bool=True,
                  residuals: bool = True, n_convolutions: int = 1,
                  dropout: Optional[float] = None):
         """
@@ -26,8 +27,8 @@ class ConvBlock(torch.nn.Module):
             (dy, dx) displacement of the kernel window in the first convolution
         activation : str
             name of the activation function
-        batch_norm : bool
-            whether or not to apply batch norm before each
+        normalize : bool
+            whether or not to apply batch norm before each activation
         """
         super().__init__()
         self.layers = torch.nn.ModuleList()
@@ -37,8 +38,8 @@ class ConvBlock(torch.nn.Module):
             self.layers.append(PaddedConv2d(in_features, out_features, kernel_size, stride))
             stride = (1, 1)
             in_features = out_features
-            if batch_norm:
-                self.layers.append(torch.nn.BatchNorm2d(out_features))
+            if normalize:
+                self.layers.append(Normalizer(out_features))
             self.layers.append(Activation(activation))
 
     def forward(self, X):

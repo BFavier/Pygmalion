@@ -6,7 +6,7 @@ from ._conversions import floats_to_tensor, tensor_to_floats
 from ._conversions import named_to_tensor, tensor_to_dataframe
 from ._neural_network import NeuralNetwork
 from ._loss_functions import MSE
-from .layers import Activation
+from .layers import Activation, Normalizer
 
 
 class DenseRegressor(NeuralNetwork):
@@ -25,7 +25,7 @@ class DenseRegressor(NeuralNetwork):
                  target: Union[str, Iterable[str]],
                  hidden_layers: Iterable[int],
                  activation: str = "relu",
-                 batch_norm: bool = True,
+                 normalize: bool = True,
                  dropout: Optional[float] = None):
         """
         Parameters
@@ -36,8 +36,8 @@ class DenseRegressor(NeuralNetwork):
             the column name(s) of the variable(s) to predict
         activation : str or Callable or torch.nn.Module
             the activation function
-        batch_norm : bool
-            whether or not to add batch norm
+        normalize : bool
+            whether or not to add normalization layers
         dropout : float or None
             the dropout after each hidden layer if provided
         """
@@ -46,20 +46,20 @@ class DenseRegressor(NeuralNetwork):
         self.target = target if isinstance(target, str) else tuple(target)
         self.layers = torch.nn.ModuleList()
         in_features = len(inputs)
-        if batch_norm:
-            self.layers.append(torch.nn.BatchNorm1d(in_features, affine=False))
+        if normalize:
+            self.layers.append(Normalizer(in_features, affine=False))
         for out_features in hidden_layers:
             self.layers.append(torch.nn.Linear(in_features, out_features))
-            if batch_norm:
-                self.layers.append(torch.nn.BatchNorm1d(out_features))
+            if normalize:
+                self.layers.append(Normalizer(out_features))
             self.layers.append(Activation(activation))
             if dropout is not None:
                 self.layers.append(torch.nn.Dropout(dropout))
             in_features = out_features
         out_features = 1 if isinstance(target, str) else len(self.target)
         self.output = torch.nn.Linear(in_features, out_features)
-        if batch_norm:
-            self.target_norm = torch.nn.BatchNorm1d(out_features, affine=False)
+        if normalize:
+            self.target_norm = Normalizer(out_features, affine=False)
         else:
             self.target_norm = None
 
@@ -91,8 +91,7 @@ class DenseRegressor(NeuralNetwork):
 
     def _tensor_to_y(self, tensor: torch.Tensor) -> np.ndarray:
         if self.target_norm is not None:
-            tensor = (tensor * (self.target_norm.running_var + self.target_norm.eps)**0.5
-                      + self.target_norm.running_mean)
+            tensor = self.target_norm.unscale(tensor)
         if isinstance(self.target, str):
             return tensor_to_floats(tensor).reshape(-1)
         else:

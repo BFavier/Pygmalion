@@ -20,7 +20,7 @@ class ImageSegmenter(NeuralNetworkClassifier):
                  stride: Tuple[int, int] = (1, 1),
                  activation: str = "relu",
                  n_convs_per_block: int = 1,
-                 batch_norm: bool = True,
+                 normalize: bool = True,
                  residuals: bool = True,
                  upsampling_method: UPSAMPLING_METHOD = "nearest",
                  dropout: Optional[float] = None):
@@ -37,14 +37,14 @@ class ImageSegmenter(NeuralNetworkClassifier):
         for out_features in features:
             layer = torch.nn.ModuleDict(
                 {"convolutions": ConvBlock(in_features, out_features, kernel_size, stride, activation,
-                                           batch_norm, residuals, n_convs_per_block, dropout),
+                                           normalize, residuals, n_convs_per_block, dropout),
                  "downsampling": torch.nn.MaxPool2d(pooling_size) if pooling_size is not None else None})
             self.encoder.append(layer)
             in_features = out_features
         self.decoder = torch.nn.ModuleList()
         for out_features, add_features in zip(features[::-1], features[-2::-1]+[in_channels]):
             convolutions = ConvBlock(in_features+add_features, out_features,
-                                     kernel_size, (1, 1), activation, batch_norm,
+                                     kernel_size, (1, 1), activation, normalize,
                                      residuals, n_convs_per_block, dropout)
             layer = torch.nn.ModuleDict(
                 {"upsampling": Upsampling2d(scale_factor, method=upsampling_method) if scale_factor != (1, 1) else None,

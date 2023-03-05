@@ -5,7 +5,7 @@ from ._conversions import classes_to_tensor, tensor_to_classes, floats_to_tensor
 from ._conversions import named_to_tensor, tensor_to_probabilities
 from ._neural_network import NeuralNetworkClassifier
 from ._loss_functions import cross_entropy
-from .layers import Activation
+from .layers import Activation, Normalizer
 
 
 class DenseClassifier(NeuralNetworkClassifier):
@@ -14,7 +14,7 @@ class DenseClassifier(NeuralNetworkClassifier):
                  target: str, classes: Iterable[str],
                  hidden_layers: Iterable[int],
                  activation: str = "relu",
-                 batch_norm: bool = True,
+                 normalize: bool = True,
                  dropout: Optional[float] = None):
         """
         Parameters
@@ -32,12 +32,12 @@ class DenseClassifier(NeuralNetworkClassifier):
         self.classes = tuple(classes)
         self.layers = torch.nn.ModuleList()
         in_features = len(inputs)
-        if batch_norm:
-            self.layers.append(torch.nn.BatchNorm1d(in_features, affine=False))
+        if normalize:
+            self.layers.append(Normalizer(in_features, affine=False))
         for out_features in hidden_layers:
             self.layers.append(torch.nn.Linear(in_features, out_features))
-            if batch_norm:
-                self.layers.append(torch.nn.BatchNorm1d(out_features))
+            if normalize:
+                self.layers.append(Normalizer(out_features))
             self.layers.append(Activation(activation))
             if dropout is not None:
                 self.layers.append(torch.nn.Dropout(dropout))
