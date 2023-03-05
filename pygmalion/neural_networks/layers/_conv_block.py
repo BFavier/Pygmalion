@@ -39,7 +39,7 @@ class ConvBlock(torch.nn.Module):
             stride = (1, 1)
             in_features = out_features
             if normalize:
-                self.layers.append(Normalizer(out_features))
+                self.layers.append(torch.nn.BatchNorm2d(out_features))
             self.layers.append(Activation(activation))
 
     def forward(self, X):

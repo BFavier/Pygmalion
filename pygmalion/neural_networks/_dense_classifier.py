@@ -1,7 +1,7 @@
 import torch
 import pandas as pd
 from typing import List, Union, Iterable, Optional, Sequence
-from ._conversions import classes_to_tensor, tensor_to_classes, floats_to_tensor
+from ._conversions import classes_to_tensor, tensor_to_classes
 from ._conversions import named_to_tensor, tensor_to_probabilities
 from ._neural_network import NeuralNetworkClassifier
 from ._loss_functions import cross_entropy

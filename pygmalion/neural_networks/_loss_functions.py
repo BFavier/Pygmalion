@@ -27,9 +27,11 @@ def MSE(y_pred: torch.Tensor, y_target: torch.Tensor,
     torch.Tensor :
         the scalar value of the loss
     """
+    y_target = y_target.to(y_pred.device)
     if weights is None:
         return F.mse_loss(y_pred, y_target)
     else:
+        weights = weights.to(y_pred.device)
         return torch.mean(weights * (y_pred - y_target)**2)
 
 
@@ -77,9 +79,13 @@ def cross_entropy(y_pred: torch.Tensor, y_target: torch.Tensor,
     torch.Tensor :
         the scalar value of the loss
     """
+    y_target = y_target.to(y_pred.device)
+    if class_weights is not None:
+        class_weights = class_weights.to(y_pred.device)
     if weights is None:
         return F.cross_entropy(y_pred, y_target, weight=class_weights)
     else:
+        weights = weights.to(y_pred.device)
         return (F.nll_loss(F.log_softmax(y_pred, dim=1), y_target,
                            weight=class_weights, reduction="none")
                 * weights) / weights.mean()
@@ -111,7 +117,9 @@ def soft_dice_loss(y_pred: torch.Tensor, y_target: torch.Tensor,
     torch.Tensor :
         the scalar value of the loss
     """
-    assert (weights is None) and (class_weights is None), "Not implemented yet"
+    if (weights is not None) or (class_weights is not None):
+        raise NotImplementedError("Weighting in soft_dice_loss is not implemented yet")
+    y_target = y_target.to(y_pred.device)
     n_classes = y_pred.shape[1]
     pred = F.softmax(y_pred, dim=1)
     eps = 1.0E-5

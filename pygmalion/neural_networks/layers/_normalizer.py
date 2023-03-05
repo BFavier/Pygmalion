@@ -56,6 +56,7 @@ class Normalizer(torch.nn.Module):
             raise ValueError(f"Expected tensor of shape (N, {self.num_features}, *) but got {tuple(X.shape)}")
         if self.training:
             with torch.no_grad():
+                self.running_mean, self.running_var = self.running_mean.to(X.device), self.running_var.to(X.device)
                 x = X.transpose(0, 1).reshape(self.num_features, -1)
                 mean = x.mean(dim=1)
                 self.running_mean = self.momentum * mean + (1 - self.momentum) * self.running_mean
