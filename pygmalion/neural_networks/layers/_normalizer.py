@@ -3,10 +3,31 @@ import torch
 
 
 class Normalizer(torch.nn.Module):
+    """
+    Normalizer is a variation of batch normalization, where the tracked running
+    stats are used to normalize both in training and validation modes.
+    The input tensors are normalized along the 1st dimension.
+    """
 
     def __init__(self, num_features: int, eps: float=1e-05, momentum: float=0.1,
                  affine: bool=True, device: Optional[torch.device]=None,
                  dtype: Optional[torch.dtype]=None):
+        """
+        Parameters
+        ----------
+        num_features : int
+            size of the first dimension along which data are normalized
+        eps : float
+            epsilon factor to avoid division by zero
+        momentum : float
+            update factor used for the running stats
+        affine: bool
+            if True, apply a linear transformation with bias after normalization
+        device : torch.device or None
+            device to store the parameters and tensors on
+        dtype : torch.dtype
+            dtype of the tensors and parameters
+        """
         super().__init__()
         self.num_features = num_features
         self.eps = eps
