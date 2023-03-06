@@ -1,7 +1,6 @@
 import torch
-from typing import Union, Optional, Tuple, List
+from typing import Optional, Tuple
 from torch.utils.checkpoint import checkpoint
-import scipy.cluster.hierarchy as scp
 
 
 class MultiHeadAttention(torch.nn.Module):

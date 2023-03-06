@@ -55,7 +55,7 @@ def _scaled_dot_product_attention(q: torch.Tensor, k: torch.Tensor,
     return attention
 
 
-def _kernelized_attention_naive(q: torch.Tensor, k: torch.Tensor,
+def _kernelized_attention_naive(kernel: Callable, q: torch.Tensor, k: torch.Tensor,
                                 v: torch.Tensor, mask: Optional[torch.Tensor],
                                 padding_mask: Optional[torch.Tensor],
                                 RPE: Optional[torch.nn.Embedding]
@@ -81,6 +81,7 @@ def _kernelized_attention_naive(q: torch.Tensor, k: torch.Tensor,
     torch.Tensor:
         attention, a tensor of shape (N, H, Lq, D)
     """
+    q, k = kernel(q), kernel(k)
     N, H, Lq, d = q.shape
     N, H, Lk, d = k.shape
     score = torch.einsum("nhqd, nhkd -> nhqk", q, k)
@@ -114,10 +115,10 @@ def _align(tensor: torch.Tensor, n: int, dim: int) -> torch.Tensor:
     return tensor
 
 
-def _kernelized_attention_linear(q: torch.Tensor, k: torch.Tensor,
+def _kernelized_attention_linear(kernel: Callable, q: torch.Tensor, k: torch.Tensor,
                                  v: torch.Tensor, mask: bool,
                                  padding_mask: Optional[torch.Tensor],
-                                 RPE: Optional[torch.Tensor],
+                                 RPE: Optional[torch.nn.Embedding],
                                  scaled: bool=True) -> torch.Tensor:
     """
     Parameters
@@ -132,15 +133,16 @@ def _kernelized_attention_linear(q: torch.Tensor, k: torch.Tensor,
         if True, performs masked attention
     padding_mask : torch.Tensor or None
         tensor of booleans of shape (N, Lk)
-    RPE : torch.Tensor or None
-        if provided, the relative positional embedding weights.
-        tensor of floats of shape (2r+1, D)
+    RPE : torch.nn.Embedding or None
+        if provided, the relative positional embedding
 
     Returns
     -------
     torch.Tensor:
         attention, a tensor of shape (N, H, Lq, D)
     """
+    q, k = kernel(q), kernel(k)
+    RPE = kernel(RPE.weight)
     if padding_mask is not None:
         raise NotImplementedError()
     N, H, Lq, D = q.shape
@@ -190,3 +192,39 @@ def _kernelized_attention_linear(q: torch.Tensor, k: torch.Tensor,
             q, k, torch.ones(N, H, Lk, 1), mask, padding_mask, RPE, scaled=False)
         attention = attention / scale
     return attention
+
+
+def positional_encoding(X: torch.Tensor) -> torch.Tensor:
+    """
+    Performs positional encoding on the input, in the
+    "Attention is all you need" paper fashion.
+
+    Parameters
+    ----------
+    X : torch.Tensor
+        tensor of shape (..., D), with D the embedding dimension
+
+    Returns
+    -------
+    torch.Tensor:
+        tensor of shape (..., D)
+    """
+    shape = X.shape
+    X = X.reshape(-1, shape[-1])
+    N, D = X.shape
+    pe = torch.zeros(N, D, dtype=torch.float, device=X.device)
+    position = torch.arange(0, D, dtype=torch.float).unsqueeze(0)
+    angle = position / 10000**(2*(position//2)/D)
+    pe[:, 0::2] = torch.cos(angle[:, 0::2])
+    pe[:, 1::2] = torch.sin(angle[:, 1::2])
+    X = (X + pe).reshape(shape)
+    return X
+
+
+def mask_chronological(Lq: int, Lk: int, device: torch.device) -> torch.Tensor:
+    """
+    A mask for transformers training.
+    """
+    mask = torch.ones(Lq, Lk, dtype=torch.bool, device=device)
+    mask = torch.triu(mask, diagonal=1)
+    return mask
