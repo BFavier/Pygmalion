@@ -58,7 +58,8 @@ def _scaled_dot_product_attention(q: torch.Tensor, k: torch.Tensor,
 def _kernelized_attention_naive(kernel: Callable, q: torch.Tensor, k: torch.Tensor,
                                 v: torch.Tensor, mask: Optional[torch.Tensor],
                                 padding_mask: Optional[torch.Tensor],
-                                RPE: Optional[torch.nn.Embedding]
+                                RPE: Optional[torch.nn.Embedding],
+                                scaled: bool = True
                                 ) -> torch.Tensor:
     """
     Parameters
@@ -75,6 +76,8 @@ def _kernelized_attention_naive(kernel: Callable, q: torch.Tensor, k: torch.Tens
         tensor of booleans of shape (N, Lk)
     RPE : torch.nn.Embedding or None
         if provided, the the relative positional embedding
+    scaled: bool
+        if True, the scores sum up to 1
 
     Returns
     -------
@@ -92,10 +95,11 @@ def _kernelized_attention_naive(kernel: Callable, q: torch.Tensor, k: torch.Tens
         P = RPE(P)
         score = score + torch.einsum("qkd, nhkd -> nhqk", P, k)
     if mask is not None:
-        score = score.masked_fill(mask, -float("inf"))
+        score = score.masked_fill(mask, 0)
     if padding_mask is not None:
-        score = score.masked_fill(padding_mask.reshape(N, 1, 1, Lk), -float("inf"))
-    score = score / score.sum(dim=-1).unsqueeze(-1)
+        score = score.masked_fill(padding_mask.reshape(N, 1, 1, Lk), 0)
+    if scaled:
+        score = score / score.sum(dim=-1).unsqueeze(-1)
     attention = torch.matmul(score, v)
     return attention
 
@@ -142,7 +146,8 @@ def _kernelized_attention_linear(kernel: Callable, q: torch.Tensor, k: torch.Ten
         attention, a tensor of shape (N, H, Lq, D)
     """
     q, k = kernel(q), kernel(k)
-    RPE = kernel(RPE.weight)
+    if RPE is not None:
+        RPE = kernel(RPE.weight)
     if padding_mask is not None:
         raise NotImplementedError()
     N, H, Lq, D = q.shape
@@ -189,12 +194,12 @@ def _kernelized_attention_linear(kernel: Callable, q: torch.Tensor, k: torch.Ten
             attention = attention + torch.einsum("nhq, nhqd -> nhqd", W_after, V_after)
     if scaled:
         scale = _kernelized_attention_linear(
-            q, k, torch.ones(N, H, Lk, 1), mask, padding_mask, RPE, scaled=False)
+            kernel, q, k, torch.ones(N, H, Lk, 1), mask, padding_mask, RPE, scaled=False)
         attention = attention / scale
     return attention
 
 
-def positional_encoding(X: torch.Tensor) -> torch.Tensor:
+def _sinusoidal_positional_encoding(X: torch.Tensor) -> torch.Tensor:
     """
     Performs positional encoding on the input, in the
     "Attention is all you need" paper fashion.
@@ -221,10 +226,10 @@ def positional_encoding(X: torch.Tensor) -> torch.Tensor:
     return X
 
 
-def mask_chronological(Lq: int, Lk: int, device: torch.device) -> torch.Tensor:
+def _mask_chronological(Lq: int, Lk: int, device: torch.device) -> torch.Tensor:
     """
     A mask for transformers training.
     """
     mask = torch.ones(Lq, Lk, dtype=torch.bool, device=device)
-    mask = torch.triu(mask, diagonal=1)
+    mask = torch.tril(mask, diagonal=1)
     return mask

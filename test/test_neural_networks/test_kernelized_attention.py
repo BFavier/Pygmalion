@@ -1,28 +1,44 @@
-from pygmalion.neural_networks.layers.transformers._attention import _kernelized_attention_linear, _kernelized_attention_naive
+from pygmalion.neural_networks.layers.transformers._functions import _kernelized_attention_linear, _kernelized_attention_naive, _mask_chronological
 import torch
+import torch.nn.functional as F
 import pandas as pd
 import matplotlib.pyplot as plt
 from timeit import timeit
 import IPython
 
 
-def naive_m(q, k, v):
-    return _kernelized_attention_linear(None, q, k, v, masked=True)
+def kernel(x):
+    return F.elu(x) + 1
 
 
-def naive_b(q, k, v):
-    return _kernelized_attention_naive(None, q, k, v, masked=False)
+def naive_m(q, k, v, scaled=True):
+    return _kernelized_attention_naive(kernel, q, k, v, _mask_chronological(Lq, Lk, q.device), None, None, scaled=scaled)
 
 
-def linear_m(q, k, v):
-    return _kernelized_attention_linear(None, q, k, v, masked=True)
+def naive_b(q, k, v, scaled=True):
+    _, _, Lq, _ = q.shape
+    _, _, Lk, _ = k.shape
+    return _kernelized_attention_naive(kernel, q, k, v, None, None, None, scaled=scaled)
 
 
-def linear_b(q, k, v):
-    return _kernelized_attention_naive(None, q, k, v, masked=False)
+def linear_m(q, k, v, scaled=True):
+    return _kernelized_attention_linear(kernel, q, k, v, True, None, None, scaled=scaled)
 
 
-if __name__ == "__main__":
+def linear_b(q, k, v, scaled=True):
+    _, _, Lq, _ = q.shape
+    _, _, Lk, _ = k.shape
+    return _kernelized_attention_linear(kernel, q, k, v, False, None, None, scaled=scaled)
+
+
+def test_equality():
+    N, H, Lq, Lk, D = 1, 1, 110, 100, 64
+    q = torch.rand(N, H, Lq, D)
+    k = torch.rand(N, H, Lk, D)
+    v = torch.rand(N, H, Lk, D)
+    assert torch.allclose(naive_b(q, k, v), linear_b(q, k, v))
+
+def benchmark():
     naive_masked = []
     naive_bidirectional = []
     linear_masked = []
@@ -73,4 +89,10 @@ if __name__ == "__main__":
     plt.legend()
     plt.show()
 
+
+if __name__ == "__main__":
+    N, H, Lq, Lk, D = 1, 1, 110, 100, 64
+    q = torch.rand(N, H, Lq, D)
+    k = torch.rand(N, H, Lk, D)
+    v = torch.rand(N, H, Lk, D)
     IPython.embed()
