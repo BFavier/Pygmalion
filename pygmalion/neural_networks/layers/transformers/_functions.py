@@ -146,12 +146,12 @@ def _kernelized_attention_linear(kernel: Callable, q: torch.Tensor, k: torch.Ten
         attention, a tensor of shape (N, H, Lq, D)
     """
     pq, pk = kernel(q), kernel(k)
-    if RPE is not None:
-        RPE = kernel(RPE.weight)
+    rpe = kernel(RPE.weight) if RPE is not None else rpe
     if padding_mask is not None:
         raise NotImplementedError()
-    N, H, Lq, D = pq.shape
-    N, H, Lk, D = pk.shape
+    N, H, Lq, _ = pq.shape
+    N, H, Lk, _ = pk.shape
+    D = v.shape[-1]
     if mask:
         expanded = torch.einsum("nhkd, nhkD -> nhkdD", pk, v)
         summed = _align(torch.cumsum(expanded, dim=2), Lq, 2)
@@ -159,16 +159,16 @@ def _kernelized_attention_linear(kernel: Callable, q: torch.Tensor, k: torch.Ten
     else:
         right = torch.einsum("nhkd, nhkD -> nhdD", pk, v)
         attention = torch.einsum("nhqd, nhdD -> nhqD", pq, right)
-    if RPE is not None:
-        r = RPE.shape[0] // 2
+    if rpe is not None:
+        r = rpe.shape[0] // 2
         if mask:
-            RPE = torch.masked_fill(RPE, torch.arange(2*r+1).unsqueeze(-1) > r, 0.)
-        W = torch.einsum("nhqd, Rd -> nhqR", pq, RPE)
+            rpe = torch.masked_fill(rpe, torch.arange(2*r+1).unsqueeze(-1) > r, 0.)
+        W = torch.einsum("nhqd, Rd -> nhqR", pq, rpe)
         # before horizon
-        p_before = max(r, Lq)
+        p_before, n_before = min(r, Lq), min(max(0, Lq-r), Lk)
         W_before = W[..., 0]  # (N, H, Lq)
-        padding_before = (p_before if i == 2 else s for i, s in enumerate(v.shape))
-        V_before = torch.cumsum(torch.cat([torch.zeros(*padding_before), v], dim=2), dim=2)
+        padding_before = tuple(p_before if i == 2 else s for i, s in enumerate(v.shape))
+        V_before = _align(torch.cat([torch.zeros(padding_before), v[..., :n_before, :].cumsum(dim=2)], dim=2), Lq, 2)
         attention = attention + torch.einsum("nhq, nhqd -> nhqd", W_before, V_before)
         # horizon
         W_horizon = W[..., 1:-1]  # (N, H, Lq, 2r-1)
@@ -181,7 +181,7 @@ def _kernelized_attention_linear(kernel: Callable, q: torch.Tensor, k: torch.Ten
         L = V_horizon.shape[-2]
         V_horizon = V_horizon.as_strided(size=(N, H, Lq, 2*r-1, D),
                                          stride=(H*L*D, L*D, D, D, 1))
-        attention = attention + torch.einsum("nhq, nhqd -> nhqd", W_horizon, V_horizon)
+        attention = attention + torch.einsum("nhqr, nhqrd -> nhqd", W_horizon, V_horizon)
         # after horizon
         if not mask:
             n_after = min(Lq+r, Lk)

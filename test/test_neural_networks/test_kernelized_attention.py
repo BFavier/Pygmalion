@@ -36,21 +36,24 @@ def test_equality():
     q = torch.rand(N, H, Lq, D)
     k = torch.rand(N, H, Lk, D)
     v = torch.rand(N, H, Lk, D)
-    assert torch.allclose(naive_b(q, k, v), linear_b(q, k, v))
+    RPE = None
+    assert torch.allclose(naive_b(q, k, v, RPE), linear_b(q, k, v, RPE))
 
 def test_equality_masked():
-    N, H, Lq, Lk, D = 1, 1, 110, 100, 64
+    N, H, Lq, Lk, D = 1, 1, 100, 110, 64
     q = torch.rand(N, H, Lq, D)
     k = torch.rand(N, H, Lk, D)
     v = torch.rand(N, H, Lk, D)
-    assert torch.allclose(naive_m(q, k, v), linear_m(q, k, v))
+    RPE = None
+    assert torch.allclose(naive_m(q, k, v, RPE), linear_m(q, k, v, RPE))
 
 def test_equality_RPE():
     N, H, Lq, Lk, D = 1, 1, 110, 100, 64
     q = torch.rand(N, H, Lq, D)
     k = torch.rand(N, H, Lk, D)
     v = torch.rand(N, H, Lk, D)
-    assert torch.allclose(naive_m(q, k, v), linear_m(q, k, v))
+    RPE = torch.nn.Embedding(5, D)
+    assert torch.allclose(naive_b(q, k, v, RPE), linear_b(q, k, v, RPE))
 
 def benchmark():
     naive_masked = []
@@ -109,5 +112,5 @@ if __name__ == "__main__":
     q = torch.rand(N, H, Lq, D)
     k = torch.rand(N, H, Lk, D)
     v = torch.rand(N, H, Lk, D)
-    test_equality_masked()
+    test_equality_RPE()
     IPython.embed()
