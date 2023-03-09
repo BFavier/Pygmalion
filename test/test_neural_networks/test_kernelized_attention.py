@@ -38,6 +38,13 @@ def test_equality():
     v = torch.rand(N, H, Lk, D)
     assert torch.allclose(naive_b(q, k, v), linear_b(q, k, v))
 
+def test_equality_masked():
+    N, H, Lq, Lk, D = 1, 1, 110, 100, 64
+    q = torch.rand(N, H, Lq, D)
+    k = torch.rand(N, H, Lk, D)
+    v = torch.rand(N, H, Lk, D)
+    assert torch.allclose(naive_m(q, k, v), linear_m(q, k, v))
+
 def benchmark():
     naive_masked = []
     naive_bidirectional = []
