@@ -95,7 +95,7 @@ def _kernelized_attention_naive(kernel: Callable, q: torch.Tensor, k: torch.Tens
         P = RPE(P)
         score = score + torch.einsum("qkd, nhkd -> nhqk", P, pk)
     if mask is not None:
-        score = score.masked_fill(mask, 0)
+        score = score.masked_fill(mask.reshape(1, 1, Lq, Lk), 0)
     if padding_mask is not None:
         score = score.masked_fill(padding_mask.reshape(N, 1, 1, Lk), 0)
     if scaled:
@@ -153,7 +153,7 @@ def _kernelized_attention_linear(kernel: Callable, q: torch.Tensor, k: torch.Ten
     N, H, Lq, D = pq.shape
     N, H, Lk, D = pk.shape
     if mask:
-        expanded = torch.einsum("nhkD, nhkd -> nhkdD", pk, v)
+        expanded = torch.einsum("nhkd, nhkD -> nhkdD", pk, v)
         summed = _align(torch.cumsum(expanded, dim=2), Lq, 2)
         attention = torch.einsum("nhqd, nhqdD -> nhqD", pq, summed)
     else:
@@ -231,5 +231,5 @@ def _mask_chronological(Lq: int, Lk: int, device: torch.device) -> torch.Tensor:
     A mask for transformers training.
     """
     mask = torch.ones(Lq, Lk, dtype=torch.bool, device=device)
-    mask = torch.tril(mask, diagonal=1)
+    mask = torch.triu(mask, diagonal=1)
     return mask

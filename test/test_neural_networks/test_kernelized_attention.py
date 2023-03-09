@@ -11,24 +11,24 @@ def kernel(x):
     return F.elu(x) + 1
 
 
-def naive_m(q, k, v, scaled=True):
-    return _kernelized_attention_naive(kernel, q, k, v, _mask_chronological(Lq, Lk, q.device), None, None, scaled=scaled)
+def naive_m(q, k, v, RPE, scaled=True):
+    return _kernelized_attention_naive(kernel, q, k, v, _mask_chronological(Lq, Lk, q.device), None, RPE, scaled=scaled)
 
 
-def naive_b(q, k, v, scaled=True):
+def naive_b(q, k, v, RPE, scaled=True):
     _, _, Lq, _ = q.shape
     _, _, Lk, _ = k.shape
-    return _kernelized_attention_naive(kernel, q, k, v, None, None, None, scaled=scaled)
+    return _kernelized_attention_naive(kernel, q, k, v, None, None, RPE, scaled=scaled)
 
 
-def linear_m(q, k, v, scaled=True):
-    return _kernelized_attention_linear(kernel, q, k, v, True, None, None, scaled=scaled)
+def linear_m(q, k, v, RPE, scaled=True):
+    return _kernelized_attention_linear(kernel, q, k, v, True, None, RPE, scaled=scaled)
 
 
-def linear_b(q, k, v, scaled=True):
+def linear_b(q, k, v, RPE, scaled=True):
     _, _, Lq, _ = q.shape
     _, _, Lk, _ = k.shape
-    return _kernelized_attention_linear(kernel, q, k, v, False, None, None, scaled=scaled)
+    return _kernelized_attention_linear(kernel, q, k, v, False, None, RPE, scaled=scaled)
 
 
 def test_equality():
@@ -39,6 +39,13 @@ def test_equality():
     assert torch.allclose(naive_b(q, k, v), linear_b(q, k, v))
 
 def test_equality_masked():
+    N, H, Lq, Lk, D = 1, 1, 110, 100, 64
+    q = torch.rand(N, H, Lq, D)
+    k = torch.rand(N, H, Lk, D)
+    v = torch.rand(N, H, Lk, D)
+    assert torch.allclose(naive_m(q, k, v), linear_m(q, k, v))
+
+def test_equality_RPE():
     N, H, Lq, Lk, D = 1, 1, 110, 100, 64
     q = torch.rand(N, H, Lq, D)
     k = torch.rand(N, H, Lk, D)
@@ -102,4 +109,5 @@ if __name__ == "__main__":
     q = torch.rand(N, H, Lq, D)
     k = torch.rand(N, H, Lk, D)
     v = torch.rand(N, H, Lk, D)
+    test_equality_masked()
     IPython.embed()
