@@ -92,8 +92,7 @@ def _kernelized_attention_naive(kernel: Callable, q: torch.Tensor, k: torch.Tens
         r = RPE.weight.shape[0] // 2
         P = torch.clip(r + torch.arange(Lk, device=score.device).reshape(1, Lk)
                        - torch.arange(Lq, device=score.device).reshape(Lq, 1), 0, 2*r)
-        P = RPE(P)
-        score = score + torch.einsum("qkd, nhkd -> nhqk", P, pk)
+        score = score + torch.einsum("qkd, nhqd -> nhqk", kernel(RPE(P)), pq)
     if mask is not None:
         score = score.masked_fill(mask.reshape(1, 1, Lq, Lk), 0)
     if padding_mask is not None:
