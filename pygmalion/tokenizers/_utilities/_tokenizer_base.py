@@ -73,7 +73,7 @@ class Tokenizer(ModelBase):
         return string
 
     @property
-    def vocabulary(self) -> Tuple[Union[bytes, SpecialToken], ...]:
+    def vocabulary(self) -> Tuple[Union[str, bytes, SpecialToken], ...]:
         return self._vocabulary + self.special_tokens
 
     @property
@@ -91,3 +91,7 @@ class Tokenizer(ModelBase):
     @property
     def lowercase(self) -> int:
         return self._lowercase
+
+    @property
+    def n_tokens(self) -> int:
+        return len(self._vocabulary) + len(self._special_token_names)
