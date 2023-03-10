@@ -1,7 +1,7 @@
 from typing import List
-from ._utilities import TokenizerBase
+from ._utilities import Tokenizer
 
-class CharTokenizer(TokenizerBase):
+class CharTokenizer(Tokenizer):
     """
     Tokenizer that split text into single bytes tokens (using UTF-8 encoding)
     This dummy tokenizer does not compress information

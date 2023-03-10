@@ -4,7 +4,7 @@ from pygmalion._model_base import ModelBase
 from ._special_token import SpecialToken
 
 
-class TokenizerBase(ModelBase):
+class Tokenizer(ModelBase):
     """
     Tokenizer base is a base class for tokenizers
 

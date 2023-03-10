@@ -2,10 +2,10 @@ import re
 from itertools import chain
 from collections import Counter
 from typing import Iterable, List, Dict
-from ._utilities import split_words, TokenizerBase, SpecialToken
+from ._utilities import split_words, Tokenizer, SpecialToken
 
 
-class WordsTokenizer(TokenizerBase):
+class WordsTokenizer(Tokenizer):
     """
     Tokenizer for whitespace separated words, with additional
 
@@ -64,7 +64,7 @@ class WordsTokenizer(TokenizerBase):
         return [w if w in self._token_indexes.keys() else SpecialToken("UNKNOWN")
                 for w in split_words(self._preprocess(string))]
 
-    @TokenizerBase.vocabulary.setter
+    @Tokenizer.vocabulary.setter
     def vocabulary(self, other):
         self._vocabulary = tuple(t for t in other if isinstance(t, str))
         self._token_indexes = {w: i for i, w in enumerate(self.vocabulary)}

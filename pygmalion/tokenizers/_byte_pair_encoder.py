@@ -1,10 +1,10 @@
 from typing import Tuple, List, Iterable, Optional, Dict
 from collections import Counter
 from unidecode import unidecode
-from ._utilities import zip_pairs, split_wordpiece, BytesTree, TokenizerBase
+from ._utilities import zip_pairs, split_wordpiece, BytesTree, Tokenizer
 
 
-class BytePairEncoder(TokenizerBase):
+class BytePairEncoder(Tokenizer):
 
     @classmethod
     def from_dump(cls, dump: dict) -> "BytePairEncoder":
