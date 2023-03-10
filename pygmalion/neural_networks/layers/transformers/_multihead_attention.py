@@ -11,8 +11,7 @@ _attention_functions = {k: v for k, v in zip(ATTENTION_TYPE, (_scaled_dot_produc
 class MultiHeadAttention(torch.nn.Module):
 
     def __init__(self, projection_dim: int, n_heads: int,
-                 masked: bool, key_padding_mask: Optional[torch.Tensor] = None,
-                 query_padding_mask: Optional[torch.Tensor] = None,
+                 masked: bool,
                  RPE_radius: Optional[int] = None,
                  attention_type: ATTENTION_TYPE = "scaled dot product",
                  kernel_function : Callable = _log_exp_kernel):
@@ -26,12 +25,6 @@ class MultiHeadAttention(torch.nn.Module):
         masked: bool
             whether or not a query at index i can't attend to keys
             at index j > i in the sequence
-        key_padding_mask : torch.Tensor or None
-            tensor of booleans of shape (N, Lk)
-            or None if padding tokens should not be masked
-        query_padding_mask : torch.Tensor or None
-            tensor of booleans of shape (N, Lq)
-            or None if padding tokens should not be masked
         RPE_radius : int or None
             The radius of the relative positional encoding
             or None if no relative positional encoding should be applied
@@ -45,19 +38,17 @@ class MultiHeadAttention(torch.nn.Module):
         self.projection_dim = projection_dim
         dim = projection_dim * n_heads
         self.masked = masked
-        self.key_padding_mask = key_padding_mask
-        self.query_padding_mask = query_padding_mask
         self.relative_positional_encoding = torch.nn.Embedding(2*RPE_radius+1, dim) if RPE_radius else None
         self.query = torch.nn.Linear(dim, dim, bias=False)
         self.key = torch.nn.Linear(dim, dim, bias=False)
         self.value = torch.nn.Linear(dim, dim, bias=False)
         self.attention = _attention_functions[attention_type]
         assert not isinstance(kernel_function, LambdaType), "Lambda function cannot be pickled and saved on disk"
-        self.kernel_function = kernel_function
+        self.kernel_function = kernel_function if "kernelized" in attention_type else None
 
     def forward(self, query: torch.Tensor, key: torch.Tensor,
-                mask: Optional[torch.Tensor] = None,
-                padding_mask: Optional[torch.Tensor] = None):
+                query_padding_mask: Optional[torch.Tensor] = None,
+                key_padding_mask: Optional[torch.Tensor] = None):
         """
         Forward pass of the multihead attention module.
         Apply masked attention, followed by dropout, and batch normalization
@@ -73,78 +64,36 @@ class MultiHeadAttention(torch.nn.Module):
             * N the number of sentences to treat
             * Lk the sequence length of the key
             * D the embedding dimension
-        mask : torch.Tensor or None
-            the mask, tensor of booleans of shape (Lq, Lk), where attention
-            is set to -infinity
-        padding_mask : torch.Tensor or None
-            the padding mask, tensor of booleans of shape (N, Lk),
-            where value vectors are set to 0 in the attention function
-        null_mask
+        key_padding_mask : torch.Tensor or None
+            tensor of booleans of shape (N, Lk)
+            or None if padding tokens should not be masked
+        query_padding_mask : torch.Tensor or None
+            tensor of booleans of shape (N, Lq)
+            or None if padding tokens should not be masked
         Returns
         -------
         torch.Tensor :
             tensor of shape (N, Lq, D)
         """
-        return self._multihead_attention(query, key, mask, padding_mask)
-
-    def _multihead_attention(self, query: torch.Tensor, key: torch.Tensor,
-                             mask: Optional[torch.Tensor],
-                             padding_mask: Optional[torch.Tensor]
-                             ) -> torch.Tensor:
-        """
-        Apply multihead attention.
-        Same inputs/outputs types/shapes as the forward pass
-        """
+        query, key = query.to(self.device), key.to(self.device)
         N, Lq, _ = query.shape
         N, Lk, _ = key.shape
         # project into 'n_heads' different subspaces
         q = self.query(query).reshape(N, Lq, self.n_heads, self.projection_dim)
         k = self.key(key).reshape(N, Lk, self.n_heads, self.projection_dim)
         v = self.value(key).reshape(N, Lk, self.n_heads, self.projection_dim)
-        # compute attention dot product
+        # compute attention
         q, k, v = q.transpose(1, 2), k.transpose(1, 2), v.transpose(1, 2)
-
-        attention = self._scaled_dot_product_attention(q, k, v, mask, padding_mask)
+        if self.kernel_function is None:
+            attention = self.attention(q, k, v, self.masked, key_padding_mask)
+        else:
+            attention = self.attention(self.kernel_function, q, k, v, self.masked, key_padding_mask)
         attention = attention.transpose(2, 1).reshape(N, Lq, -1)
+        if query_padding_mask is not None:
+            query_padding_mask = query_padding_mask.to(attention.device).unsqueeze(-1)
+            attention = torch.masked_fill(attention, query_padding_mask, 0.)
         return attention
 
-    def _scaled_dot_product_attention(self, q: torch.Tensor, k: torch.Tensor,
-                                      v: torch.Tensor,
-                                      mask: Optional[torch.Tensor],
-                                      padding_mask: Optional[torch.Tensor]
-                                      ) -> Tuple[torch.Tensor]:
-        """
-        Apply scaled dot product attention to a batch of 'N' sentences pairs,
-        with 'H' the number of heads, and 'D' the projection dimension.
-        The query is a sequence of length 'Lq', and the key is
-        a sequence of length 'Lk'.
-        This is the original attention mechanism described in the 2017 paper:
-            'Attention is all you need'
-            https://arxiv.org/pdf/1706.03762.pdf
-        Parameters
-        ----------
-        q : torch.Tensor
-            query tensor of shape (N, H, Lq, D)
-        k : torch.Tensor
-            key tensor of shape (N, H, Lk, D)
-        v : torch.Tensor
-            value tensor of shape (N, H, Lk, D)
-        mask : torch.Tensor or None
-            tensor of booleans of shape (Lq, Lk)
-        padding_mask : torch.Tensor or None
-            tensor of booleans of shape (N, Lk)
-        Returns
-        -------
-        tuple of torch.Tensors:
-            a tuple of (attention, score)
-        """
-        N, H, Lk, d = k.shape
-        scaling = Lk**0.5 if padding_mask is None else (~padding_mask).float().sum(dim=-1).reshape(N, 1, 1, 1)**0.5
-        score = torch.matmul(q, k.transpose(-2, -1)) / scaling
-        if mask is not None:
-            score = score.masked_fill(mask, -float("inf"))
-        if padding_mask is not None:
-            score = score.masked_fill(padding_mask.reshape(N, 1, 1, Lk), -float("inf"))
-        score = torch.softmax(score, dim=-1)
-        attention = torch.matmul(score, v)
-        return attention
+    @property
+    def device(self) -> torch.device:
+        return self.query.weight.device
