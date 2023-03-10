@@ -1,6 +1,7 @@
 import torch
 import torch.nn.functional as F
 from typing import Union, Callable
+from types import LambdaType
 
 
 class Activation(torch.nn.Module):
@@ -26,6 +27,7 @@ class Activation(torch.nn.Module):
     def __init__(self, activation: Union[str, Callable]):
         super().__init__()
         assert isinstance(activation, str) or callable(activation)
+        assert not isinstance(activation, LambdaType), "Lambda function cannot be pickled and saved on disk"
         self.function = self._as_callable(activation)
 
     def __repr__(self):

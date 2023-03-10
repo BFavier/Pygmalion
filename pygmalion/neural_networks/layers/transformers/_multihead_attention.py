@@ -1,29 +1,59 @@
 import torch
-from typing import Optional, Tuple
-from torch.utils.checkpoint import checkpoint
+from typing import Optional, Tuple, Literal, Callable
+from ._attention import _scaled_dot_product_attention, _kernelized_attention_linear, _kernelized_attention_naive
+from ._utilities import _log_exp_kernel
+from types import LambdaType
+
+ATTENTION_TYPE = Literal["scaled dot product", "kernelized linear", "kernelized quadratic"]
+_attention_functions = {k: v for k, v in zip(ATTENTION_TYPE, (_scaled_dot_product_attention, _kernelized_attention_linear, _kernelized_attention_naive))}
 
 
 class MultiHeadAttention(torch.nn.Module):
 
-    def __init__(self, projection_dim: int, n_heads: int):
-        """
+    def __init__(self, projection_dim: int, n_heads: int,
+                 masked: bool, key_padding_mask: Optional[torch.Tensor] = None,
+                 query_padding_mask: Optional[torch.Tensor] = None,
+                 RPE_radius: Optional[int] = None,
+                 attention_type: ATTENTION_TYPE = "scaled dot product",
+                 kernel_function : Callable = _log_exp_kernel):
+        f"""
         Parameters
         ----------
         projection_dim : int
             the dimension of the projection space for the feature vectors
         n_heads : int
             the number of different projection at each stage of the transformer
-        linear_complexity : bool
-            if True, a variant of the attention mechanism is used that has
-            linear coplexity with the sequence length of tokens
+        masked: bool
+            whether or not a query at index i can't attend to keys
+            at index j > i in the sequence
+        key_padding_mask : torch.Tensor or None
+            tensor of booleans of shape (N, Lk)
+            or None if padding tokens should not be masked
+        query_padding_mask : torch.Tensor or None
+            tensor of booleans of shape (N, Lq)
+            or None if padding tokens should not be masked
+        RPE_radius : int or None
+            The radius of the relative positional encoding
+            or None if no relative positional encoding should be applied
+        attention_type : {ATTENTION_TYPE}
+            the type of attention function to perform
+        kernel_function : Callable
+            the kernel function for kernelized attention
         """
         super().__init__()
         self.n_heads = n_heads
         self.projection_dim = projection_dim
         dim = projection_dim * n_heads
+        self.masked = masked
+        self.key_padding_mask = key_padding_mask
+        self.query_padding_mask = query_padding_mask
+        self.relative_positional_encoding = torch.nn.Embedding(2*RPE_radius+1, dim) if RPE_radius else None
         self.query = torch.nn.Linear(dim, dim, bias=False)
         self.key = torch.nn.Linear(dim, dim, bias=False)
         self.value = torch.nn.Linear(dim, dim, bias=False)
+        self.attention = _attention_functions[attention_type]
+        assert not isinstance(kernel_function, LambdaType), "Lambda function cannot be pickled and saved on disk"
+        self.kernel_function = kernel_function
 
     def forward(self, query: torch.Tensor, key: torch.Tensor,
                 mask: Optional[torch.Tensor] = None,
@@ -118,184 +148,3 @@ class MultiHeadAttention(torch.nn.Module):
         score = torch.softmax(score, dim=-1)
         attention = torch.matmul(score, v)
         return attention
-
-    def _multihead_attention_stock(self, query: torch.Tensor,
-                                   key: torch.Tensor,
-                                   mask: Optional[torch.Tensor]):
-        """
-        Apply multihead attention.
-        Same inputs/outputs types/shapes as the forward pass
-        """
-        query = query.transpose(0, 1)
-        key = key.transpose(0, 1)
-        value = key
-        embed_dim = self.projection_dim * self.n_heads
-        in_proj_weight = None
-        in_proj_bias = None
-        out_proj_weight = torch.eye(embed_dim, dtype=torch.float,
-                                    device=query.device)
-        out_proj_bias = torch.zeros(embed_dim, dtype=torch.float,
-                                    device=query.device)
-        dropout = 0.
-        return torch.nn.functional.multi_head_attention_forward(
-            query, key, value, embed_dim, self.n_heads,
-            in_proj_weight, in_proj_bias,
-            None, None, False,
-            dropout, out_proj_weight, out_proj_bias,
-            training=self.training,
-            key_padding_mask=None, need_weights=False,
-            attn_mask=mask, use_separate_proj_weight=True,
-            q_proj_weight=self.query.weight,
-            k_proj_weight=self.key.weight,
-            v_proj_weight=self.value.weight)[0].transpose(1, 0)
-
-
-class TransformerEncoderStage(torch.nn.Module):
-
-    def __init__(self, projection_dim: int, n_heads: int,
-                 dropout: Optional[float] = None,
-                 activation: str = "relu"):
-        super().__init__()
-        dim = projection_dim * n_heads
-        self.activation = getattr(torch, activation)
-        self.self_attention = MultiHeadAttention(projection_dim, n_heads)
-        self.intermediate_norm = torch.nn.LayerNorm(dim)
-        self.intermediate_dropout = torch.nn.Dropout(dropout)
-        self.expand = torch.nn.Linear(dim, dim * 4)
-        self.contract = torch.nn.Linear(dim * 4, dim)
-        self.out_dropout = torch.nn.Dropout(dropout)
-        self.out_norm = torch.nn.LayerNorm(dim)
-
-    def forward(self, X, mask: Optional[torch.Tensor] = None, padding_mask: Optional[torch.Tensor] = None):
-        """
-        Parameter
-        ---------
-        X : torch.Tensor
-            Tensor of shape (N, L, F) with
-            * N sentences count
-            * L sequence length
-            * F number of features
-        mask : torch.Tensor or None
-            mask to apply for the attention
-        Returns
-        -------
-        torch.Tensor
-            tensor of shape (N, L, F)
-        """
-        X = X.to(self.device)
-        if mask is not None:
-            mask = mask.to(self.device)
-        if padding_mask is not None:
-            padding_mask = padding_mask.to(self.device)
-        N, L, _ = X.shape
-        input = X.reshape(N * L, -1)
-        X = self.self_attention(X, X, mask=mask, padding_mask=padding_mask).reshape(N * L, -1)
-        X = self.intermediate_dropout(X) + input
-        X = self.intermediate_norm(X)
-        input = X
-        X = self.activation(self.expand(X))
-        X = self.out_dropout(self.contract(X)) + input
-        X = self.out_norm(X)
-        return X.reshape(N, L, -1)
-
-    @property
-    def device(self) -> torch.device:
-        return self.self_attention.key.weight.device
-
-
-class TransformerDecoderStage(torch.nn.Module):
-
-    def __init__(self, projection_dim: int, n_heads: int,
-                 dropout: Optional[float] = None, activation: str = "relu"):
-        super().__init__()
-        dim = projection_dim * n_heads
-        self.activation = getattr(torch, activation)
-        self.masked_attention = MultiHeadAttention(projection_dim, n_heads)
-        self.first_dropout = torch.nn.Dropout(dropout)
-        self.first_norm = torch.nn.LayerNorm(dim)
-        self.attention = MultiHeadAttention(projection_dim, n_heads)
-        self.second_dropout = torch.nn.Dropout(dropout)
-        self.second_norm = torch.nn.LayerNorm(dim)
-        self.expand = torch.nn.Linear(dim, 4 * dim)
-        self.contract = torch.nn.Linear(4 * dim, dim)
-        self.out_dropout = torch.nn.Dropout(dropout)
-        self.out_norm = torch.nn.LayerNorm(dim)
-
-    def forward(self, encoded, Y, mask: Optional[torch.Tensor] = None, padding_mask: Optional[torch.Tensor] = None):
-        """
-        Parameter
-        ---------
-        encoded : torch.Tensor
-            Tensor of shape (N, L, F)
-        Y : torch.Tensor
-            Tensor of shape (N, L, F)
-        mask : torch.Tensor or None
-            mask to apply for the attention
-        Returns
-        -------
-        torch.Tensor
-            tensor of shape (N, L, F)
-        """
-        encoded = encoded.to(self.device)
-        Y = Y.to(self.device)
-        if mask is not None:
-            mask = mask.to(self.device)
-        if padding_mask is not None:
-            padding_mask = padding_mask.to(self.device)
-        N, L, _ = Y.shape
-        input = Y.reshape(N * L, -1)
-        Y = self.masked_attention(Y, Y, mask=mask, padding_mask=padding_mask).reshape(N * L, -1)
-        Y = self.first_norm(self.first_dropout(Y) + input).reshape(N, L, -1)
-        input = Y.reshape(N * L, -1)
-        Y = self.attention(Y, encoded, mask=None, padding_mask=padding_mask).reshape(N * L, -1)
-        Y = self.second_norm(self.second_dropout(Y) + input)
-        input = Y
-        Y = self.out_dropout(self.contract(self.activation(self.expand(Y))))
-        Y = self.out_norm(Y + input)
-        return Y.reshape(N, L, -1)
-
-    @property
-    def device(self) -> torch.device:
-        return self.masked_attention.key.weight.device
-
-
-class TransformerEncoder(torch.nn.Module):
-
-    def __init__(self, n_stages: int, projection_dim: int, n_heads: int,
-                 dropout: Optional[float] = None, activation: str = "relu",
-                 low_memory: bool = True):
-        super().__init__()
-        self.stages = torch.nn.ModuleList()
-        self.low_memory = low_memory
-        for stage in range(n_stages):
-            self.stages.append(TransformerEncoderStage(projection_dim, n_heads,
-                                                       dropout=dropout, activation=activation))
-
-    def forward(self, X, mask=None, padding_mask: Optional[torch.Tensor] = None):
-        for stage in self.stages:
-            if self.low_memory and self.training:
-                X = checkpoint(stage, X, mask, padding_mask)
-            else:
-                X = stage(X, mask=mask, padding_mask=padding_mask)
-        return X
-
-
-class TransformerDecoder(torch.nn.Module):
-
-    def __init__(self, n_stages: int, projection_dim: int, n_heads: int,
-                 dropout: Optional[float] = None, activation: str = "relu",
-                 low_memory: bool = True):
-        super().__init__()
-        self.stages = torch.nn.ModuleList()
-        self.low_memory = low_memory
-        for stage in range(n_stages):
-            self.stages.append(TransformerDecoderStage(projection_dim, n_heads,
-                                                       dropout=dropout, activation=activation))
-
-    def forward(self, encoded, Y, mask: Optional[torch.Tensor] = None, padding_mask: Optional[torch.Tensor] = None):
-        for stage in self.stages:
-            if self.low_memory and self.training:
-                Y = checkpoint(stage, encoded, Y, mask, padding_mask)
-            else:
-                Y = stage(encoded, Y, mask=mask, padding_mask=padding_mask)
-        return Y
