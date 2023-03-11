@@ -83,9 +83,11 @@ class MultiHeadAttention(torch.nn.Module):
         # compute attention
         q, k, v = q.transpose(1, 2), k.transpose(1, 2), v.transpose(1, 2)
         if self.kernel_function is None:
-            attention = self.attention(q, k, v, self.masked, key_padding_mask)
+            attention = self.attention(q, k, v, self.masked, key_padding_mask,
+                                       self.relative_positional_encoding)
         else:
-            attention = self.attention(self.kernel_function, q, k, v, self.masked, key_padding_mask)
+            attention = self.attention(self.kernel_function, q, k, v, self.masked,
+                                       key_padding_mask, self.relative_positional_encoding)
         attention = attention.transpose(2, 1).reshape(N, Lq, -1)
         if query_padding_mask is not None:
             query_padding_mask = query_padding_mask.to(attention.device).unsqueeze(-1)

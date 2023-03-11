@@ -89,7 +89,8 @@ class TextTranslator(NeuralNetwork):
         N, L = X.shape
         X = self.embedding_input(X)
         X = self.positional_encoding_input(X)
-        X = self.dropout_input(X.reshape(N*L, -1)).reshape(N, L, -1)
+        if self.dropout_input is not None:
+            X = self.dropout_input(X.reshape(N*L, -1)).reshape(N, L, -1)
         X = self.transformer_encoder(X, padding_mask)
         return X
 
@@ -119,7 +120,8 @@ class TextTranslator(NeuralNetwork):
         N, L = Y.shape
         Y = self.embedding_out(Y)
         Y = self.positional_encoding_output(Y)
-        Y = self.dropout_output(Y.reshape(N*L, -1)).reshape(N, L, -1)
+        if self.dropout_output is not None:
+            Y = self.dropout_output(Y.reshape(N*L, -1)).reshape(N, L, -1)
         Y = self.transformer_decoder(Y, encoded, encoded_padding_mask)
         return self.head(Y)
 
@@ -132,9 +134,10 @@ class TextTranslator(NeuralNetwork):
         y_target : torch.Tensor
             tensor of long of shape (N, Lt)
         """
+        x, y_target = x.to(self.device), y_target.to(self.device)
         padding_mask = (x == self.tokenizer_input.PAD) if self.mask_padding else None
         encoded = self(x, padding_mask)
-        y_pred = self.decode(encoded, y_target[:, :-1], padding_mask)
+        y_pred = self.decode(y_target[:, :-1], encoded, padding_mask)
         return cross_entropy(y_pred.transpose(1, 2), y_target[:, 1:],
                              weights, class_weights)
 
