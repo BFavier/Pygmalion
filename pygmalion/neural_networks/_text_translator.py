@@ -30,6 +30,7 @@ class TextTranslator(NeuralNetwork):
         """
         super().__init__()
         self.mask_padding = mask_padding
+        self.max_sequence_length = max_sequence_length
         embedding_dim = projection_dim*n_heads
         self.tokenizer_input = tokenizer_input
         self.tokenizer_output = tokenizer_output
@@ -82,11 +83,14 @@ class TextTranslator(NeuralNetwork):
         torch.Tensor :
             tensor of floats of shape (N, L, D) with D the embedding dimension
         """
+        X = X.to(self.device)
+        if padding_mask is not None:
+            padding_mask = padding_mask.to(self.device)
         N, L = X.shape
         X = self.embedding_input(X)
-        X = self.positional_encoding_input(X, padding_mask)
+        X = self.positional_encoding_input(X)
         X = self.dropout_input(X.reshape(N*L, -1)).reshape(N, L, -1)
-        X = self.transformer_encoder(X)
+        X = self.transformer_encoder(X, padding_mask)
         return X
 
     def decode(self, Y: torch.Tensor, encoded: torch.Tensor, encoded_padding_mask: Optional[torch.Tensor]):
@@ -153,15 +157,21 @@ class TextTranslator(NeuralNetwork):
             Y = torch.cat([Y, index], dim=-1)
         return Y
 
+    @property
+    def device(self) -> torch.device:
+        return self.head.weight.device
+
     def _x_to_tensor(self, x: List[str],
                      device: Optional[torch.device] = None):
         return sentences_to_tensor(x, self.tokenizer_input, device,
-                                    max_sequence_length=self.module.max_length)
+                                    max_sequence_length=self.max_sequence_length,
+                                    add_start_end_tokens=False)
 
     def _y_to_tensor(self, y: List[str],
                      device: Optional[torch.device] = None) -> torch.Tensor:
         return sentences_to_tensor(y, self.tokenizer_output, device,
-                                   max_sequence_length=self.module.max_length)
+                                   max_sequence_length=self.max_sequence_length,
+                                   add_start_end_tokens=True)
 
     def _tensor_to_y(self, tensor: torch.Tensor) -> np.ndarray:
         return tensor_to_sentences(tensor, self.tokenizer_output)

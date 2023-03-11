@@ -170,9 +170,10 @@ class NeuralNetwork(torch.nn.Module, ModelBase):
 
     def data_to_tensor(self, x: object, y: object,
                         weights: Optional[Sequence[float]] = None,
-                        device: Optional[torch.device] = None) -> tuple:
-        x = self._x_to_tensor(x, device)
-        y = self._y_to_tensor(y, device)
+                        device: Optional[torch.device] = None,
+                        **kwargs) -> tuple:
+        x = self._x_to_tensor(x, device, **kwargs)
+        y = self._y_to_tensor(y, device, **kwargs)
         if weights is not None:
             w = floats_to_tensor(weights, device)
             data = (x, y, w/w.mean())
@@ -220,9 +221,10 @@ class NeuralNetworkClassifier(NeuralNetwork):
     def data_to_tensor(self, x: object, y: object,
                         weights: Optional[Sequence[float]] = None,
                         class_weights: Optional[Sequence[float]] = None,
-                        device: Optional[torch.device] = None) -> tuple:
-        x = self._x_to_tensor(x, device)
-        y = self._y_to_tensor(y, device)
+                        device: Optional[torch.device] = None,
+                        **kwargs) -> tuple:
+        x = self._x_to_tensor(x, device, **kwargs)
+        y = self._y_to_tensor(y, device, **kwargs)
         if weights is not None:
             w = floats_to_tensor(weights, device)
             w = w/w.mean()

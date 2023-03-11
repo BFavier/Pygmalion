@@ -2,10 +2,9 @@ import torch
 from typing import Optional, Tuple, Literal, Callable
 from ._attention import _scaled_dot_product_attention, _kernelized_attention_linear, _kernelized_attention_naive
 from ._utilities import _log_exp_kernel
-from types import LambdaType
 
 ATTENTION_TYPE = Literal["scaled dot product", "kernelized linear", "kernelized quadratic"]
-_attention_functions = {k: v for k, v in zip(ATTENTION_TYPE, (_scaled_dot_product_attention, _kernelized_attention_linear, _kernelized_attention_naive))}
+_attention_functions = {k: v for k, v in zip(ATTENTION_TYPE.__args__, (_scaled_dot_product_attention, _kernelized_attention_linear, _kernelized_attention_naive))}
 
 
 class MultiHeadAttention(torch.nn.Module):
@@ -28,7 +27,7 @@ class MultiHeadAttention(torch.nn.Module):
         RPE_radius : int or None
             The radius of the relative positional encoding
             or None if no relative positional encoding should be applied
-        attention_type : {ATTENTION_TYPE}
+        attention_type : {ATTENTION_TYPE.__args__}
             the type of attention function to perform
         kernel_function : Callable
             the kernel function for kernelized attention
@@ -43,7 +42,6 @@ class MultiHeadAttention(torch.nn.Module):
         self.key = torch.nn.Linear(dim, dim, bias=False)
         self.value = torch.nn.Linear(dim, dim, bias=False)
         self.attention = _attention_functions[attention_type]
-        assert not isinstance(kernel_function, LambdaType), "Lambda function cannot be pickled and saved on disk"
         self.kernel_function = kernel_function if "kernelized" in attention_type else None
 
     def forward(self, query: torch.Tensor, key: torch.Tensor,

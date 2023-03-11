@@ -1,5 +1,4 @@
 import torch
-from .transformers._utilities import _sinusoidal_positional_encoding
 
 
 class LearnedPositionalEncoding(torch.nn.Module):

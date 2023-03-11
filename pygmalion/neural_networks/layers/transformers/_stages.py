@@ -18,10 +18,10 @@ class TransformerEncoderStage(torch.nn.Module):
                                                  RPE_radius=RPE_radius,
                                                  attention_type=attention_type)
         self.intermediate_norm = torch.nn.LayerNorm(dim)
-        self.intermediate_dropout = torch.nn.Dropout(dropout)
+        self.intermediate_dropout = torch.nn.Dropout(dropout) if dropout is not None else None
         self.expand = torch.nn.Linear(dim, dim * 4)
         self.contract = torch.nn.Linear(dim * 4, dim)
-        self.out_dropout = torch.nn.Dropout(dropout)
+        self.out_dropout = torch.nn.Dropout(dropout) if dropout is not None else None
         self.out_norm = torch.nn.LayerNorm(dim)
 
     def forward(self, X: torch.Tensor,
@@ -45,12 +45,14 @@ class TransformerEncoderStage(torch.nn.Module):
         N, L, _ = X.shape
         input = X.reshape(N * L, -1)
         X = self.self_attention(X, X, padding_mask, padding_mask).reshape(N * L, -1)
-        X = self.intermediate_dropout(X) + input
+        if self.intermediate_dropout is not None:
+            X = self.intermediate_dropout(X) + input
         X = self.intermediate_norm(X)
         input = X
-        X = self.activation(self.expand(X))
-        X = self.out_dropout(self.contract(X)) + input
-        X = self.out_norm(X)
+        X = self.contract(self.activation(self.expand(X)))
+        if self.out_dropout is not None:
+            X = self.out_dropout(X)
+        X = self.out_norm(X + input)
         return X.reshape(N, L, -1)
 
     @property
@@ -70,16 +72,16 @@ class TransformerDecoderStage(torch.nn.Module):
         self.masked_attention = MultiHeadAttention(projection_dim, n_heads, True,
                                                    RPE_radius=RPE_radius,
                                                    attention_type=attention_type)
-        self.first_dropout = torch.nn.Dropout(dropout)
+        self.first_dropout = torch.nn.Dropout(dropout) if dropout is not None else None
         self.first_norm = torch.nn.LayerNorm(dim)
         self.attention = MultiHeadAttention(projection_dim, n_heads, False,
                                             RPE_radius=RPE_radius,
                                             attention_type=attention_type)
-        self.second_dropout = torch.nn.Dropout(dropout)
+        self.second_dropout = torch.nn.Dropout(dropout) if dropout is not None else None
         self.second_norm = torch.nn.LayerNorm(dim)
         self.expand = torch.nn.Linear(dim, 4 * dim)
         self.contract = torch.nn.Linear(4 * dim, dim)
-        self.out_dropout = torch.nn.Dropout(dropout)
+        self.out_dropout = torch.nn.Dropout(dropout) if dropout is not None else None
         self.out_norm = torch.nn.LayerNorm(dim)
 
     def forward(self, Y, encoded,
@@ -103,13 +105,19 @@ class TransformerDecoderStage(torch.nn.Module):
         N, L, _ = Y.shape
         input = Y.reshape(N * L, -1)
         Y = self.masked_attention(Y, Y).reshape(N * L, -1)
-        Y = self.first_norm(self.first_dropout(Y) + input).reshape(N, L, -1)
+        if self.first_dropout is not None:
+            Y = self.first_dropout(Y)
+        Y = self.first_norm(Y + input).reshape(N, L, -1)
         input = Y.reshape(N * L, -1)
         Y = self.attention(Y, encoded, query_padding_mask=None,
                            key_padding_mask=encoded_padding_mask).reshape(N * L, -1)
-        Y = self.second_norm(self.second_dropout(Y) + input)
+        if self.second_dropout is not None:
+            Y = self.second_dropout(Y)
+        Y = self.second_norm(Y + input)
         input = Y
-        Y = self.out_dropout(self.contract(self.activation(self.expand(Y))))
+        Y = self.contract(self.activation(self.expand(Y)))
+        if self.out_dropout is not None:
+            Y = self.out_dropout(Y)
         Y = self.out_norm(Y + input)
         return Y.reshape(N, L, -1)
 

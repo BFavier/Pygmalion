@@ -18,8 +18,6 @@ class Tokenizer(ModelBase):
         name of the special tokens available with this tokenizer
     _vocabulary : tuple
         tuple of of all of the vocabulary, special tokens excluded
-    _token_indexes : dict
-        for a given token, gives it's index in the vocabulary
     """
 
     def __init__(self, ascii: bool, lowercase: bool, special_token_names: Iterable[str]):
@@ -28,7 +26,6 @@ class Tokenizer(ModelBase):
         self._lowercase = lowercase
         self._special_token_names = special_token_names
         self._vocabulary = tuple()
-        self._token_indexes = dict()
 
     def __repr__(self) -> str:
         n_tokens = f"{len(self.vocabulary):,}".replace(",", " ")
@@ -38,10 +35,10 @@ class Tokenizer(ModelBase):
         """
         indexes of special tokens in the vocabulary can be accessed as attributes
         """
-        if attr in object.__getattribute__(self, "_special_token_names"):
-            return object.__getattribute__(self, "_token_indexes")[SpecialToken(attr)]
+        if attr in self._special_token_names:
+            return self._special_token_names.index(attr) + len(self.vocabulary)
         else:
-            return object.__getattribute__(self, attr)
+            raise ValueError(f"Unregistered special token '{attr}'")
 
     def encode(self, string: str, start_token: bool = False,
                end_token: bool = False, padded_size: Optional[int] = None) -> List[int]:

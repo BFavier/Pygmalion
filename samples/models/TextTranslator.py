@@ -1,41 +1,23 @@
 import pygmalion as ml
-import matplotlib.pyplot as plt
-import pandas as pd
-import pathlib
+import torch
 import IPython
 
-path = pathlib.Path(__file__).parent
-data_path = path / "data"
+DEVICE = "cpu"#"cuda:0"
+tokenizer = ml.tokenizers.AsciiCharTokenizer()
+model = ml.neural_networks.TextTranslator(tokenizer, tokenizer, n_stages=4, projection_dim=16, n_heads=4)
+model.to(DEVICE)
 
-# Download the data
-train_data = ml.datasets.generators.OperationsGenerator()
+class Batchifyer:
+    def __init__(self, tokenizer: ml.tokenizers.AsciiCharTokenizer, batch_size: int, n_batches: int=1):
+        self.generator = ml.datasets.generators.RomanNumeralsGenerator(batch_size, n_batches)
+        self.tokenizer = tokenizer
+    
+    def __iter__(self):
+        for arabic_numerals, roman_numerals in self.generator:
+            yield model.data_to_tensor(arabic_numerals, roman_numerals)
 
-df = pd.read_csv(data_path / "sentence_pairs.txt", header=None,
-                 names=["en", "fr"], sep="\t")
-en, fr = df["en"].str.lower(), df["fr"].str.lower()
+train_data = Batchifyer(tokenizer, batch_size=100)
 
-tokenizer_in = ml.tokenizers.WhitespaceTokenizer()
-c1 = tokenizer_in.train(fr)
-tokenizer_out = ml.unsupervised.tokenizers.WhitespaceTokenizer()
-c2 = tokenizer_out.train(en)
-
-
-n_stages = 4
-projection_dim = 128
-n_heads = 4
-model = ml.neural_networks.Traductor(tokenizer_in, tokenizer_out,
-                                     n_stages, projection_dim, n_heads,
-                                     GPU=0, optimization_method="Adam")
-
-model.train((fr, en), n_epochs=10000, learning_rate=1.0E-3,
-            batch_size=20, n_batches=10, keep_best=False)
-
-model.plot_history()
-plt.show()
-
-for sentence in fr[:3]:
-    print()
-    print(sentence)
-    print(model(sentence, max_words=50))
+train_losses, val_losses, best_step = model.fit(train_data, n_steps=1000, learning_rate=1.0E-3)
 
 IPython.embed()

@@ -1,27 +1,26 @@
 from typing import List
+from unidecode import unidecode
 from ._utilities import Tokenizer
 
-class CharTokenizer(Tokenizer):
+class AsciiCharTokenizer(Tokenizer):
     """
-    Tokenizer that split text into single bytes tokens (using UTF-8 encoding)
-    This dummy tokenizer does not compress information
-    but also does not require training
+    Dummy Tokenizer that split text into single ascii characters tokens
+    This tokenizer does not require training
     """
 
     @classmethod
-    def from_dump(cls, dump: dict) -> "CharTokenizer":
+    def from_dump(cls, dump: dict) -> "AsciiCharTokenizer":
         assert dump["type"] == cls.__name__
-        return CharTokenizer()
+        return AsciiCharTokenizer()
 
-    def __init__(self, ascii: bool, lowercase: bool,
-                 special_tokens: List[str]=["START", "END", "PAD"]):
-        super().__init__(ascii, lowercase, special_tokens)
+    def __init__(self, lowercase: bool=False, special_tokens: List[str]=["START", "END", "PAD"]):
+        super().__init__(ascii=True, lowercase=lowercase, special_token_names=special_tokens)
 
     def encode(self, string: str) -> List[int]:
         """
         encode a string
         """
-        return list(self._preprocess(string).encode("utf-8"))
+        return list(self._preprocess(unidecode(string)).encode("utf-8"))
 
     def decode(self, encoded: List[int]) -> str:
         """
@@ -33,7 +32,7 @@ class CharTokenizer(Tokenizer):
         """
         split a string in bytes, with each byte beeing a token
         """
-        return [b for b in self._preprocess(string).encode("utf-8")]
+        return [b for b in self._preprocess(unidecode(string))]
 
     @property
     def vocabulary(self):
