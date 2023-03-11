@@ -1,14 +1,13 @@
 import torch
 import numpy as np
-from typing import Union, List, Dict, Tuple, Optional, Callable
+from typing import Union, List, Dict, Tuple, Optional, Literal
 from .layers.transformers import TransformerEncoder, TransformerDecoder, ATTENTION_TYPE
+from .layers import LearnedPositionalEncoding, SinusoidalPositionalEncoding
 from ._conversions import sentences_to_tensor, tensor_to_sentences
 from ._conversions import floats_to_tensor
 from ._neural_network import NeuralNetwork
 from ._loss_functions import cross_entropy
 from pygmalion.tokenizers._utilities import Tokenizer, SpecialToken
-
-
 
 
 class TextTranslator(NeuralNetwork):
@@ -18,33 +17,54 @@ class TextTranslator(NeuralNetwork):
                  n_stages: int, projection_dim: int, n_heads: int,
                  activation: str = "relu",
                  dropout: Union[float, None] = None,
+                 positional_encoding_type: Literal["sinusoidal", "learned", None] = "sinusoidal",
                  mask_padding: bool = False,
                  attention_type: ATTENTION_TYPE = "scaled dot product",
-                 RPE_radius: Optional[int] = None):
+                 RPE_radius: Optional[int] = None,
+                 max_sequence_length: Optional[int] = None,
+                 low_memory: bool = True):
         """
         Parameters
         ----------
         ...
         """
         super().__init__()
+        self.mask_padding = mask_padding
         embedding_dim = projection_dim*n_heads
         self.tokenizer_input = tokenizer_input
         self.tokenizer_output = tokenizer_output
-        self.embedding_in = torch.nn.Embedding(self.tokenizer_input.n_tokens,
-                                               embedding_dim)
-        self.dropout_in = torch.nn.Dropout(dropout) if dropout is not None else None
-        self.transformer_encoder = TransformerEncoder(...)
+        self.embedding_input = torch.nn.Embedding(self.tokenizer_input.n_tokens,
+                                                  embedding_dim)
         self.embedding_out = torch.nn.Embedding(self.tokenizer_output.n_tokens,
                                                 embedding_dim)
-        self.dropout_out = torch.nn.Dropout(dropout) if dropout is not None else None
+        self.dropout_input = torch.nn.Dropout(dropout) if dropout is not None else None
+        self.dropout_output = torch.nn.Dropout(dropout) if dropout is not None else None
+        if positional_encoding_type == "sinusoidal":
+            self.positional_encoding_input = SinusoidalPositionalEncoding()
+            self.positional_encoding_output = SinusoidalPositionalEncoding()
+        elif positional_encoding_type == "learned":
+            assert max_sequence_length is not None
+            self.positional_encoding_input = LearnedPositionalEncoding(max_sequence_length, embedding_dim)
+            self.positional_encoding_output = LearnedPositionalEncoding(max_sequence_length, embedding_dim)
+        elif positional_encoding_type is None:
+            self.positional_encoding_input = None
+            self.positional_encoding_output = None
+        else:
+            raise ValueError(f"Unexpected positional encoding type '{positional_encoding_type}'")
+        self.transformer_encoder = TransformerEncoder(n_stages, projection_dim, n_heads,
+                                                      dropout=dropout, activation=activation,
+                                                      RPE_radius=RPE_radius, attention_type=attention_type,
+                                                      low_memory=low_memory)
         self.transformer_decoder = TransformerDecoder(n_stages, projection_dim, n_heads,
-                                                      dropout=dropout, activation=activation)
-        self.output = torch.nn.Linear(embedding_dim, self.tokenizer_output.n_tokens)
+                                                      dropout=dropout, activation=activation,
+                                                      RPE_radius=RPE_radius, attention_type=attention_type,
+                                                      low_memory=low_memory)
+        self.head = torch.nn.Linear(embedding_dim, self.tokenizer_output.n_tokens)
 
-    def forward(self, X):
-        return self.encode(X)
+    def forward(self, X, padding_mask):
+        return self.encode(X, padding_mask)
 
-    def encode(self, X):
+    def encode(self, X: torch.Tensor, padding_mask: Optional[torch.Tensor]):
         """
         performs the encoding part of the network
 
@@ -54,6 +74,8 @@ class TextTranslator(NeuralNetwork):
             tensor of longs of shape (N, L) with:
             * N : number of sentences
             * L : words per sentence
+        padding_mask : torch.Tensor or None
+            tensor of booleans of shape (N, L)
 
         Returns
         -------
@@ -61,28 +83,29 @@ class TextTranslator(NeuralNetwork):
             tensor of floats of shape (N, L, D) with D the embedding dimension
         """
         N, L = X.shape
-        X = self.embedding_in(X)
-        X = positional_encoding(X)
-        X = self.dropout_in(X.reshape(N*L, -1)).reshape(N, L, -1)
-        X = self.transformer.encode(X)
+        X = self.embedding_input(X)
+        X = self.positional_encoding_input(X, padding_mask)
+        X = self.dropout_input(X.reshape(N*L, -1)).reshape(N, L, -1)
+        X = self.transformer_encoder(X)
         return X
 
-    def decode(self, encoded, Y):
+    def decode(self, Y: torch.Tensor, encoded: torch.Tensor, encoded_padding_mask: Optional[torch.Tensor]):
         """
         performs the decoding part of the network
 
         Parameters
         ----------
+        Y : torch.Tensor
+            tensor of long of shape (N, Ly) with:
+            * N : number of sentences
+            * Ly : words per sentence in the output language
         encoded : torch.Tensor
             tensor of floats of shape (N, Lx, D) with:
             * N : number of sentences
             * Lx : words per sentence in the input language
             * D : embedding dim
-
-        Y : torch.Tensor
-            tensor of long of shape (N, Ly) with:
-            * N : number of sentences
-            * Ly : words per sentence in the output language
+        encoded_padding_mask : torch.Tensor or None
+            tensor of booleans of shape (N, L)
 
         Returns
         -------
@@ -91,51 +114,44 @@ class TextTranslator(NeuralNetwork):
         """
         N, L = Y.shape
         Y = self.embedding_out(Y)
-        Y = positional_encoding(Y)
-        Y = self.dropout_out(Y.reshape(N*L, -1)).reshape(N, L, -1)
-        mask = mask_chronological(L, L, Y.device)
-        Y = self.transformer.decode(encoded, Y, mask=mask)
-        return self.output(Y)
+        Y = self.positional_encoding_output(Y)
+        Y = self.dropout_output(Y.reshape(N*L, -1)).reshape(N, L, -1)
+        Y = self.transformer_decoder(Y, encoded, encoded_padding_mask)
+        return self.head(Y)
 
-    def loss(self, encoded, y_target, weights=None):
-        y_pred = self.decode(encoded, y_target[:, :-1])
+    def loss(self, x, y_target, weights=None, class_weights=None):
+        """
+        Parameters
+        ----------
+        x : torch.Tensor
+            tensor of long of shape (N, Li)
+        y_target : torch.Tensor
+            tensor of long of shape (N, Lt)
+        """
+        padding_mask = (x == self.tokenizer_input.PAD) if self.mask_padding else None
+        encoded = self(x, padding_mask)
+        y_pred = self.decode(encoded, y_target[:, :-1], padding_mask)
         return cross_entropy(y_pred.transpose(1, 2), y_target[:, 1:],
-                             weights, self.class_weights)
+                             weights, class_weights)
 
-    def predict(self, X, max_words=100):
-        n_tokens = self.tokenizer_out.n_tokens
-        sentence_start = n_tokens
-        sentence_end = n_tokens+1
+    def predict(self, X, max_tokens=100):
+        START = self.tokenizer_output.PAD
+        END = self.tokenizer_output.END
         encoded = self(X)
         # Y is initialized as a single 'start of sentence' character
-        Y = torch.full([1, 1], sentence_start,
+        Y = torch.full([1, 1], START,
                        dtype=torch.long, device=X.device)
-        for _ in range(max_words):
+        for _ in range(max_tokens):
             res = self.decode(encoded, Y)
             res = torch.argmax(res, dim=-1)
             index = res[:, -1:]
             Y = torch.cat([Y, index], dim=-1)
             new_token = index.item()
-            if new_token == sentence_end or new_token > n_tokens:
+            if new_token == END:
                 break
         else:
             Y = torch.cat([Y, index], dim=-1)
         return Y
-
-    def _data_to_tensor(self, X: List[str],
-                        Y: Union[None, List[str]],
-                        weights: None = None,
-                        device: torch.device = torch.device("cpu")) -> tuple:
-        if X is not None:
-            x = 
-        else:
-            x = None
-        if Y is not None:
-            y = 
-        else:
-            y = None
-        w = None if weights is None else floats_to_tensor(weights, device)
-        return x, y, w
 
     def _x_to_tensor(self, x: List[str],
                      device: Optional[torch.device] = None):

@@ -133,12 +133,12 @@ class TransformerEncoder(torch.nn.Module):
                                                        RPE_radius=RPE_radius,
                                                        attention_type=attention_type))
 
-    def forward(self, X, mask=None, padding_mask: Optional[torch.Tensor] = None):
+    def forward(self, X, padding_mask: Optional[torch.Tensor] = None):
         for stage in self.stages:
             if self.low_memory and self.training:
-                X = checkpoint(stage, X, mask, padding_mask)
+                X = checkpoint(stage, X, padding_mask)
             else:
-                X = stage(X, mask=mask, padding_mask=padding_mask)
+                X = stage(X, padding_mask)
         return X
 
 
@@ -157,10 +157,10 @@ class TransformerDecoder(torch.nn.Module):
                                                        RPE_radius=RPE_radius,
                                                        attention_type=attention_type))
 
-    def forward(self, encoded, Y, mask: Optional[torch.Tensor] = None, padding_mask: Optional[torch.Tensor] = None):
+    def forward(self, encoded, Y, encoded_padding_mask: Optional[torch.Tensor] = None):
         for stage in self.stages:
             if self.low_memory and self.training:
-                Y = checkpoint(stage, encoded, Y, mask, padding_mask)
+                Y = checkpoint(stage, encoded, Y, encoded_padding_mask)
             else:
-                Y = stage(encoded, Y, mask=mask, padding_mask=padding_mask)
+                Y = stage(encoded, Y, encoded_padding_mask)
         return Y
