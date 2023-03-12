@@ -35,8 +35,10 @@ class TransformerEncoderStage(torch.nn.Module):
             * N sentences count
             * L sequence length
             * D number of features
+
         padding_mask : torch.tensor or None
-            tensor of booleans of shape (N, L) to ignore
+            tensor of booleans of shape (N, L) of tokens to ignore
+
         Returns
         -------
         torch.Tensor
@@ -92,16 +94,17 @@ class TransformerDecoderStage(torch.nn.Module):
         """
         Parameter
         ---------
-        encoded : torch.Tensor
-            Tensor of shape (N, Lk, F)
         Y : torch.Tensor
-            Tensor of shape (N, Lq, F)
+            Tensor of shape (N, Lq, D)
+        encoded : torch.Tensor
+            Tensor of shape (N, Lk, D)
         encoded_padding_mask : torch.Tensor or None
             mask of shape (N, Lk)
+
         Returns
         -------
         torch.Tensor
-            tensor of shape (N, L, F)
+            tensor of shape (N, L, D)
         """
         encoded = encoded.to(self.device)
         Y = Y.to(self.device)
@@ -123,6 +126,42 @@ class TransformerDecoderStage(torch.nn.Module):
             Y = self.out_dropout(Y)
         Y = self.out_norm(Y + input)
         return Y.reshape(N, L, -1)
+    
+    def predict(self, Y, encoded,
+                encoded_padding_mask: Optional[torch.Tensor] = None):
+        """
+        Efficiently predict the next representation
+        of the last token in the Y sequence
+
+        Parameter
+        ---------
+        Y : torch.Tensor
+            Tensor of shape (N, Lq, D)
+        encoded : torch.Tensor
+            Tensor of shape (N, Lk, D)
+        encoded_padding_mask : torch.Tensor or None
+            mask of shape (N, Lk)
+        Returns
+        -------
+        torch.Tensor
+            tensor of shape (N, 1, D)
+        """
+        assert not self.training
+        encoded = encoded.to(self.device)
+        Y = Y.to(self.device)
+        N, L, _ = Y.shape
+        Q = Y[:, -1:, :]
+        input = Q.reshape(N, -1)
+        Q = self.masked_attention(Q, Y).reshape(N, -1)
+        Q = self.first_norm(Q + input).reshape(N, 1, -1)
+        input = Q.reshape(N, -1)
+        Q = self.attention(Q, encoded, query_padding_mask=None,
+                           key_padding_mask=encoded_padding_mask).reshape(N, -1)
+        Q = self.second_norm(Q + input)
+        input = Q
+        Q = self.contract(self.activation(self.expand(Q)))
+        Q = self.out_norm(Q + input)
+        return Q.reshape(N, 1, -1)
 
     @property
     def device(self) -> torch.device:

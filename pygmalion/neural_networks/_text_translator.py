@@ -21,7 +21,8 @@ class TextTranslator(NeuralNetwork):
                  mask_padding: bool = False,
                  attention_type: ATTENTION_TYPE = "scaled dot product",
                  RPE_radius: Optional[int] = None,
-                 max_sequence_length: Optional[int] = None,
+                 max_input_sequence_length: Optional[int] = None,
+                 max_output_sequence_length: Optional[int] = None,
                  low_memory: bool = True):
         """
         Parameters
@@ -30,13 +31,14 @@ class TextTranslator(NeuralNetwork):
         """
         super().__init__()
         self.mask_padding = mask_padding
-        self.max_sequence_length = max_sequence_length
+        self.max_input_sequence_length = max_input_sequence_length
+        self.max_output_sequence_length = max_output_sequence_length
         embedding_dim = projection_dim*n_heads
         self.tokenizer_input = tokenizer_input
         self.tokenizer_output = tokenizer_output
         self.embedding_input = torch.nn.Embedding(self.tokenizer_input.n_tokens,
                                                   embedding_dim)
-        self.embedding_out = torch.nn.Embedding(self.tokenizer_output.n_tokens,
+        self.embedding_output = torch.nn.Embedding(self.tokenizer_output.n_tokens,
                                                 embedding_dim)
         self.dropout_input = torch.nn.Dropout(dropout) if dropout is not None else None
         self.dropout_output = torch.nn.Dropout(dropout) if dropout is not None else None
@@ -44,9 +46,9 @@ class TextTranslator(NeuralNetwork):
             self.positional_encoding_input = SinusoidalPositionalEncoding()
             self.positional_encoding_output = SinusoidalPositionalEncoding()
         elif positional_encoding_type == "learned":
-            assert max_sequence_length is not None
-            self.positional_encoding_input = LearnedPositionalEncoding(max_sequence_length, embedding_dim)
-            self.positional_encoding_output = LearnedPositionalEncoding(max_sequence_length, embedding_dim)
+            assert max_input_sequence_length is not None and max_output_sequence_length is not None
+            self.positional_encoding_input = LearnedPositionalEncoding(max_input_sequence_length, embedding_dim)
+            self.positional_encoding_output = LearnedPositionalEncoding(max_output_sequence_length, embedding_dim)
         elif positional_encoding_type is None:
             self.positional_encoding_input = None
             self.positional_encoding_output = None
@@ -118,7 +120,7 @@ class TextTranslator(NeuralNetwork):
             tensor of floats of shape (N, Ly, D)
         """
         N, L = Y.shape
-        Y = self.embedding_out(Y)
+        Y = self.embedding_output(Y)
         Y = self.positional_encoding_output(Y)
         if self.dropout_output is not None:
             Y = self.dropout_output(Y.reshape(N*L, -1)).reshape(N, L, -1)
@@ -141,25 +143,65 @@ class TextTranslator(NeuralNetwork):
         return cross_entropy(y_pred.transpose(1, 2), y_target[:, 1:],
                              weights, class_weights)
 
-    def predict(self, X, max_tokens=100):
-        START = self.tokenizer_output.START
-        END = self.tokenizer_output.END
-        PAD = self.tokenizer_input.PAD
-        encoded = self(X, (X == PAD) if self.mask_padding else None)
-        # Y is initialized as a single 'start of sentence' character
-        Y = torch.full([1, 1], START,
-                       dtype=torch.long, device=X.device)
-        for _ in range(max_tokens):
-            res = self.decode(encoded, Y)
-            res = torch.argmax(res, dim=-1)
-            index = res[:, -1:]
-            Y = torch.cat([Y, index], dim=-1)
-            new_token = index.item()
-            if new_token == END:
-                break
-        else:
-            Y = torch.cat([Y, index], dim=-1)
-        return Y
+    def predict(self, sequences: List[str], max_tokens: int = 100,
+                n_beams: int = 1) -> List[str]:
+        """
+        Predict a translation for the given sequences using beam search,
+        outputing at most 'max_tokens' tokens.
+        If 'n_beams' is 1, this is equivalent to predicting the single token
+        with the highest likelyhood at each step.
+        """
+        self.eval()
+        with torch.no_grad():
+            X = self._x_to_tensor(sequences, self.device)
+            START = self.tokenizer_output.START
+            END = self.tokenizer_output.END
+            PAD = self.tokenizer_input.PAD
+            n_classes = self.tokenizer_output.n_tokens
+            encoded_padding_mask = (X == PAD) if self.mask_padding else None
+            encoded = self(X, encoded_padding_mask)
+            N, _, D = encoded.shape
+            encoded_expanded = encoded.unsqueeze(1).repeat(1, n_beams, 1, 1).reshape(N*n_beams, -1, D)
+            predicted = torch.zeros((N, 1, 0), device=X.device, dtype=torch.long)
+            log_likelyhood = torch.zeros((N, 1), device=X.device, dtype=torch.float)
+            n_predicted_tokens = torch.zeros((N, 1), device=X.device, dtype=torch.long)
+            intermediate = [torch.zeros((N, 0, D), device=X.device)
+                            for _ in self.transformer_encoder.stages]
+            I = torch.full([N, 1], START,
+                           dtype=torch.long, device=X.device)
+            for _ in range(max_tokens):
+                stop = (predicted == END).any(dim=-1)
+                if stop.all():
+                    break
+                Q = self.embedding_output(I)
+                if self.positional_encoding_output is not None:
+                    Q = self.positional_encoding_output(Q)
+                intermediate, Q = self.transformer_decoder.predict(
+                    intermediate, Q, encoded, encoded_padding_mask)
+                # lookup the beam/token that lead to highest mean log likelyhood
+                log_p = torch.log(torch.softmax(self.head(Q.reshape(N, -1, D)), dim=-1))
+                log_likelyhood = log_likelyhood.unsqueeze(-1) + torch.masked_fill(log_p, stop.unsqueeze(-1), 0.)
+                n_predicted_tokens = n_predicted_tokens + (~stop)
+                mean_log_likelyhood = log_likelyhood / n_predicted_tokens.unsqueeze(-1)
+                mean_log_likelyhood, indexes = mean_log_likelyhood.reshape(N, -1).topk(k=n_beams, dim=-1)
+                beam, token = torch.div(indexes, n_classes, rounding_mode="floor"), indexes % n_classes
+                # create the property of the new beams
+                I = token.reshape(N*n_beams, 1)
+                intermediate = [torch.gather(inter.reshape(N, predicted.shape[1], -1, D),
+                                             1,
+                                             beam.reshape(N, n_beams, 1, 1).expand(-1, -1, inter.shape[1], D)
+                                             ).reshape(N*n_beams, -1, D)
+                                for inter in intermediate]
+                predicted = torch.gather(predicted, 1, beam.unsqueeze(-1).expand(-1, -1, predicted.shape[-1]))
+                predicted = torch.cat([predicted, token.unsqueeze(-1)], dim=-1)
+                log_likelyhood = torch.gather(log_likelyhood, 1, beam.unsqueeze(-1).expand(-1, -1, n_classes))
+                log_likelyhood = torch.gather(log_likelyhood, -1, token.unsqueeze(-1)).squeeze(-1)
+                n_predicted_tokens = torch.gather(n_predicted_tokens, 1, beam)
+                encoded = encoded_expanded
+            # get best final beam
+            predicted = predicted[:, 0, :]
+            translations = [self.tokenizer_output.decode(p.cpu().tolist()) for p in predicted]
+            return translations
 
     @property
     def device(self) -> torch.device:
@@ -168,13 +210,13 @@ class TextTranslator(NeuralNetwork):
     def _x_to_tensor(self, x: List[str],
                      device: Optional[torch.device] = None):
         return sentences_to_tensor(x, self.tokenizer_input, device,
-                                    max_sequence_length=self.max_sequence_length,
+                                    max_sequence_length=self.max_input_sequence_length,
                                     add_start_end_tokens=False)
 
     def _y_to_tensor(self, y: List[str],
                      device: Optional[torch.device] = None) -> torch.Tensor:
         return sentences_to_tensor(y, self.tokenizer_output, device,
-                                   max_sequence_length=self.max_sequence_length,
+                                   max_sequence_length=self.max_output_sequence_length,
                                    add_start_end_tokens=True)
 
     def _tensor_to_y(self, tensor: torch.Tensor) -> np.ndarray:

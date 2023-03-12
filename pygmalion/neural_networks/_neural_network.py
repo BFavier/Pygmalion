@@ -53,8 +53,7 @@ class NeuralNetwork(torch.nn.Module, ModelBase):
             if not(overwrite) and file_path.exists():
                 raise FileExistsError(
                     f"The file '{file_path}' already exists, set 'overwrite=True' to overwrite.")
-            with open(file_path, "w", encoding="utf-8") as json_file:
-                torch.save(self, json_file)
+            torch.save(self, file_path)
         else:
             torch.save(self, file_path)
 

@@ -11,6 +11,7 @@ class ScaledDotProductAttention(torch.nn.Module):
     def forward(self, q, k, v, mask_future, padding_mask, RPE):
         return self._scaled_dot_product_attention(q, k, v, mask_future, padding_mask, RPE)
 
+    @staticmethod
     def _scaled_dot_product_attention(q: torch.Tensor, k: torch.Tensor,
                                       v: torch.Tensor, mask_future: bool,
                                       padding_mask: Optional[torch.Tensor],

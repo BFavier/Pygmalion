@@ -27,7 +27,7 @@ class AsciiCharTokenizer(Tokenizer):
         """
         decode an encoded string
         """
-        return bytes(encoded).decode("utf-8", errors="ignore")
+        return bytes(e for e in encoded if 0<= e < 256).decode("utf-8", errors="ignore")
 
     def split(self, string: str) -> List[bytes]:
         """

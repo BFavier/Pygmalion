@@ -38,7 +38,20 @@ class Tokenizer(ModelBase):
         if attr in self._special_token_names:
             return self._special_token_names.index(attr) + len(self.vocabulary)
         else:
-            raise ValueError(f"Unregistered special token '{attr}'")
+            cls = type(self.__name__)
+            raise AttributeError(f"Type '{cls}' has not attribute '{attr}' and has not special token named '{attr}'")
+
+    def __getstate__(self) -> dict:
+        """
+        must be implemented for compatibility with pickle because __getattr__ was implemented
+        """
+        return self.__dict__
+
+    def __setstate__(self, other: dict):
+        """
+        must be implemented for compatibility with pickle because __getattr__ was implemented
+        """
+        self.__dict__.update(other)
 
     def encode(self, string: str, start_token: bool = False,
                end_token: bool = False, padded_size: Optional[int] = None) -> List[int]:
