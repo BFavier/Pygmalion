@@ -1,19 +1,17 @@
 import torch
 from typing import Optional, Tuple, Literal, Callable
-from ._attention import _scaled_dot_product_attention, _kernelized_attention_linear, _kernelized_attention_naive
-from ._utilities import _log_exp_kernel
+from ._attention import ScaledDotProductAttention, KernelizedAttention
 
-ATTENTION_TYPE = Literal["scaled dot product", "kernelized linear", "kernelized quadratic"]
-_attention_functions = {k: v for k, v in zip(ATTENTION_TYPE.__args__, (_scaled_dot_product_attention, _kernelized_attention_linear, _kernelized_attention_naive))}
+ATTENTION_TYPE = Literal["scaled dot product", "kernelized"]
 
 
 class MultiHeadAttention(torch.nn.Module):
 
     def __init__(self, projection_dim: int, n_heads: int,
                  masked: bool,
-                 RPE_radius: Optional[int] = None,
-                 attention_type: ATTENTION_TYPE = "scaled dot product",
-                 kernel_function : Callable = _log_exp_kernel):
+                 RPE_radius: Optional[int],
+                 attention_type: ATTENTION_TYPE,
+                 **kwargs):
         f"""
         Parameters
         ----------
@@ -29,8 +27,7 @@ class MultiHeadAttention(torch.nn.Module):
             or None if no relative positional encoding should be applied
         attention_type : {ATTENTION_TYPE.__args__}
             the type of attention function to perform
-        kernel_function : Callable
-            the kernel function for kernelized attention
+        **kwargs : kwargs passed to the attention class
         """
         super().__init__()
         self.n_heads = n_heads
@@ -41,8 +38,12 @@ class MultiHeadAttention(torch.nn.Module):
         self.query = torch.nn.Linear(dim, dim, bias=False)
         self.key = torch.nn.Linear(dim, dim, bias=False)
         self.value = torch.nn.Linear(dim, dim, bias=False)
-        self.attention = _attention_functions[attention_type]
-        self.kernel_function = kernel_function if "kernelized" in attention_type else None
+        if attention_type == "scaled dot product":
+            self.attention = ScaledDotProductAttention(**kwargs)
+        elif attention_type == "kernelized":
+            self.attention = KernelizedAttention(**kwargs)
+        else:
+            raise ValueError(f"Unexpected attention type '{attention_type}'")
 
     def forward(self, query: torch.Tensor, key: torch.Tensor,
                 query_padding_mask: Optional[torch.Tensor] = None,

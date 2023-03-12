@@ -62,10 +62,10 @@ class TextTranslator(NeuralNetwork):
                                                       low_memory=low_memory)
         self.head = torch.nn.Linear(embedding_dim, self.tokenizer_output.n_tokens)
 
-    def forward(self, X, padding_mask):
+    def forward(self, X: torch.Tensor, padding_mask: Optional[torch.Tensor]):
         return self.encode(X, padding_mask)
 
-    def encode(self, X: torch.Tensor, padding_mask: Optional[torch.Tensor]):
+    def encode(self, X: torch.Tensor, padding_mask: Optional[torch.Tensor]) -> torch.Tensor:
         """
         performs the encoding part of the network
 
@@ -142,9 +142,10 @@ class TextTranslator(NeuralNetwork):
                              weights, class_weights)
 
     def predict(self, X, max_tokens=100):
-        START = self.tokenizer_output.PAD
+        START = self.tokenizer_output.START
         END = self.tokenizer_output.END
-        encoded = self(X)
+        PAD = self.tokenizer_input.PAD
+        encoded = self(X, (X == PAD) if self.mask_padding else None)
         # Y is initialized as a single 'start of sentence' character
         Y = torch.full([1, 1], START,
                        dtype=torch.long, device=X.device)

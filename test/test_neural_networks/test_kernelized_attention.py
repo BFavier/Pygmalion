@@ -1,4 +1,4 @@
-from pygmalion.neural_networks.layers.transformers._attention import _kernelized_attention_linear, _kernelized_attention_naive
+from pygmalion.neural_networks.layers.transformers._attention import KernelizedAttention
 import torch
 import torch.nn.functional as F
 # import pandas as pd
@@ -10,24 +10,24 @@ def kernel(x):
     return F.elu(x) + 1
 
 
-def naive_m(q, k, v, RPE, scaled=True):
-    return _kernelized_attention_naive(kernel, q, k, v, True, None, RPE, scaled=scaled)
+def naive_m(q, k, v, RPE, padding_mask=None, scaled=True):
+    return KernelizedAttention._kernelized_attention_naive(kernel, q, k, v, True, padding_mask, RPE, scaled=scaled)
 
 
-def naive_b(q, k, v, RPE, scaled=True):
+def naive_b(q, k, v, RPE, padding_mask=None, scaled=True):
     _, _, Lq, _ = q.shape
     _, _, Lk, _ = k.shape
-    return _kernelized_attention_naive(kernel, q, k, v, False, None, RPE, scaled=scaled)
+    return KernelizedAttention._kernelized_attention_naive(kernel, q, k, v, False, padding_mask, RPE, scaled=scaled)
 
 
-def linear_m(q, k, v, RPE, scaled=True):
-    return _kernelized_attention_linear(kernel, q, k, v, True, None, RPE, scaled=scaled)
+def linear_m(q, k, v, RPE, padding_mask=None, scaled=True):
+    return KernelizedAttention._kernelized_attention_linear(kernel, q, k, v, True, padding_mask, RPE, scaled=scaled)
 
 
-def linear_b(q, k, v, RPE, scaled=True):
+def linear_b(q, k, v, RPE, padding_mask=None, scaled=True):
     _, _, Lq, _ = q.shape
     _, _, Lk, _ = k.shape
-    return _kernelized_attention_linear(kernel, q, k, v, False, None, RPE, scaled=scaled)
+    return KernelizedAttention._kernelized_attention_linear(kernel, q, k, v, False, padding_mask, RPE, scaled=scaled)
 
 
 def test_equality_bidirectional():
@@ -61,6 +61,16 @@ def test_equality_masked_RPE():
     v = torch.rand(N, H, Lk, D)
     RPE = torch.nn.Embedding(5, D)
     assert torch.allclose(naive_m(q, k, v, RPE), linear_m(q, k, v, RPE))
+
+def test_equality_padding_masked_RPE():
+    N, H, Lq, Lk, D = 1, 1, 100, 110, 64
+    q = torch.rand(N, H, Lq, D)
+    k = torch.rand(N, H, Lk, D)
+    v = torch.rand(N, H, Lk, D)
+    padding_mask = (torch.rand(N, Lk) > 0.5)
+    RPE = torch.nn.Embedding(5, D)
+    assert torch.allclose(naive_m(q, k, v, RPE, padding_mask=padding_mask),
+                          linear_m(q, k, v, RPE, padding_mask=padding_mask))
 
 # def benchmark():
 #     naive_masked = []
@@ -119,5 +129,6 @@ if __name__ == "__main__":
     test_equality_masked()
     test_equality_RPE()
     test_equality_masked_RPE()
+    test_equality_padding_masked_RPE()
     import IPython
     IPython.embed()

@@ -9,14 +9,15 @@ class TransformerEncoderStage(torch.nn.Module):
     def __init__(self, projection_dim: int, n_heads: int,
                  dropout: Optional[float] = None,
                  activation: str = "relu", RPE_radius: Optional[int] = None,
-                 attention_type: ATTENTION_TYPE = "scaled dot product"
-                 ):
+                 attention_type: ATTENTION_TYPE = "scaled dot product",
+                 **kwargs):
         super().__init__()
         dim = projection_dim * n_heads
         self.activation = getattr(torch, activation)
         self.self_attention = MultiHeadAttention(projection_dim, n_heads, False,
                                                  RPE_radius=RPE_radius,
-                                                 attention_type=attention_type)
+                                                 attention_type=attention_type,
+                                                 **kwargs)
         self.intermediate_norm = torch.nn.LayerNorm(dim)
         self.intermediate_dropout = torch.nn.Dropout(dropout) if dropout is not None else None
         self.expand = torch.nn.Linear(dim, dim * 4)
@@ -65,13 +66,15 @@ class TransformerDecoderStage(torch.nn.Module):
     def __init__(self, projection_dim: int, n_heads: int,
                  dropout: Optional[float] = None, activation: str = "relu",
                  RPE_radius: Optional[int] = None,
-                 attention_type: ATTENTION_TYPE = "scaled dot product"):
+                 attention_type: ATTENTION_TYPE = "scaled dot product",
+                 **kwargs):
         super().__init__()
         dim = projection_dim * n_heads
         self.activation = getattr(torch, activation)
         self.masked_attention = MultiHeadAttention(projection_dim, n_heads, True,
                                                    RPE_radius=RPE_radius,
-                                                   attention_type=attention_type)
+                                                   attention_type=attention_type,
+                                                   **kwargs)
         self.first_dropout = torch.nn.Dropout(dropout) if dropout is not None else None
         self.first_norm = torch.nn.LayerNorm(dim)
         self.attention = MultiHeadAttention(projection_dim, n_heads, False,
@@ -124,51 +127,3 @@ class TransformerDecoderStage(torch.nn.Module):
     @property
     def device(self) -> torch.device:
         return self.masked_attention.key.weight.device
-
-
-class TransformerEncoder(torch.nn.Module):
-
-    def __init__(self, n_stages: int, projection_dim: int, n_heads: int,
-                 dropout: Optional[float] = None, activation: str = "relu",
-                 RPE_radius: Optional[int] = None, attention_type: ATTENTION_TYPE = "scaled dot product",
-                 low_memory: bool = True):
-        super().__init__()
-        self.stages = torch.nn.ModuleList()
-        self.low_memory = low_memory
-        for stage in range(n_stages):
-            self.stages.append(TransformerEncoderStage(projection_dim, n_heads,
-                                                       dropout=dropout, activation=activation,
-                                                       RPE_radius=RPE_radius,
-                                                       attention_type=attention_type))
-
-    def forward(self, X, padding_mask: Optional[torch.Tensor] = None):
-        for stage in self.stages:
-            if self.low_memory and self.training:
-                X = checkpoint(stage, X, padding_mask)
-            else:
-                X = stage(X, padding_mask)
-        return X
-
-
-class TransformerDecoder(torch.nn.Module):
-
-    def __init__(self, n_stages: int, projection_dim: int, n_heads: int,
-                 dropout: Optional[float] = None, activation: str = "relu",
-                 RPE_radius: Optional[int] = None, attention_type: ATTENTION_TYPE = "scaled dot product",
-                 low_memory: bool = True):
-        super().__init__()
-        self.stages = torch.nn.ModuleList()
-        self.low_memory = low_memory
-        for stage in range(n_stages):
-            self.stages.append(TransformerDecoderStage(projection_dim, n_heads,
-                                                       dropout=dropout, activation=activation,
-                                                       RPE_radius=RPE_radius,
-                                                       attention_type=attention_type))
-
-    def forward(self, encoded, Y, encoded_padding_mask: Optional[torch.Tensor] = None):
-        for stage in self.stages:
-            if self.low_memory and self.training:
-                Y = checkpoint(stage, encoded, Y, encoded_padding_mask)
-            else:
-                Y = stage(encoded, Y, encoded_padding_mask)
-        return Y
