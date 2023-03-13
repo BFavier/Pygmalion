@@ -18,7 +18,7 @@ class TextTranslator(NeuralNetwork):
                  activation: str = "relu",
                  dropout: Union[float, None] = None,
                  positional_encoding_type: Literal["sinusoidal", "learned", None] = "sinusoidal",
-                 mask_padding: bool = False,
+                 mask_padding: bool = True,
                  attention_type: ATTENTION_TYPE = "scaled dot product",
                  RPE_radius: Optional[int] = None,
                  max_input_sequence_length: Optional[int] = None,
@@ -127,7 +127,7 @@ class TextTranslator(NeuralNetwork):
         Y = self.transformer_decoder(Y, encoded, encoded_padding_mask)
         return self.head(Y)
 
-    def loss(self, x, y_target, weights=None, class_weights=None):
+    def loss(self, x, y_target, weights=None):
         """
         Parameters
         ----------
@@ -137,6 +137,8 @@ class TextTranslator(NeuralNetwork):
             tensor of long of shape (N, Lt)
         """
         x, y_target = x.to(self.device), y_target.to(self.device)
+        class_weights = torch.ones(self.tokenizer_output.n_tokens, device=self.device)
+        class_weights[self.tokenizer_output.PAD] = 0.
         padding_mask = (x == self.tokenizer_input.PAD) if self.mask_padding else None
         encoded = self(x, padding_mask)
         y_pred = self.decode(y_target[:, :-1], encoded, padding_mask)
@@ -169,7 +171,7 @@ class TextTranslator(NeuralNetwork):
                             for _ in self.transformer_encoder.stages]
             I = torch.full([N, 1], START,
                            dtype=torch.long, device=X.device)
-            for _ in range(max_tokens):
+            for i in range(max_tokens):
                 stop = (predicted == END).any(dim=-1)
                 if stop.all():
                     break
@@ -177,12 +179,12 @@ class TextTranslator(NeuralNetwork):
                 if self.positional_encoding_output is not None:
                     Q = self.positional_encoding_output(Q)
                 intermediate, Q = self.transformer_decoder.predict(
-                    intermediate, Q, encoded, encoded_padding_mask)
+                    intermediate, Q, encoded, encoded_padding_mask, i)
                 # lookup the beam/token that lead to highest mean log likelyhood
                 log_p = torch.log(torch.softmax(self.head(Q.reshape(N, -1, D)), dim=-1))
-                log_likelyhood = log_likelyhood.unsqueeze(-1) + torch.masked_fill(log_p, stop.unsqueeze(-1), 0.)
+                all_log_likelyhoods = log_likelyhood.unsqueeze(-1) + torch.masked_fill(log_p, stop.unsqueeze(-1), 0.)
                 n_predicted_tokens = n_predicted_tokens + (~stop)
-                mean_log_likelyhood = log_likelyhood / n_predicted_tokens.unsqueeze(-1)
+                mean_log_likelyhood = all_log_likelyhoods / n_predicted_tokens.unsqueeze(-1)
                 mean_log_likelyhood, indexes = mean_log_likelyhood.reshape(N, -1).topk(k=n_beams, dim=-1)
                 beam, token = torch.div(indexes, n_classes, rounding_mode="floor"), indexes % n_classes
                 # create the property of the new beams
@@ -194,8 +196,7 @@ class TextTranslator(NeuralNetwork):
                                 for inter in intermediate]
                 predicted = torch.gather(predicted, 1, beam.unsqueeze(-1).expand(-1, -1, predicted.shape[-1]))
                 predicted = torch.cat([predicted, token.unsqueeze(-1)], dim=-1)
-                log_likelyhood = torch.gather(log_likelyhood, 1, beam.unsqueeze(-1).expand(-1, -1, n_classes))
-                log_likelyhood = torch.gather(log_likelyhood, -1, token.unsqueeze(-1)).squeeze(-1)
+                log_likelyhood = torch.gather(all_log_likelyhoods, -1, indexes.unsqueeze(-1)).squeeze(-1)
                 n_predicted_tokens = torch.gather(n_predicted_tokens, 1, beam)
                 encoded = encoded_expanded
             # get best final beam

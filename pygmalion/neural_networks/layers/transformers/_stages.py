@@ -73,10 +73,10 @@ class TransformerDecoderStage(torch.nn.Module):
         super().__init__()
         dim = projection_dim * n_heads
         self.activation = getattr(torch, activation)
-        self.masked_attention = MultiHeadAttention(projection_dim, n_heads, True,
-                                                   RPE_radius=RPE_radius,
-                                                   attention_type=attention_type,
-                                                   **kwargs)
+        self.masked_self_attention = MultiHeadAttention(projection_dim, n_heads, True,
+                                                        RPE_radius=RPE_radius,
+                                                        attention_type=attention_type,
+                                                        **kwargs)
         self.first_dropout = torch.nn.Dropout(dropout) if dropout is not None else None
         self.first_norm = torch.nn.LayerNorm(dim)
         self.attention = MultiHeadAttention(projection_dim, n_heads, False,
@@ -110,7 +110,7 @@ class TransformerDecoderStage(torch.nn.Module):
         Y = Y.to(self.device)
         N, L, _ = Y.shape
         input = Y.reshape(N * L, -1)
-        Y = self.masked_attention(Y, Y).reshape(N * L, -1)
+        Y = self.masked_self_attention(Y, Y).reshape(N * L, -1)
         if self.first_dropout is not None:
             Y = self.first_dropout(Y)
         Y = self.first_norm(Y + input).reshape(N, L, -1)
@@ -126,9 +126,10 @@ class TransformerDecoderStage(torch.nn.Module):
             Y = self.out_dropout(Y)
         Y = self.out_norm(Y + input)
         return Y.reshape(N, L, -1)
-    
+
     def predict(self, Y, encoded,
-                encoded_padding_mask: Optional[torch.Tensor] = None):
+                encoded_padding_mask: Optional[torch.Tensor],
+                mask_index_offset: int):
         """
         Efficiently predict the next representation
         of the last token in the Y sequence
@@ -141,6 +142,9 @@ class TransformerDecoderStage(torch.nn.Module):
             Tensor of shape (N, Lk, D)
         encoded_padding_mask : torch.Tensor or None
             mask of shape (N, Lk)
+        mask_index_offset : int
+            the offset to add to query positions
+
         Returns
         -------
         torch.Tensor
@@ -152,11 +156,12 @@ class TransformerDecoderStage(torch.nn.Module):
         N, L, _ = Y.shape
         Q = Y[:, -1:, :]
         input = Q.reshape(N, -1)
-        Q = self.masked_attention(Q, Y).reshape(N, -1)
+        Q = self.masked_self_attention(Q, Y, mask_index_offset=mask_index_offset).reshape(N, -1)
         Q = self.first_norm(Q + input).reshape(N, 1, -1)
         input = Q.reshape(N, -1)
         Q = self.attention(Q, encoded, query_padding_mask=None,
-                           key_padding_mask=encoded_padding_mask).reshape(N, -1)
+                           key_padding_mask=encoded_padding_mask,
+                           mask_index_offset=mask_index_offset).reshape(N, -1)
         Q = self.second_norm(Q + input)
         input = Q
         Q = self.contract(self.activation(self.expand(Q)))
@@ -165,4 +170,4 @@ class TransformerDecoderStage(torch.nn.Module):
 
     @property
     def device(self) -> torch.device:
-        return self.masked_attention.key.weight.device
+        return self.masked_self_attention.key.weight.device

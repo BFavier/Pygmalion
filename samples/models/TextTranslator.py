@@ -4,10 +4,8 @@ import matplotlib.pyplot as plt
 
 DEVICE = "cuda:0"
 tokenizer = ml.tokenizers.AsciiCharTokenizer()
-model = ml.neural_networks.TextTranslator(tokenizer, tokenizer, n_stages=2, projection_dim=16, n_heads=4)
+model = ml.neural_networks.TextTranslator(tokenizer, tokenizer, n_stages=4, projection_dim=16, n_heads=4)
 model.to(DEVICE)
-
-model.predict(["1234", "567"], n_beams=3)
 
 class Batchifyer:
     def __init__(self, model, batch_size: int, n_batches: int=1):
@@ -20,8 +18,7 @@ class Batchifyer:
 
 train_data = Batchifyer(model, batch_size=10000)
 
-train_losses, val_losses, best_step = model.fit(train_data, n_steps=5000, learning_rate=1.0E-3)
-# model.predict("10")
+train_losses, val_losses, best_step = model.fit(train_data, n_steps=5000, learning_rate=5.0E-4)
 
 ml.plot_losses(train_losses, val_losses, best_step)
 plt.show()

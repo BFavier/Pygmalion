@@ -92,7 +92,8 @@ class TransformerDecoder(torch.nn.Module):
 
     def predict(self, intermediate: List[torch.Tensor],
                 Q: torch.Tensor, encoded: torch.Tensor,
-                encoded_padding_mask: Optional[torch.Tensor] = None
+                encoded_padding_mask: Optional[torch.Tensor],
+                mask_index_offset: int
                 ) -> Tuple[List[torch.Tensor], torch.Tensor]:
         """
         Efficiently predict the next representation of a new predicted vector 'Q',
@@ -109,6 +110,8 @@ class TransformerDecoder(torch.nn.Module):
             Tensor of shape (N, Lk, D)
         encoded_padding_mask : torch.Tensor or None
             mask of shape (N, Lk)
+        mask_index_offset : int
+            the offset in query indexes
 
         Returns
         -------
@@ -120,5 +123,5 @@ class TransformerDecoder(torch.nn.Module):
         for stage, rep in zip(self.stages, intermediate):
             Y = torch.cat([rep, Q], dim=1)
             new.append(Y)
-            Q = stage.predict(Y, encoded, encoded_padding_mask)
+            Q = stage.predict(Y, encoded, encoded_padding_mask, mask_index_offset)
         return new, Q

@@ -8,14 +8,17 @@ class ScaledDotProductAttention(torch.nn.Module):
     def __init__(self):
         super().__init__()
     
-    def forward(self, q, k, v, mask_future, padding_mask, RPE):
-        return self._scaled_dot_product_attention(q, k, v, mask_future, padding_mask, RPE)
+    def forward(self, q: torch.Tensor, k: torch.Tensor, v: torch.Tensor, mask_future: bool,
+                padding_mask: Optional[torch.Tensor], RPE: Optional[torch.nn.Embedding],
+                mask_index_offset: int = 0):
+        return self._scaled_dot_product_attention(q, k, v, mask_future, padding_mask, RPE, mask_index_offset)
 
     @staticmethod
     def _scaled_dot_product_attention(q: torch.Tensor, k: torch.Tensor,
                                       v: torch.Tensor, mask_future: bool,
                                       padding_mask: Optional[torch.Tensor],
-                                      RPE: Optional[torch.nn.Embedding]
+                                      RPE: Optional[torch.nn.Embedding],
+                                      mask_index_offset: int = 0
                                       ) -> torch.Tensor:
         """
         Apply scaled dot product attention to a batch of 'N' sentences pairs,
@@ -41,6 +44,10 @@ class ScaledDotProductAttention(torch.nn.Module):
             tensor of booleans of shape (N, Lk)
         RPE : torch.nn.Embedding or None
             if provided, the the relative positional embedding
+        mask_index_offset : int
+            Add the given offset to the query positions for future masking.
+            This is intended for evaluation mode, where representation of
+            previously generated tokens must not be generated several times.
 
         Returns
         -------
@@ -54,11 +61,12 @@ class ScaledDotProductAttention(torch.nn.Module):
         if RPE is not None:
             r = RPE.weight.shape[0] // 2
             P = torch.clip(r + torch.arange(Lk, device=score.device).reshape(1, Lk)
-                        - torch.arange(Lq, device=score.device).reshape(Lq, 1), 0, 2*r)
+                           - torch.arange(Lq, device=score.device).reshape(Lq, 1)
+                           - mask_index_offset, 0, 2*r)
             P = RPE(P)
             score = score + torch.einsum("qkd, nhkd -> nhqk", P, k) / scaling
         if mask_future:
-            score = score.masked_fill(_mask_chronological(Lq, Lk, score.device).reshape(1, 1, Lq, Lk), -float("inf"))
+            score = score.masked_fill(_mask_chronological(Lq, Lk, score.device, mask_index_offset).reshape(1, 1, Lq, Lk), -float("inf"))
         if padding_mask is not None:
             score = score.masked_fill(padding_mask.reshape(N, 1, 1, Lk), -float("inf"))
         score = torch.softmax(score, dim=-1)
@@ -69,25 +77,28 @@ class ScaledDotProductAttention(torch.nn.Module):
 class KernelizedAttention(torch.nn.Module):
 
     def __init__(self, kernel_function: Callable = _log_exp_kernel,
-                 linear_compelxity: bool = True):
+                 linear_compelxity: bool = True,
+                 scaled: bool = True):
+        """
+        Parameters
+        ----------
+        kernel_function : Callable
+            the kernel function applied to query and keys
+        linear_complexity : bool
+            whether to use linear or quadratic complexity algorithm
+        scaled: bool
+            if True, the scores sum up to 1
+        """
         super().__init__()
         self.kernel_function = kernel_function
         self.linear_complexity = linear_compelxity
+        self.scaled = scaled
     
-    def forward(self, q, k, v, mask_future, padding_mask, RPE):
-        if self.linear_complexity:
-            return self._kernelized_attention_linear(
-                self.kernel_function, q, k, v, mask_future, padding_mask, RPE)
-        else:
-            return self._kernelized_attention_naive(
-                self.kernel_function, q, k, v, mask_future, padding_mask, RPE)
-
-    @staticmethod
-    def _kernelized_attention_linear(kernel: Callable, q: torch.Tensor, k: torch.Tensor,
-                                     v: torch.Tensor, mask_future: bool,
-                                     padding_mask: Optional[torch.Tensor],
-                                     RPE: Optional[torch.nn.Embedding],
-                                     scaled: bool=True) -> torch.Tensor:
+    def forward(self, q: torch.Tensor, k: torch.Tensor,
+                v: torch.Tensor, mask_future: bool,
+                padding_mask: Optional[torch.Tensor],
+                RPE: Optional[torch.nn.Embedding],
+                mask_index_offset: int = 0):
         """
         Parameters
         ----------
@@ -104,11 +115,34 @@ class KernelizedAttention(torch.nn.Module):
             tensor of booleans of shape (N, Lk)
         RPE : torch.nn.Embedding or None
             if provided, the relative positional embedding
+        mask_index_offset : int
+            Add the given offset to the query positions for future masking.
+            This is intended for evaluation mode, where representation of
+            previously generated tokens must not be generated several times.
+            If different from 0, the squared complexity algorithm is used
+            (because this is intended for use with a sequence of queries of length 1).
 
         Returns
         -------
         torch.Tensor:
             attention, a tensor of shape (N, H, Lq, D)
+        """
+        if self.linear_complexity and (mask_index_offset == 0):
+            return self._kernelized_attention_linear(
+                self.kernel_function, q, k, v, mask_future, padding_mask, RPE, self.scaled)
+        else:
+            return self._kernelized_attention_naive(
+                self.kernel_function, q, k, v, mask_future, padding_mask, RPE, self.scaled,
+                mask_index_offset)
+
+    @staticmethod
+    def _kernelized_attention_linear(kernel: Callable, q: torch.Tensor, k: torch.Tensor,
+                                     v: torch.Tensor, mask_future: bool,
+                                     padding_mask: Optional[torch.Tensor],
+                                     RPE: Optional[torch.nn.Embedding],
+                                     scaled: bool) -> torch.Tensor:
+        """
+        see forward doc
         """
         pq, pk = kernel(q), kernel(k)
         N, H, Lq, _ = pq.shape
@@ -171,31 +205,14 @@ class KernelizedAttention(torch.nn.Module):
                                     v: torch.Tensor, mask_future: bool,
                                     padding_mask: Optional[torch.Tensor],
                                     RPE: Optional[torch.nn.Embedding],
-                                    scaled: bool = True
+                                    scaled: bool,
+                                    mask_index_offset: int = 0,
                                     ) -> torch.Tensor:
         """
+        see forward doc
         Parameters
         ----------
-        q : torch.Tensor
-            query tensor of shape (N, H, Lq, D)
-        k : torch.Tensor
-            key tensor of shape (N, H, Lk, D)
-        v : torch.Tensor
-            value tensor of shape (N, H, Lk, D)
-        mask_future : bool
-            whether or not a query at index i can't attend to keys at index j > i
-            in the sequence 
-        padding_mask : torch.Tensor or None
-            tensor of booleans of shape (N, Lk)
-        RPE : torch.nn.Embedding or None
-            if provided, the the relative positional embedding
-        scaled: bool
-            if True, the scores sum up to 1
 
-        Returns
-        -------
-        torch.Tensor:
-            attention, a tensor of shape (N, H, Lq, D)
         """
         pq, pk = kernel(q), kernel(k)
         N, H, Lq, d = pq.shape
@@ -204,12 +221,15 @@ class KernelizedAttention(torch.nn.Module):
         if RPE is not None:
             r = RPE.weight.shape[0] // 2
             P = torch.clip(r + torch.arange(Lk, device=score.device).reshape(1, Lk)
-                        - torch.arange(Lq, device=score.device).reshape(Lq, 1), 0, 2*r)
+                           - torch.arange(Lq, device=score.device).reshape(Lq, 1)
+                           - mask_index_offset,
+                           0, 2*r)
             score = score + torch.einsum("qkd, nhqd -> nhqk", kernel(RPE(P)), pq)
         if mask_future:
-            score = score.masked_fill(_mask_chronological(Lq, Lk, score.device).reshape(1, 1, Lq, Lk), 0)
+            mask = _mask_chronological(Lq, Lk, score.device, mask_index_offset).reshape(1, 1, Lq, Lk)
+            score = torch.masked_fill(score, mask, 0)
         if padding_mask is not None:
-            score = score.masked_fill(padding_mask.reshape(N, 1, 1, Lk), 0)
+            score = torch.masked_fill(score, padding_mask.reshape(N, 1, 1, Lk), 0)
         if scaled:
             score = score / score.sum(dim=-1).unsqueeze(-1)
         if padding_mask is not None:

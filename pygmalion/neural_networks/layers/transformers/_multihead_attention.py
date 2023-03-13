@@ -47,7 +47,8 @@ class MultiHeadAttention(torch.nn.Module):
 
     def forward(self, query: torch.Tensor, key: torch.Tensor,
                 query_padding_mask: Optional[torch.Tensor] = None,
-                key_padding_mask: Optional[torch.Tensor] = None):
+                key_padding_mask: Optional[torch.Tensor] = None,
+                mask_index_offset: int=0):
         """
         Forward pass of the multihead attention module.
         Apply masked attention, followed by dropout, and batch normalization
@@ -69,6 +70,11 @@ class MultiHeadAttention(torch.nn.Module):
         query_padding_mask : torch.Tensor or None
             tensor of booleans of shape (N, Lq)
             or None if padding tokens should not be masked
+        mask_index_offset : int
+            Add the given offset to the query positions for future masking.
+            This is intended for evaluation mode, where representation of
+            previously generated tokens must not be generated several times.
+
         Returns
         -------
         torch.Tensor :
@@ -84,7 +90,8 @@ class MultiHeadAttention(torch.nn.Module):
         # compute attention
         q, k, v = q.transpose(1, 2), k.transpose(1, 2), v.transpose(1, 2)
         attention = self.attention(q, k, v, self.masked, key_padding_mask,
-                                   self.relative_positional_encoding)
+                                   self.relative_positional_encoding,
+                                   mask_index_offset=mask_index_offset)
         attention = attention.transpose(2, 1).reshape(N, Lq, -1)
         if query_padding_mask is not None:
             query_padding_mask = query_padding_mask.to(attention.device).unsqueeze(-1)
