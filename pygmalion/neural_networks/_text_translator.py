@@ -145,8 +145,8 @@ class TextTranslator(NeuralNetwork):
         return cross_entropy(y_pred.transpose(1, 2), y_target[:, 1:],
                              weights, class_weights)
 
-    def predict(self, sequences: List[str], max_tokens: int = 100,
-                n_beams: int = 1) -> List[str]:
+    def predict_beam_search(self, sequences: List[str], max_tokens: int = 100,
+                            n_beams: int = 1) -> List[str]:
         """
         Predict a translation for the given sequences using beam search,
         outputing at most 'max_tokens' tokens.
@@ -161,16 +161,17 @@ class TextTranslator(NeuralNetwork):
             PAD = self.tokenizer_input.PAD
             n_classes = self.tokenizer_output.n_tokens
             encoded_padding_mask = (X == PAD) if self.mask_padding else None
+            encoded_padding_mask_expanded = encoded_padding_mask.expand(n_beams, -1) if self.mask_padding else None
             encoded = self(X, encoded_padding_mask)
             N, _, D = encoded.shape
             encoded_expanded = encoded.unsqueeze(1).repeat(1, n_beams, 1, 1).reshape(N*n_beams, -1, D)
-            predicted = torch.zeros((N, 1, 0), device=X.device, dtype=torch.long)
-            log_likelyhood = torch.zeros((N, 1), device=X.device, dtype=torch.float)
-            n_predicted_tokens = torch.zeros((N, 1), device=X.device, dtype=torch.long)
+            predicted = torch.zeros((N, 1, 0), device=X.device, dtype=torch.long)  # index in vocabulary of predicted tokens (N, n_beams, L)
+            log_likelyhood = torch.zeros((N, 1), device=X.device, dtype=torch.float)  # sum of negative log likelyhood of rpedicted tokens (N, n_beams)
+            n_predicted_tokens = torch.zeros((N, 1), device=X.device, dtype=torch.long)  # number of predicted tokens before <END> (N, n_beams)
             intermediate = [torch.zeros((N, 0, D), device=X.device)
-                            for _ in self.transformer_encoder.stages]
+                            for _ in self.transformer_encoder.stages]  # list of intermediate representations (N, L, D)
             I = torch.full([N, 1], START,
-                           dtype=torch.long, device=X.device)
+                           dtype=torch.long, device=X.device)  # Index of previously predicted tokens in the vocabulary (N*n_beams, 1)
             for i in range(max_tokens):
                 stop = (predicted == END).any(dim=-1)
                 if stop.all():
@@ -196,15 +197,75 @@ class TextTranslator(NeuralNetwork):
                                 for inter in intermediate]
                 predicted = torch.gather(predicted, 1, beam.unsqueeze(-1).expand(-1, -1, predicted.shape[-1]))
                 predicted = torch.cat([predicted, token.unsqueeze(-1)], dim=-1)
-                if all_log_likelyhoods.shape[1] != n_beams:
-                    all_log_likelyhoods = all_log_likelyhoods.expand(-1, n_beams, -1)
-                log_likelyhood = torch.gather(all_log_likelyhoods, -1, indexes.unsqueeze(-1)).squeeze(-1)
+                log_likelyhood = torch.gather(all_log_likelyhoods.reshape(N, -1), -1, indexes).reshape(N, n_beams)
                 n_predicted_tokens = torch.gather(n_predicted_tokens, 1, beam)
                 encoded = encoded_expanded
+                encoded_padding_mask = encoded_padding_mask_expanded
             # get best final beam
             predicted = predicted[:, 0, :]
             translations = [self.tokenizer_output.decode(p.cpu().tolist()) for p in predicted]
             return translations
+    
+    def predict(self, sequences: List[str], max_tokens: int = 100) -> List[str]:
+        """
+        """
+        self.eval()
+        with torch.no_grad():
+            X = self._x_to_tensor(sequences, self.device)
+            START = self.tokenizer_output.START
+            END = self.tokenizer_output.END
+            PAD = self.tokenizer_input.PAD
+            encoded_padding_mask = (X == PAD) if self.mask_padding else None
+            encoded = self(X, encoded_padding_mask)
+            N, _, D = encoded.shape
+            predicted = torch.zeros((N, 0), device=X.device, dtype=torch.long)
+            token = torch.full([N, 1], START, dtype=torch.long, device=X.device)
+            intermediate = [torch.zeros((N, 0, D), device=X.device)
+                            for _ in self.transformer_encoder.stages]
+            for i in range(max_tokens):
+                stop = (predicted == END).any(dim=-1)
+                if stop.all():
+                    break
+                Q = self.embedding_output(token)
+                if self.positional_encoding_output is not None:
+                    Q = self.positional_encoding_output(Q)
+                intermediate, Q = self.transformer_decoder.predict(
+                    intermediate, Q, encoded, encoded_padding_mask, i)
+                # lookup the beam/token that lead to highest mean log likelyhood
+                p = torch.softmax(self.head(Q), dim=-1)
+                token = p.max(dim=-1).indices.reshape(N, 1)
+                # create the property of the new beams
+                predicted = torch.cat([predicted, token], dim=-1)
+            translations = [self.tokenizer_output.decode(p.cpu().tolist()) for p in predicted]
+            return translations
+    
+    def predict_naive(self, sequences: List[str], max_tokens: int = 100) -> List[str]:
+        self.eval()
+        with torch.no_grad():
+            X = self._x_to_tensor(sequences, self.device)
+            START = self.tokenizer_output.START
+            END = self.tokenizer_output.END
+            PAD = self.tokenizer_input.PAD
+            encoded_padding_mask = (X == PAD) if self.mask_padding else None
+            encoded = self(X, encoded_padding_mask)
+            N, _, D = encoded.shape
+            predicted = torch.full([N, 1], START, dtype=torch.long, device=X.device)
+            intermediate = [torch.zeros((N, 0, D), device=X.device)
+                            for _ in self.transformer_encoder.stages]
+            for i in range(max_tokens):
+                stop = (predicted == END).any(dim=-1)
+                if stop.all():
+                    break
+                Q = self.embedding_output(predicted)
+                if self.positional_encoding_output is not None:
+                    Q = self.positional_encoding_output(Q)
+                Q = self.transformer_decoder(Q, encoded, encoded_padding_mask)
+                p = torch.softmax(self.head(Q), dim=-1)
+                token = p.max(dim=-1).indices[:, -1:]
+                predicted = torch.cat([predicted, token], dim=-1)
+            translations = [self.tokenizer_output.decode(p.cpu().tolist()) for p in predicted]
+            return translations
+
 
     @property
     def device(self) -> torch.device:
