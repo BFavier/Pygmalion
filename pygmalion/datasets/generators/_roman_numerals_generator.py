@@ -24,7 +24,11 @@ class RomanNumeralsGenerator:
         """
         generates 'n' pairs of arabic numeral/roman numeral numbers
         """
-        numbers = np.exp(np.random.uniform(0, np.log(self.max), n)).round().astype(int)
+        # numbers = np.exp(np.random.uniform(0, np.log(self.max), n)).round().astype(int)
+        if n < self.max:
+            numbers = np.random.permutation(self.max)[:n]
+        else:
+            numbers = np.random.randint(0, self.max+1, n)
         remainder = numbers
         quotients = []
         for v in self._values:
@@ -35,6 +39,28 @@ class RomanNumeralsGenerator:
         arabic_numerals = [str(i) for i in numbers]
         return arabic_numerals, roman_numerals
 
+    @classmethod
+    def arabic_to_roman(cls, arabic_number: int) -> str:
+        """
+        converts an arabic number to roman numbers
+        """
+        roman_number = ""
+        for v, s in zip(cls._values, cls._symbols):
+            roman_number += s*(arabic_number // v)
+            arabic_number = arabic_number % v
+        return roman_number
+
+    @classmethod
+    def roman_to_arabic(cls, roman_number: str) -> int:
+        """
+        converts a roman number to arabic
+        """
+        arabic_number = 0
+        for v, s in zip(cls._values, cls._symbols):
+            while roman_number.startswith(s):
+                roman_number = roman_number[len(s):]
+                arabic_number += v
+        return arabic_number
 
 
 if __name__ == "__main__":

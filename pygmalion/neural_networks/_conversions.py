@@ -187,6 +187,9 @@ def sentences_to_tensor(sentences: Iterable[str],
     if max_sequence_length is None:
         L_max = max(len(s) for s in sentences) + (2 if add_start_end_tokens else 0)
     else:
+        for s in sentences:
+            if len(s) > max_sequence_length:
+                raise ValueError(f"Tried converting to tensor a sequence of length {len(s)}, superior to max sequence length {max_sequence_length}")
         L_max = max_sequence_length
     if add_start_end_tokens:
         start, end = tokenizer.START, tokenizer.END
