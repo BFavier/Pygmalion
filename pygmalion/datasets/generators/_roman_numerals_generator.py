@@ -7,7 +7,7 @@ class RomanNumeralsGenerator:
     """
     A generator that generates batches of (arabic numerals, roman numerals) pairs
     """
-    _values = [1000, 900, 400, 500, 100, 90, 50, 40, 10, 9, 5, 4, 1]
+    _values = [1000, 900, 500, 400, 100, 90, 50, 40, 10, 9, 5, 4, 1]
     _symbols = ["M", "CM", "D", "CD", "C", "XC", "L", "XL", "X", "IX", "V", "IV", "I"]
 
     def __init__(self, batch_size: int, n_batches: int, max: int=1999):
