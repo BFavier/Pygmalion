@@ -1,6 +1,8 @@
 import torch
 import numpy as np
 from typing import Union, List, Dict, Tuple, Optional, Literal
+from itertools import count
+from warnings import warn
 from .layers.transformers import TransformerEncoder, TransformerDecoder, ATTENTION_TYPE
 from .layers import LearnedPositionalEncoding, SinusoidalPositionalEncoding
 from ._conversions import sentences_to_tensor, tensor_to_sentences
@@ -145,14 +147,19 @@ class TextTranslator(NeuralNetwork):
         return cross_entropy(y_pred.transpose(1, 2), y_target[:, 1:],
                              weights, class_weights)
 
-    def predict_beam_search(self, sequences: List[str], max_tokens: int = 100,
-                            n_beams: int = 1) -> List[str]:
+    def predict(self, sequences: List[str], max_tokens: Optional[int] = None,
+                n_beams: int = 1) -> List[str]:
         """
         Predict a translation for the given sequences using beam search,
         outputing at most 'max_tokens' tokens.
         If 'n_beams' is 1, this is equivalent to predicting the single token
         with the highest likelyhood at each step.
         """
+        if max_tokens is not None and self.output_sequence_length is not None:
+            if max_tokens > self.output_sequence_length:
+                warn(f"Tried predicting up to {max_tokens} tokens but 'output_sequence_length' is {self.output_sequence_length}")
+                max_tokens = self.output_sequence_length
+        max_tokens = max_tokens or self.output_sequence_length
         self.eval()
         with torch.no_grad():
             X = self._x_to_tensor(sequences, self.device)
@@ -172,15 +179,16 @@ class TextTranslator(NeuralNetwork):
                             for _ in self.transformer_encoder.stages]  # list of intermediate representations (N, L, D)
             I = torch.full([N, 1], START,
                            dtype=torch.long, device=X.device)  # Index of previously predicted tokens in the vocabulary (N*n_beams, 1)
-            for i in range(max_tokens):
+            counter = range(max_tokens) if max_tokens is not None else count(0)
+            for i in counter:
                 stop = (predicted == END).any(dim=-1)
                 if stop.all():
                     break
                 Q = self.embedding_output(I)
                 if self.positional_encoding_output is not None:
-                    Q = self.positional_encoding_output(Q)
+                    Q = self.positional_encoding_output(Q, offset=i)
                 intermediate, Q = self.transformer_decoder.predict(
-                    intermediate, Q, encoded, encoded_padding_mask, i)
+                    intermediate, Q, encoded, encoded_padding_mask)
                 # lookup the beam/token that lead to highest mean log likelyhood
                 log_p = torch.log(torch.softmax(self.head(Q.reshape(N, -1, D)), dim=-1))
                 all_log_likelyhoods = log_likelyhood.unsqueeze(-1) + torch.masked_fill(log_p, stop.unsqueeze(-1), 0.)
@@ -205,41 +213,17 @@ class TextTranslator(NeuralNetwork):
             predicted = predicted[:, 0, :]
             translations = [self.tokenizer_output.decode(p.cpu().tolist()) for p in predicted]
             return translations
+
     
-    def predict(self, sequences: List[str], max_tokens: int = 100) -> List[str]:
+    def _predict_naive(self, sequences: List[str], max_tokens: Optional[int] = 100) -> List[str]:
         """
+        For comparison sake, this should output the same result as predict with n_beams=1
         """
-        self.eval()
-        with torch.no_grad():
-            X = self._x_to_tensor(sequences, self.device)
-            START = self.tokenizer_output.START
-            END = self.tokenizer_output.END
-            PAD = self.tokenizer_input.PAD
-            encoded_padding_mask = (X == PAD) if self.mask_padding else None
-            encoded = self(X, encoded_padding_mask)
-            N, _, D = encoded.shape
-            predicted = torch.zeros((N, 0), device=X.device, dtype=torch.long)
-            token = torch.full([N, 1], START, dtype=torch.long, device=X.device)
-            intermediate = [torch.zeros((N, 0, D), device=X.device)
-                            for _ in self.transformer_encoder.stages]
-            for i in range(max_tokens):
-                stop = (predicted == END).any(dim=-1)
-                if stop.all():
-                    break
-                Q = self.embedding_output(token)
-                if self.positional_encoding_output is not None:
-                    Q = self.positional_encoding_output(Q)
-                intermediate, Q = self.transformer_decoder.predict(
-                    intermediate, Q, encoded, encoded_padding_mask, i)
-                # lookup the beam/token that lead to highest mean log likelyhood
-                p = torch.softmax(self.head(Q), dim=-1)
-                token = p.max(dim=-1).indices.reshape(N, 1)
-                # create the property of the new beams
-                predicted = torch.cat([predicted, token], dim=-1)
-            translations = [self.tokenizer_output.decode(p.cpu().tolist()) for p in predicted]
-            return translations
-    
-    def predict_naive(self, sequences: List[str], max_tokens: int = 100) -> List[str]:
+        if max_tokens is not None and self.output_sequence_length is not None:
+            if max_tokens > self.output_sequence_length:
+                warn(f"Tried predicting up to {max_tokens} tokens but 'output_sequence_length' is {self.output_sequence_length}")
+                max_tokens = self.output_sequence_length
+        max_tokens = max_tokens or self.output_sequence_length
         self.eval()
         with torch.no_grad():
             X = self._x_to_tensor(sequences, self.device)
@@ -250,9 +234,8 @@ class TextTranslator(NeuralNetwork):
             encoded = self(X, encoded_padding_mask)
             N, _, D = encoded.shape
             predicted = torch.full([N, 1], START, dtype=torch.long, device=X.device)
-            intermediate = [torch.zeros((N, 0, D), device=X.device)
-                            for _ in self.transformer_encoder.stages]
-            for i in range(max_tokens):
+            counter = range(max_tokens) if max_tokens is not None else count(0)
+            for _ in counter:
                 stop = (predicted == END).any(dim=-1)
                 if stop.all():
                     break
@@ -263,6 +246,8 @@ class TextTranslator(NeuralNetwork):
                 p = torch.softmax(self.head(Q), dim=-1)
                 token = p.max(dim=-1).indices[:, -1:]
                 predicted = torch.cat([predicted, token], dim=-1)
+            else:
+                warn(f"Prediction stoped because {max_tokens} where generated")
             translations = [self.tokenizer_output.decode(p.cpu().tolist()) for p in predicted]
             return translations
 

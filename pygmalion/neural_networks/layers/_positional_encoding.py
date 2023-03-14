@@ -19,12 +19,14 @@ class LearnedPositionalEncoding(torch.nn.Module):
         super().__init__()
         self.embedding = torch.nn.Embedding(n_positions, embedding_dimension)
 
-    def forward(self, X: torch.Tensor) -> torch.Tensor:
+    def forward(self, X: torch.Tensor, offset: int=0) -> torch.Tensor:
         """
         Parameters
         ----------
         X : torch.Tensor
             tensor of floats of shape (..., L, D)
+        offset : int
+            a position offset
         
         Returns
         -------
@@ -34,7 +36,7 @@ class LearnedPositionalEncoding(torch.nn.Module):
         L, D = X.shape[-2:]
         P = torch.arange(L, device=X.device)
         shape = tuple(1 for _ in range(len(X.shape) - 2)) + (L, D)
-        return X + self.embedding(P).reshape(shape)
+        return X + self.embedding(P+offset).reshape(shape)
 
 
 class SinusoidalPositionalEncoding(torch.nn.Module):
@@ -47,12 +49,14 @@ class SinusoidalPositionalEncoding(torch.nn.Module):
     def __init__(self):
         super().__init__()
     
-    def forward(self, X: torch.Tensor) -> torch.Tensor:
+    def forward(self, X: torch.Tensor, offset: int=0) -> torch.Tensor:
         """
         Parameters
         ----------
         X : torch.Tensor
             tensor of shape (..., D), with D the embedding dimension
+        offset : int
+            a position offset
 
         Returns
         -------
@@ -63,7 +67,7 @@ class SinusoidalPositionalEncoding(torch.nn.Module):
         X = X.reshape(-1, shape[-1])
         N, D = X.shape
         pe = torch.zeros(N, D, dtype=torch.float, device=X.device)
-        position = torch.arange(0, D, dtype=torch.float).unsqueeze(0)
+        position = torch.arange(0, D, dtype=torch.float).unsqueeze(0) + offset
         angle = position / 10000**(2*torch.div(position, 2, rounding_mode='floor')/D)
         pe[:, 0::2] = torch.cos(angle[:, 0::2])
         pe[:, 1::2] = torch.sin(angle[:, 1::2])

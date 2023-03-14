@@ -128,8 +128,7 @@ class TransformerDecoderStage(torch.nn.Module):
         return Y.reshape(N, L, -1)
 
     def predict(self, Y, encoded,
-                encoded_padding_mask: Optional[torch.Tensor],
-                mask_index_offset: int):
+                encoded_padding_mask: Optional[torch.Tensor]):
         """
         Efficiently predict the next representation
         of the last token in the Y sequence
@@ -142,8 +141,6 @@ class TransformerDecoderStage(torch.nn.Module):
             Tensor of shape (N, Lk, D)
         encoded_padding_mask : torch.Tensor or None
             mask of shape (N, Lk)
-        mask_index_offset : int
-            the offset to add to query positions
 
         Returns
         -------
@@ -156,12 +153,12 @@ class TransformerDecoderStage(torch.nn.Module):
         N, L, _ = Y.shape
         Q = Y[:, -1:, :]
         input = Q.reshape(N, -1)
-        Q = self.masked_self_attention(Q, Y, mask_index_offset=mask_index_offset).reshape(N, -1)
+        Q = self.masked_self_attention(Q, Y, mask_index_offset=L-1).reshape(N, -1)
         Q = self.first_norm(Q + input).reshape(N, 1, -1)
         input = Q.reshape(N, -1)
         Q = self.attention(Q, encoded, query_padding_mask=None,
                            key_padding_mask=encoded_padding_mask,
-                           mask_index_offset=mask_index_offset).reshape(N, -1)
+                           mask_index_offset=L-1).reshape(N, -1)
         Q = self.second_norm(Q + input)
         input = Q
         Q = self.contract(self.activation(self.expand(Q)))

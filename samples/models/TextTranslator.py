@@ -8,9 +8,9 @@ import matplotlib.pyplot as plt
 DEVICE = "cuda:0"
 tokenizer = AsciiCharTokenizer()
 model = TextTranslator(tokenizer, tokenizer, n_stages=4, projection_dim=16, n_heads=4,
-                                          positional_encoding_type="learned",
-                                          input_sequence_length=10,
-                                          output_sequence_length=15)
+                       positional_encoding_type="learned",
+                       input_sequence_length=10,
+                       output_sequence_length=15)
 model.to(DEVICE)
 
 
@@ -25,10 +25,7 @@ class Batchifyer:
 
 train_data = Batchifyer(model, batch_size=1000)
 
-train_losses, val_losses, best_step = model.fit(train_data, n_steps=1000, learning_rate=1.0E-3)
-model.predict_beam_search(["293"])
-model.predict(["293"])
-model.predict_naive(["293"])
+train_losses, val_losses, best_step = model.fit(train_data, n_steps=3000, learning_rate=1.0E-3)
 ml.plot_losses(train_losses, val_losses, best_step)
 plt.show()
 IPython.embed()
