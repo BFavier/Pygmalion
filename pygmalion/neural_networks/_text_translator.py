@@ -155,6 +155,8 @@ class TextTranslator(NeuralNetwork):
         If 'n_beams' is 1, this is equivalent to predicting the single token
         with the highest likelyhood at each step.
         """
+        if isinstance(sequences, str):
+            sequences = [sequences]
         if max_tokens is not None and self.output_sequence_length is not None:
             if max_tokens > self.output_sequence_length:
                 warn(f"Tried predicting up to {max_tokens} tokens but 'output_sequence_length' is {self.output_sequence_length}")
@@ -168,10 +170,13 @@ class TextTranslator(NeuralNetwork):
             PAD = self.tokenizer_input.PAD
             n_classes = self.tokenizer_output.n_tokens
             encoded_padding_mask = (X == PAD) if self.mask_padding else None
-            encoded_padding_mask_expanded = encoded_padding_mask.expand(n_beams, -1) if self.mask_padding else None
             encoded = self(X, encoded_padding_mask)
             N, _, D = encoded.shape
             encoded_expanded = encoded.unsqueeze(1).repeat(1, n_beams, 1, 1).reshape(N*n_beams, -1, D)
+            if self.mask_padding:
+                encoded_padding_mask_expanded = encoded_padding_mask.unsqueeze(1).expand(-1, n_beams, -1)
+            else:
+                None
             predicted = torch.zeros((N, 1, 0), device=X.device, dtype=torch.long)  # index in vocabulary of predicted tokens (N, n_beams, L)
             log_likelyhood = torch.zeros((N, 1), device=X.device, dtype=torch.float)  # sum of negative log likelyhood of rpedicted tokens (N, n_beams)
             n_predicted_tokens = torch.zeros((N, 1), device=X.device, dtype=torch.long)  # number of predicted tokens before <END> (N, n_beams)
@@ -219,6 +224,8 @@ class TextTranslator(NeuralNetwork):
         """
         For comparison sake, this should output the same result as predict with n_beams=1
         """
+        if isinstance(sequences, str):
+            raise ValueError("Input is expected to be an Iterable of str but got str")
         if max_tokens is not None and self.output_sequence_length is not None:
             if max_tokens > self.output_sequence_length:
                 warn(f"Tried predicting up to {max_tokens} tokens but 'output_sequence_length' is {self.output_sequence_length}")
