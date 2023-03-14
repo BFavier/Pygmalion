@@ -176,7 +176,7 @@ class TextTranslator(NeuralNetwork):
             if self.mask_padding:
                 encoded_padding_mask_expanded = encoded_padding_mask.unsqueeze(1).expand(-1, n_beams, -1)
             else:
-                None
+                encoded_padding_mask_expanded = None
             predicted = torch.zeros((N, 1, 0), device=X.device, dtype=torch.long)  # index in vocabulary of predicted tokens (N, n_beams, L)
             log_likelyhood = torch.zeros((N, 1), device=X.device, dtype=torch.float)  # sum of negative log likelyhood of rpedicted tokens (N, n_beams)
             n_predicted_tokens = torch.zeros((N, 1), device=X.device, dtype=torch.long)  # number of predicted tokens before <END> (N, n_beams)
@@ -220,7 +220,7 @@ class TextTranslator(NeuralNetwork):
             return translations
 
     
-    def _predict_naive(self, sequences: List[str], max_tokens: Optional[int] = 100) -> List[str]:
+    def _predict_naive(self, sequences: List[str], max_tokens: Optional[int] = None) -> List[str]:
         """
         For comparison sake, this should output the same result as predict with n_beams=1
         """
