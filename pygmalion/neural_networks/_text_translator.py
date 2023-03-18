@@ -225,7 +225,7 @@ class TextTranslator(NeuralNetwork):
         For comparison sake, this should output the same result as predict with n_beams=1
         """
         if isinstance(sequences, str):
-            raise ValueError("Input is expected to be an Iterable of str but got str")
+            sequences = [sequences]
         if max_tokens is not None and self.output_sequence_length is not None:
             if max_tokens > self.output_sequence_length:
                 warn(f"Tried predicting up to {max_tokens} tokens but 'output_sequence_length' is {self.output_sequence_length}")

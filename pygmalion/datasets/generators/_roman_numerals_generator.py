@@ -24,8 +24,7 @@ class RomanNumeralsGenerator:
         """
         generates 'n' pairs of arabic numeral/roman numeral numbers
         """
-        # numbers = np.exp(np.random.uniform(0, np.log(self.max), n)).round().astype(int)
-        if n < self.max:
+        if n <= self.max:
             numbers = np.random.permutation(self.max)[:n]
         else:
             numbers = np.random.randint(0, self.max+1, n)
