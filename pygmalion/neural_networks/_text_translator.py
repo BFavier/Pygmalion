@@ -92,7 +92,8 @@ class TextTranslator(NeuralNetwork):
             padding_mask = padding_mask.to(self.device)
         N, L = X.shape
         X = self.embedding_input(X)
-        X = self.positional_encoding_input(X)
+        if self.positional_encoding_input is not None:
+            X = self.positional_encoding_input(X)
         if self.dropout_input is not None:
             X = self.dropout_input(X.reshape(N*L, -1)).reshape(N, L, -1)
         X = self.transformer_encoder(X, padding_mask)
@@ -123,7 +124,8 @@ class TextTranslator(NeuralNetwork):
         """
         N, L = Y.shape
         Y = self.embedding_output(Y)
-        Y = self.positional_encoding_output(Y)
+        if self.positional_encoding_output is not None:
+            Y = self.positional_encoding_output(Y)
         if self.dropout_output is not None:
             Y = self.dropout_output(Y.reshape(N*L, -1)).reshape(N, L, -1)
         Y = self.transformer_decoder(Y, encoded, encoded_padding_mask)
