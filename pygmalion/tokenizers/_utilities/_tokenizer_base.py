@@ -36,7 +36,7 @@ class Tokenizer(ModelBase):
         indexes of special tokens in the vocabulary can be accessed as attributes
         """
         if attr in self._special_token_names:
-            return self._special_token_names.index(attr) + len(self.vocabulary)
+            return self._special_token_names.index(attr) + len(self._vocabulary)
         else:
             cls = type(self.__name__)
             raise AttributeError(f"Type '{cls}' has not attribute '{attr}' and has not special token named '{attr}'")
