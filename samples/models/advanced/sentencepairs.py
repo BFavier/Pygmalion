@@ -10,11 +10,12 @@ path = pathlib.Path(__file__).parent
 data_path = path.parents[1] / "data"
 
 # Download the data
-# ml.datasets.sentence_pairs(data_path)
+ml.datasets.sentence_pairs(data_path)
 
-df = pd.read_csv(data_path / "QED_v2.0a.csv.gz")
+df = pd.read_csv(data_path / "sentence_pairs.csv.gz")
 df_train = df.sample(frac=0.8)
 df_val = df.drop(index=df_train.index)
+
 
 class Looper:
 
@@ -31,21 +32,19 @@ if tok_in_file.is_file():
     tokenizer_in = ml.tokenizers.BytePairEncoder.load(tok_in_file)
 else:
     tokenizer_in = ml.tokenizers.BytePairEncoder()
-    tokenizer_in.fit(Looper(df.fr, 1000), max_vocabulary_size=20000)
+    tokenizer_in.fit(Looper(df.fr, 1000), max_vocabulary_size=10000)
     tokenizer_in.save(tok_in_file)
 tok_out_file = path / "tokenizer_out.json"
 if tok_out_file.is_file():
     tokenizer_out = ml.tokenizers.BytePairEncoder.load(tok_out_file)
 else:
     tokenizer_out = ml.tokenizers.BytePairEncoder()
-    tokenizer_out.fit(Looper(df.en, 1000), max_vocabulary_size=20000)
+    tokenizer_out.fit(Looper(df.en, 1000), max_vocabulary_size=10000)
     tokenizer_out.save(tok_out_file)
 
-model = ml.neural_networks.TextTranslator(tokenizer_in, tokenizer_out, n_stages=6, projection_dim=16, n_heads=8,
-                                          RPE_radius=64, dropout=0.1,
-                                          positional_encoding_type=None,
-                                          input_sequence_length=256,
-                                          output_sequence_length=256)
+model = ml.neural_networks.TextTranslator(tokenizer_in, tokenizer_out, n_stages=6, projection_dim=64, n_heads=8,
+                                          RPE_radius=16, dropout=0.1,
+                                          positional_encoding_type=None)
 model.to("cuda:0")
 
 class Batchifyer:
@@ -59,13 +58,15 @@ class Batchifyer:
     
     def __iter__(self):
         for _ in range(self.n_batches):
-            sub = df.sample(n=self.batch_size)
-            yield self.model.data_to_tensor(sub.fr, sub.en)
+            sub = self.df.sample(n=self.batch_size)
+            yield self.model.data_to_tensor(sub.fr, sub.en,
+                                            max_input_sequence_length=128,
+                                            max_output_sequence_length=128)
 
 train = Batchifyer(df_train, model, batch_size=200, n_batches=1)
 val = Batchifyer(df_val, model, batch_size=200, n_batches=1)
 
-train_losses, val_losses, best_step = model.fit(train, val, n_steps=20000, patience=1000, learning_rate=1.0E-3)
+train_losses, val_losses, best_step = model.fit(train, val, n_steps=100000, patience=1000, learning_rate=1.0E-4)
 ml.plot_losses(train_losses, val_losses, best_step)
 plt.show()
 IPython.embed()
