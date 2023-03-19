@@ -20,16 +20,16 @@ class Tokenizer(ModelBase):
         tuple of of all of the vocabulary, special tokens excluded
     """
 
-    def __init__(self, ascii: bool, lowercase: bool, special_token_names: Iterable[str]):
+    def __init__(self, ascii: bool, lowercase: bool, special_tokens: Iterable[str]):
         super().__init__()
         self._ascii = ascii
         self._lowercase = lowercase
-        self._special_token_names = special_token_names
+        self._special_token_names = special_tokens
         self._vocabulary = tuple()
 
     def __repr__(self) -> str:
         n_tokens = f"{len(self.vocabulary):,}".replace(",", " ")
-        return f"{type(self).__name__}({n_tokens} tokens, ascii={self.ascii}, lowercase={self.lowercase}, special={self.special_tokens})"
+        return f"{type(self).__name__}({n_tokens} tokens, ascii={self.ascii}, lowercase={self.lowercase}, special_tokens={self.special_tokens})"
 
     def __getattr__(self, attr):
         """
@@ -38,7 +38,7 @@ class Tokenizer(ModelBase):
         if attr in self._special_token_names:
             return self._special_token_names.index(attr) + len(self._vocabulary)
         else:
-            cls = type(self.__name__)
+            cls = type(self).__name__
             raise AttributeError(f"Type '{cls}' has not attribute '{attr}' and has not special token named '{attr}'")
 
     def __getstate__(self) -> dict:
