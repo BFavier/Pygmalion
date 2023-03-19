@@ -1,8 +1,8 @@
 import torch
-import torchvision.ops as ops
 import pandas as pd
 import numpy as np
-from typing import List, Iterable, Optional, Union, Tuple
+from typing import List, Iterable, Optional, Union
+from warnings import warn
 from pygmalion.tokenizers._utilities import Tokenizer
 
 
@@ -147,29 +147,36 @@ def segmented_to_tensor(images: np.ndarray, colors: Iterable,
     return longs_to_tensor(np.argmax(masks, axis=0), device)
 
 
-def sentences_to_tensor(sentences: Iterable[str],
-                        tokenizer: Tokenizer,
-                        device: torch.device,
-                        max_sequence_length: Optional[int] = None,
-                        add_start_end_tokens: bool = False,
-                        **kwargs) -> torch.Tensor:
+def strings_to_tensor(strings: Iterable[str],
+                      tokenizer: Tokenizer,
+                      device: torch.device,
+                      max_sequence_length: Optional[int] = None,
+                      raise_on_longer_sequences: bool = False,
+                      add_start_end_tokens: bool = False,
+                      **kwargs) -> torch.Tensor:
     """
     converts a list of sentences to tensor
 
     Parameters
     ----------
-    sentences : iterable of str
-        a list of sentences
+    strings : iterable of str
+        a list of strings
     tokenizer : Tokenizer
-        the tokenizer to segment sentences
+        the tokenizer to segment strings
     device : torch.device
         the device to host the tensor on
     max_sequence_length : int or None
         Sentences are stored in a tensor with one dimension corresponding to
-        the max token sequence's length, and sentences shorter are padded.
+        the max token sequence's length, and strings shorter are padded.
         If max_sequence_length is specified, the size of this dimension is
-        fixed and sentences that are longer are droped.
-        Otherwise this dimension is defined by the longest encoded sentence.
+        fixed and strings that are longer are droped.
+        Otherwise this dimension is defined by the longest encoded string.
+    raise_on_longer_sequences : bool
+        If True, raise a ValueError if any sequence
+        is longer than max_sequence_length once tokenized
+    add_start_end_token : bool
+        If True, the <START> and <END> special token are appended around each
+        encoded string, before padding with <PAD>
     **kwargs : dict
         dict of kwargs passed to the tokenizer when encoding
 
@@ -178,24 +185,28 @@ def sentences_to_tensor(sentences: Iterable[str],
     -------
     torch.Tensor :
         a tensor of shape (N, L) of longs, where:
-        * N is the number of sentences
+        * N is the number of strings
         * L is the length of longest sentence
         and each scalar is the index of a word in the lexicon
     """
     pad = tokenizer.PAD
-    sentences = [tokenizer.encode(s, **kwargs) for s in sentences]
-    if max_sequence_length is None:
-        L_max = max(len(s) for s in sentences) + (2 if add_start_end_tokens else 0)
-    else:
-        for s in sentences:
-            if len(s) > max_sequence_length:
-                raise ValueError(f"Tried converting to tensor a sequence of length {len(s)}, superior to max sequence length {max_sequence_length}")
-        L_max = max_sequence_length
+    strings = [tokenizer.encode(s, **kwargs) for s in strings]
     if add_start_end_tokens:
         start, end = tokenizer.START, tokenizer.END
-        data = [[start] + s + [end] + [pad]*(L_max - 2 - len(s)) for s in sentences]
+        strings = [[start] + s + [end] for s in strings]
+    if max_sequence_length is None:
+        L_max = max(len(s) for s in strings)
     else:
-        data = [s + [pad]*(L_max - len(s)) for s in sentences]
+        n = sum(1 for s in strings if len(s) > max_sequence_length)
+        if n > 0:
+            error = f"Found {n:,}/{len(strings):,} sequences with tokenized length superior to {max_sequence_length}".replace(",", " ")
+            if raise_on_longer_sequences:
+                raise ValueError(error)
+            else:
+                warn(error)
+        strings = [s if len(s) <= max_sequence_length else [] for s in strings]
+        L_max = max_sequence_length
+    data = [s + [pad]*(L_max - len(s)) for s in strings]
     return longs_to_tensor(data, device)
 
 

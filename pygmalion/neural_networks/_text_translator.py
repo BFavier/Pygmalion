@@ -1,11 +1,11 @@
 import torch
 import numpy as np
-from typing import Union, List, Dict, Tuple, Optional, Literal
+from typing import Union, List, Sequence, Optional, Literal
 from itertools import count
 from warnings import warn
 from .layers.transformers import TransformerEncoder, TransformerDecoder, ATTENTION_TYPE
 from .layers import LearnedPositionalEncoding, SinusoidalPositionalEncoding
-from ._conversions import sentences_to_tensor, tensor_to_sentences
+from ._conversions import strings_to_tensor, tensor_to_sentences
 from ._conversions import floats_to_tensor
 from ._neural_network import NeuralNetwork
 from ._loss_functions import cross_entropy
@@ -166,7 +166,7 @@ class TextTranslator(NeuralNetwork):
         max_tokens = max_tokens or self.output_sequence_length
         self.eval()
         with torch.no_grad():
-            X = self._x_to_tensor(sequences, self.device)
+            X = self._x_to_tensor(sequences, self.device, raise_on_longer_sequences=True)
             START = self.tokenizer_output.START
             END = self.tokenizer_output.END
             PAD = self.tokenizer_input.PAD
@@ -235,7 +235,7 @@ class TextTranslator(NeuralNetwork):
         max_tokens = max_tokens or self.output_sequence_length
         self.eval()
         with torch.no_grad():
-            X = self._x_to_tensor(sequences, self.device)
+            X = self._x_to_tensor(sequences, self.device, raise_on_longer_sequences=True)
             START = self.tokenizer_output.START
             END = self.tokenizer_output.END
             PAD = self.tokenizer_input.PAD
@@ -264,17 +264,29 @@ class TextTranslator(NeuralNetwork):
     @property
     def device(self) -> torch.device:
         return self.head.weight.device
+    
+    def data_to_tensor(self, x: object, y: object,
+                       weights: Optional[Sequence[float]] = None,
+                       device: Optional[torch.device] = None, **kwargs) -> tuple:
+        X, Y = super().data_to_tensor(x, y, weights, device, **kwargs)
+        # skiping observations where input or target was too long
+        mask = (X[:, 0] != self.tokenizer_input.PAD) & (Y[:, 0] != self.tokenizer_output.PAD)
+        return X[mask, ...], Y[mask, ...]
 
     def _x_to_tensor(self, x: List[str],
-                     device: Optional[torch.device] = None):
-        return sentences_to_tensor(x, self.tokenizer_input, device,
+                     device: Optional[torch.device] = None,
+                     raise_on_longer_sequences: bool = False):
+        return strings_to_tensor(x, self.tokenizer_input, device,
                                     max_sequence_length=self.input_sequence_length,
+                                    raise_on_longer_sequences=raise_on_longer_sequences,
                                     add_start_end_tokens=False)
 
     def _y_to_tensor(self, y: List[str],
-                     device: Optional[torch.device] = None) -> torch.Tensor:
-        return sentences_to_tensor(y, self.tokenizer_output, device,
+                     device: Optional[torch.device] = None,
+                     raise_on_longer_sequences: bool = False) -> torch.Tensor:
+        return strings_to_tensor(y, self.tokenizer_output, device,
                                    max_sequence_length=self.output_sequence_length,
+                                   raise_on_longer_sequences=raise_on_longer_sequences,
                                    add_start_end_tokens=True)
 
     def _tensor_to_y(self, tensor: torch.Tensor) -> np.ndarray:
