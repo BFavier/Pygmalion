@@ -207,9 +207,10 @@ class NeuralNetworkClassifier(NeuralNetwork):
     class methods
     """
 
-    def __init__(self):
+    def __init__(self, classes: Iterable[str]):
         super().__init__()
-    
+        self.classes = tuple(classes)
+
     def probabilities(self, *args):
         self.eval()
         x = self._x_to_tensor(*args)

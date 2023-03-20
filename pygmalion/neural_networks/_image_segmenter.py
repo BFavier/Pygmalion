@@ -29,8 +29,7 @@ class ImageSegmenter(NeuralNetworkClassifier):
         ----------
         ...
         """
-        super().__init__()
-        self.classes = tuple(classes)
+        super().__init__(classes)
         self.encoder = torch.nn.ModuleList()
         scale_factor = tuple(a*b for a, b in zip(stride, pooling_size or (1, 1)))
         in_features = in_channels
