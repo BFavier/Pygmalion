@@ -28,8 +28,7 @@ class ImageClassifier(NeuralNetworkClassifier):
         ----------
         ...
         """
-        super().__init__()
-        self.classes = tuple(classes)
+        super().__init__(classes)
         self.layers = torch.nn.ModuleList()
         in_features = in_channels
         for out_features in features:

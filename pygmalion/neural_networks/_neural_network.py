@@ -2,7 +2,7 @@ import io
 import copy
 import pathlib
 import torch
-from typing import Union, Sequence, Optional, Callable, Iterable
+from typing import Union, Sequence, Optional, Callable, Iterable, List
 from ._conversions import floats_to_tensor
 from pygmalion._model_base import ModelBase
 
@@ -87,8 +87,8 @@ class NeuralNetwork(torch.nn.Module, ModelBase):
             The maximum number of optimization steps
         learning_rate : float or Callable
             The learning rate used to update the parameters,
-            or a learning rate function of the number of optimization steps
-            performed
+            or a learning rate function of 'step' the number
+            of optimization steps performed
         patience : int or None
             The number of steps before early stopping
             (if no improvement for 'patience' steps, stops training early)
@@ -105,6 +105,7 @@ class NeuralNetwork(torch.nn.Module, ModelBase):
         best_metric = None
         train_losses = []
         val_losses = []
+        grad_norms = []
         if optimizer is None:
             lr = learning_rate(0) if callable(learning_rate) else learning_rate
             optimizer = torch.optim.Adam(self.parameters(), lr)
@@ -125,10 +126,16 @@ class NeuralNetwork(torch.nn.Module, ModelBase):
                 train_loss = []
                 for batch in training_data:
                     loss = self.loss(*batch)
+                    if L1 is not None:
+                        loss = loss + L1 * self._norm(self.parameters(), 1)
+                    if L2 is not None:
+                        loss = loss + L2 * self._norm(self.parameters(), 2)
                     loss.backward()
                     train_loss.append(loss.item())
                 train_loss = sum(train_loss) / max(1, len(train_loss))
                 train_losses.append(train_loss)
+                # gradient norm
+                grad_norms.append(self._norm((p.grad for p in self.parameters()), 2).item())
                 # validation data
                 self.eval()
                 if validation_data is not None:
@@ -153,9 +160,9 @@ class NeuralNetwork(torch.nn.Module, ModelBase):
                 # message printing
                 if verbose:
                     if val_loss is not None:
-                        print(f"Step {step}: train loss = {train_loss:.3g}, val loss = {val_loss:.3g}")
+                        print(f"Step {step}: train loss = {train_loss:.3g}, val loss = {val_loss:.3g}, grad = {grad_norms[-1]:.3g}")
                     else:
-                        print(f"Step {step}: train loss = {train_loss:.3g}")
+                        print(f"Step {step}: train loss = {train_loss:.3g}, grad = {grad_norms[-1]:.3g}")
         except KeyboardInterrupt:
             if verbose:
                 print("Training interrupted by the user")
@@ -163,12 +170,7 @@ class NeuralNetwork(torch.nn.Module, ModelBase):
             # load the best state
             if keep_best:
                 self.load_state_dict(best_state)
-        return train_losses, val_losses, best_step
-    
-    # def norm(tensors: Iterable[torch.Tensor]) -> torch.Tensor:
-    #     """
-    #     """
-    #     return 0
+        return train_losses, val_losses, grad_norms, best_step
 
     def data_to_tensor(self, x: object, y: object,
                         weights: Optional[Sequence[float]] = None,
@@ -189,6 +191,12 @@ class NeuralNetwork(torch.nn.Module, ModelBase):
         with torch.no_grad():
             y_pred = self(x)
         return self._tensor_to_y(y_pred)
+    
+    def loss(x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
+        raise NotImplementedError()
+
+    def parameter_groups(self) -> List[Iterable[torch.nn.parameter.Parameter]]:
+        return [self.parameters()]
 
     def _x_to_tensor(self, x: object) -> torch.Tensor:
         raise NotImplementedError()
@@ -198,6 +206,18 @@ class NeuralNetwork(torch.nn.Module, ModelBase):
 
     def _tensor_to_y(self, T: torch.Tensor) -> object:
         raise NotImplementedError()
+    
+    @staticmethod
+    def _norm(tensors: Iterable[torch.Tensor], order: int):
+        """
+        returns the norm of the tensors
+        (normalized by number of elements)
+        """
+        n, L = 0, 0.
+        for t in tensors:
+            L = L + torch.sum(torch.abs(t)**order)
+            n += t.numel()
+        return (L/n)**(1/order)
 
 
 class NeuralNetworkClassifier(NeuralNetwork):

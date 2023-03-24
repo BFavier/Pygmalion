@@ -26,10 +26,9 @@ class DenseClassifier(NeuralNetworkClassifier):
         ...
 
         """
-        super().__init__()
+        super().__init__(classes)
         self.inputs = tuple(inputs)
         self.target = str(target)
-        self.classes = tuple(classes)
         self.layers = torch.nn.ModuleList()
         in_features = len(inputs)
         if normalize:
