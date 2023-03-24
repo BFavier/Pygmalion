@@ -13,7 +13,7 @@ data_path = path.parents[1] / "data"
 ml.datasets.sentence_pairs(data_path)
 
 df = pd.read_csv(data_path / "sentence_pairs.csv.gz")
-df_train = df.sample(frac=0.8)
+df_train = df.sample(frac=0.9)
 df_val = df.drop(index=df_train.index)
 
 
@@ -42,8 +42,8 @@ else:
     tokenizer_out.fit(Looper(df.en, 1000), max_vocabulary_size=10000)
     tokenizer_out.save(tok_out_file)
 
-model = ml.neural_networks.TextTranslator(tokenizer_in, tokenizer_out, n_stages=6, projection_dim=64, n_heads=8,
-                                          RPE_radius=16, dropout=0.1,
+model = ml.neural_networks.TextTranslator(tokenizer_in, tokenizer_out, n_stages=6, projection_dim=64, n_heads=12,
+                                          RPE_radius=8, dropout=0.1,
                                           positional_encoding_type=None)
 model.to("cuda:0")
 
@@ -63,10 +63,11 @@ class Batchifyer:
                                             max_input_sequence_length=128,
                                             max_output_sequence_length=128)
 
-train = Batchifyer(df_train, model, batch_size=200, n_batches=1)
-val = Batchifyer(df_val, model, batch_size=200, n_batches=1)
+train = Batchifyer(df_train, model, batch_size=400, n_batches=1)
+val = Batchifyer(df_val, model, batch_size=400, n_batches=1)
+optimizer = torch.optim.Adam([{"params": pg} for pg in model.parameter_groups()], lr=0., betas=(0.9, 0.98))
+train_losses, val_losses, grad, best_step = model.fit(train, val, optimizer,
+    n_steps=20000, patience=None, learning_rate=lambda step: 1.0E-4 / 2**(step/2000))
 
-train_losses, val_losses, best_step = model.fit(train, val, n_steps=100000, patience=1000, learning_rate=1.0E-4)
-ml.plot_losses(train_losses, val_losses, best_step)
-plt.show()
+ml.plot_losses(train_losses, val_losses, best_step);plt.show()
 IPython.embed()
