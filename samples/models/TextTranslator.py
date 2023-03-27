@@ -25,7 +25,7 @@ class Batchifyer:
 
 train_data = Batchifyer(model, batch_size=1000)
 
-train_losses, val_losses, best_step = model.fit(train_data, n_steps=3000, learning_rate=1.0E-3)
-ml.plot_losses(train_losses, val_losses, best_step)
+train_losses, val_losses, grad, best_step = model.fit(train_data, n_steps=3000, learning_rate=1.0E-3)
+ml.plot_losses(train_losses, val_losses, grad, best_step)
 plt.show()
 IPython.embed()

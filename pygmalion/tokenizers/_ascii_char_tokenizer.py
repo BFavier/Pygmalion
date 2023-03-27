@@ -14,7 +14,7 @@ class AsciiCharTokenizer(Tokenizer):
         return AsciiCharTokenizer()
 
     def __init__(self, lowercase: bool=False, special_tokens: List[str]=["START", "END", "PAD"]):
-        super().__init__(ascii=True, lowercase=lowercase, special_token_names=special_tokens)
+        super().__init__(ascii=True, lowercase=lowercase, special_tokens=special_tokens)
         self._vocabulary = [bytes([b]) for b in range(256)]
 
     def encode(self, string: str) -> List[int]:

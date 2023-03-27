@@ -12,11 +12,11 @@ train_data = ml.datasets.generators.CirclesGenerator(100, 1, device=DEVICE)
 # Create and train the model
 model = nn.ImageSegmenter(1, ["inside", "outside"], [8, 16, 32, 64], pooling_size=(2, 2), n_convs_per_block=2)
 model.to(DEVICE)
-train_losses, val_losses, best_step = model.fit(train_data,
+train_losses, val_losses, grad, best_step = model.fit(train_data,
     n_steps=5000, learning_rate=1.0E-3, patience=None, keep_best=False)
 
 # Plot results
-ml.plot_losses(train_losses, val_losses, best_step)
+ml.plot_losses(train_losses, val_losses, grad, best_step)
 x_train, y_train = train_data.generate(5)
 y_predicted = model.predict(x_train)
 y_train, y_predicted = (v.astype(np.uint8) * 255 for v in (y_train, y_predicted))

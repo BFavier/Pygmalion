@@ -93,7 +93,7 @@ def tensor_to_index(tensor: torch.tensor, dim=1) -> np.ndarray:
     return tensor_to_longs(torch.argmax(tensor, dim=dim))
 
 
-def classes_to_tensor(input: Iterable[str],
+def classes_to_tensor(input: Iterable[Union[str, int]],
                       classes: Iterable[str],
                       device: Optional[torch.device] = None) -> torch.Tensor:
     """
@@ -102,7 +102,7 @@ def classes_to_tensor(input: Iterable[str],
     The tensor contains for each input the index of the category.
     """
     indexes = {c: i for i, c in enumerate(classes)}
-    return longs_to_tensor([indexes[c] for c in input],
+    return longs_to_tensor([indexes[c] if isinstance(c, str) else int(c) for c in input],
                            device=device)
 
 

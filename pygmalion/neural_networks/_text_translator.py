@@ -25,16 +25,51 @@ class TextTranslator(NeuralNetwork):
                  RPE_radius: Optional[int] = None,
                  input_sequence_length: Optional[int] = None,
                  output_sequence_length: Optional[int] = None,
-                 low_memory: bool = True):
+                 low_memory: bool = True,
+                 label_smoothing: float = 0.):
         """
         Parameters
         ----------
-        ...
+        
+        tokenizer_input : Tokenizer
+            tokenizer of the input sentences
+        tokenizer_output : Tokenizer
+            tokenizer of the output (target/predicted) sentences
+        n_stages : int
+            number of stages in the encoder and decoder
+        projection_dim : int
+            dimension of a single attention head
+        n_heads : int
+            number of heads for the multi-head attention mechanism
+        activation : str
+            activation function
+        dropout : float or None
+            dropout probability if any
+        positional_encoding_type : str or None
+            type of absolute positional encoding
+        mask_padding : bool
+            If True, PAD tokens are masked in attention
+        attention_type : ATTENTION_TYPE
+            type of attention for multi head attention
+        RPE_radius : int or None
+            radius of the relative positional encoding, or None if not used
+        input_sequence_length : int or None
+            Fixed size of the input sequence after padding.
+            Usefull if 'mask_padding' is False,
+            or if 'positional_encoding_type' is not None.
+        output_sequence_length : int or None
+            Same as input_sequence_length but for output sequences.
+        low_memory : bool
+            If True, uses gradient checkpointing to reduce memory usage during
+            training at the expense of computation time.
+        label_smoothing : float
+            label smoothing level used in cross entropy loss
         """
         super().__init__()
         self.mask_padding = mask_padding
         self.input_sequence_length = input_sequence_length
         self.output_sequence_length = output_sequence_length
+        self.label_smoothing = label_smoothing
         embedding_dim = projection_dim*n_heads
         self.tokenizer_input = tokenizer_input
         self.tokenizer_output = tokenizer_output
@@ -147,7 +182,7 @@ class TextTranslator(NeuralNetwork):
         encoded = self(x, padding_mask)
         y_pred = self.decode(y_target[:, :-1], encoded, padding_mask)
         return cross_entropy(y_pred.transpose(1, 2), y_target[:, 1:],
-                             weights, class_weights)
+                             weights, class_weights, label_smoothing=self.label_smoothing)
 
     def predict(self, sequences: List[str], max_tokens: Optional[int] = None,
                 n_beams: int = 1) -> List[str]:

@@ -54,7 +54,8 @@ def RMSE(*args, **kwargs):
 
 def cross_entropy(y_pred: torch.Tensor, y_target: torch.Tensor,
                   weights: Union[None, torch.Tensor] = None,
-                  class_weights: Union[None, torch.Tensor] = None
+                  class_weights: Union[None, torch.Tensor] = None,
+                  label_smoothing: float = 0.
                   ) -> torch.Tensor:
     """
     Returns the cross entropy error of the model.
@@ -83,11 +84,10 @@ def cross_entropy(y_pred: torch.Tensor, y_target: torch.Tensor,
     if class_weights is not None:
         class_weights = class_weights.to(y_pred.device)
     if weights is None:
-        return F.cross_entropy(y_pred, y_target, weight=class_weights)
+        return F.cross_entropy(y_pred, y_target, weight=class_weights, label_smoothing=label_smoothing)
     else:
         weights = weights.to(y_pred.device)
-        return (F.nll_loss(F.log_softmax(y_pred, dim=1), y_target,
-                           weight=class_weights, reduction="none")
+        return (F.cross_entropy(y_pred, y_target, weight=class_weights, label_smoothing=label_smoothing, reduction="none")
                 * weights) / weights.mean()
 
 

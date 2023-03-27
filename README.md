@@ -1,5 +1,5 @@
 Pygmalion in the greek mythologie is a sculptor that fell in love with one of his creations.
-In the myth, Aphrodite gives life to Galatea, the sculpture he fell in love with. This package is a machine learning library. It contains all the tools you need to give a mind of their own to inanimate objects.
+In the myth, Aphrodite gives life to Galatea, the sculpture he fell in love with. This package is a machine learning library. It contains the tools to give a mind of their own to inanimate objects.
 
 # Installing pygmalion
 

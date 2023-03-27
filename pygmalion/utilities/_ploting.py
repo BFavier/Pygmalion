@@ -6,20 +6,30 @@ import matplotlib.patches as patches
 from typing import Iterable, Union, Optional, List
 
 
-def plot_losses(train_losses: List[float], val_losses: List[float],
-                best_step: int, ax: Optional[matplotlib.axes.Axes] = None):
+def plot_losses(train_losses: List[float], val_losses: Optional[List[float]] = None,
+                grad: Optional[List[float]] = None, best_step: Optional[int] = None,
+                ax: Optional[matplotlib.axes.Axes] = None):
     """
     plot the losses
     """
+    drawn = []
     if ax is None:
         f, ax = plt.subplots()
-    ax.scatter(range(len(train_losses)), train_losses, label="training")
-    ax.scatter(range(len(val_losses)), val_losses, label="validation")
-    ax.axvline(best_step, 0, 1, color="k", label="best step")
+    drawn.append(ax.scatter(range(len(train_losses)), train_losses, label="training loss"))
+    if val_losses is not None:
+        drawn.append(ax.scatter(range(len(val_losses)), val_losses, label="validation loss"))
     ax.set_xlabel("steps")
     ax.set_ylabel("loss")
     ax.set_yscale("log")
-    ax.legend()
+    if grad is not None:
+        ax2 = ax.twinx()
+        drawn.append(ax2.scatter(range(len(grad)), grad, marker=".", color="C2", label="gradient"))
+        ax2.set_yscale("log")
+        ax.set_zorder(ax2.get_zorder()+1)
+        ax.set_frame_on(False)
+    if best_step is not None:
+        drawn.append(ax.axvline(best_step, 0, 1, color="k", label="best step"))
+    ax.legend(drawn, [h.get_label() for h in drawn])
 
 
 def plot_fitting(x: Iterable[float], y: Iterable[float],

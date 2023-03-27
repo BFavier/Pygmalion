@@ -40,10 +40,10 @@ model = nn.DenseClassifier(inputs, target, classes, hidden_layers,
                            activation="elu")
 model.to(device)
 train_data, val_data = Batchifyer(df_train), Batchifyer(df_val)
-train_losses, val_losses, best_step = model.fit(train_data, val_data, n_steps=3000, patience=500)
+train_losses, val_losses, grad, best_step = model.fit(train_data, val_data, n_steps=3000, patience=500)
 
 # Plot results
-ml.plot_losses(train_losses, val_losses, best_step)
+ml.plot_losses(train_losses, val_losses, grad, best_step)
 y_pred, p = model.predict(df_test), model.probabilities(df_test)
 f, ax = plt.subplots()
 conf = ml.confusion_matrix(df_test[target], y_pred, classes=classes)

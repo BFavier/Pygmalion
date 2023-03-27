@@ -6,19 +6,15 @@ import pygmalion as ml
 import pygmalion.neural_networks as nn
 import matplotlib.pyplot as plt
 plt.style.use("bmh")
-data_path = pathlib.Path(__file__).parents[1] / "data" / "fashion-MNIST"
+data_path = pathlib.Path(__file__).parents[1] / "data"
 
 # Download the data
-ml.datasets.fashion_mnist(data_path.parent)
+ml.datasets.fashion_mnist(data_path)
 
 # Load data
-with open(data_path / "classes.txt", "r") as file:
-    data = file.read()
-classes = data.split(",")
-x_train = np.load(data_path / "train_images.npy")
-y_train = np.array(classes)[np.load(data_path / "train_labels.npy")]
-x_test = np.load(data_path / "test_images.npy")
-y_test = np.array(classes)[np.load(data_path / "test_labels.npy")]
+data = dict(np.load(data_path / "fashion-MNIST.npz"))
+classes, x_train, y_train, x_test, y_test = (data[k] for k in ("classes", "train_images", "train_labels", "test_images", "test_labels"))
+classes = [c.decode("utf-8") for c in classes]
 
 # Create and train the model
 device = "cuda:0"
@@ -44,28 +40,29 @@ class Batchifyer:
             yield (self.x[idx], self.y[idx])
 
 train_data, val_data = (Batchifyer(*data) for data in ml.split(x_train, y_train, weights=(0.8, 0.2)))
-train_losses, val_losses, best_step = model.fit(train_data, val_data, n_steps=1000)
+train_losses, val_losses, grad, best_step = model.fit(train_data, val_data, n_steps=1000)
 
 # Plot results
-ml.plot_losses(train_losses, val_losses, best_step)
+ml.plot_losses(train_losses, val_losses, grad, best_step)
 f, ax = plt.subplots()
 y_pred = sum([model.predict(x_test[i:i+100]) for i in range(0, len(x_test), 100)], [])
-ml.plot_matrix(ml.confusion_matrix(y_pred, y_test), ax=ax, color_bar=True)
-acc = ml.accuracy(y_pred, y_test)
+y_target = [classes[i] for i in y_test]
+ml.plot_matrix(ml.confusion_matrix(y_pred, y_target), ax=ax, color_bar=True)
+acc = ml.accuracy(y_pred, y_target)
 ax.set_title(f"Accuracy = {acc:.3g}")
 f.tight_layout()
 
 # Plot metrics
 lx, ly = 5, 5
 sample = np.random.permutation(len(x_test))[:lx*ly]
-x, y_target = x_test[sample], y_test[sample]
+x, y_target = x_test[sample], [y_target[s] for s in sample]
 y_pred = model.predict(x)
 f, axes = plt.subplots(figsize=[6, 6], ncols=lx, nrows=ly)
 for n in range(lx*ly):
     i = n // lx
     j = n % lx
     ax = axes[i, j]
-    ax.imshow(x[n], cmap="gray_r")
+    ax.imshow(x[n], cmap="gray")
     ax.set_title(y_pred[n], color="g" if y_pred[n] == y_target[n] else "r")
     ax.grid(False)
     ax.set_xticks([])

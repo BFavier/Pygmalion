@@ -132,10 +132,16 @@ class NeuralNetwork(torch.nn.Module, ModelBase):
                         loss = loss + L2 * self._norm(self.parameters(), 2)
                     loss.backward()
                     train_loss.append(loss.item())
-                train_loss = sum(train_loss) / max(1, len(train_loss))
+                n_batches = len(train_loss)
+                train_loss = sum(train_loss) / max(1, n_batches)
                 train_losses.append(train_loss)
+                # averaging gradient over batches
+                if n_batches > 1:
+                    for p in self.parameters():
+                        if p.grad is not None:
+                            p.grad /= n_batches
                 # gradient norm
-                grad_norms.append(self._norm((p.grad for p in self.parameters()), 2).item())
+                grad_norms.append(self._norm((p.grad for p in self.parameters()), 1, average=False).item())
                 # validation data
                 self.eval()
                 if validation_data is not None:
@@ -170,7 +176,7 @@ class NeuralNetwork(torch.nn.Module, ModelBase):
             # load the best state
             if keep_best:
                 self.load_state_dict(best_state)
-        return train_losses, val_losses, grad_norms, best_step
+        return train_losses, val_losses, grad_norms, best_step if keep_best else None
 
     def data_to_tensor(self, x: object, y: object,
                         weights: Optional[Sequence[float]] = None,
@@ -195,9 +201,6 @@ class NeuralNetwork(torch.nn.Module, ModelBase):
     def loss(x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
         raise NotImplementedError()
 
-    def parameter_groups(self) -> List[Iterable[torch.nn.parameter.Parameter]]:
-        return [self.parameters()]
-
     def _x_to_tensor(self, x: object) -> torch.Tensor:
         raise NotImplementedError()
 
@@ -208,7 +211,8 @@ class NeuralNetwork(torch.nn.Module, ModelBase):
         raise NotImplementedError()
     
     @staticmethod
-    def _norm(tensors: Iterable[torch.Tensor], order: int):
+    def _norm(tensors: Iterable[torch.Tensor], order: int,
+              average: bool=True):
         """
         returns the norm of the tensors
         (normalized by number of elements)
@@ -217,7 +221,9 @@ class NeuralNetwork(torch.nn.Module, ModelBase):
         for t in tensors:
             L = L + torch.sum(torch.abs(t)**order)
             n += t.numel()
-        return (L/n)**(1/order)
+        if average:
+            L /= n
+        return L**(1/order)
 
 
 class NeuralNetworkClassifier(NeuralNetwork):
