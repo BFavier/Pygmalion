@@ -96,4 +96,4 @@ def _direct_url(url: str) -> str:
         the direct download url
     """
     id = url.split("/")[-2]
-    return f"https://docs.google.com/uc?export=download&id={id}"
+    return f"https://docs.google.com/uc?export=download&confirm=t&id={id}"
