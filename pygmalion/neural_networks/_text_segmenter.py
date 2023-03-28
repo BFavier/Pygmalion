@@ -10,7 +10,7 @@ from ._loss_functions import cross_entropy
 from pygmalion.tokenizers._utilities import Tokenizer
 
 
-class TextTranslator(NeuralNetworkClassifier):
+class TextSegmenter(NeuralNetworkClassifier):
 
     def __init__(self, tokenizer: Tokenizer,
                  classes: Iterable[str],
@@ -21,26 +21,54 @@ class TextTranslator(NeuralNetworkClassifier):
                  mask_padding: bool = True,
                  attention_type: ATTENTION_TYPE = "scaled dot product",
                  RPE_radius: Optional[int] = None,
-                 input_sequence_length: Optional[int] = None,
+                 sequence_length: Optional[int] = None,
                  low_memory: bool = True):
         """
         Parameters
         ----------
-        ...
+        classes : list of str
+            the class names
+        tokenizer : Tokenizer
+            tokenizer of the input sentences
+        n_stages : int
+            number of stages in the encoder and decoder
+        projection_dim : int
+            dimension of a single attention head
+        n_heads : int
+            number of heads for the multi-head attention mechanism
+        activation : str
+            activation function
+        dropout : float or None
+            dropout probability if any
+        positional_encoding_type : str or None
+            type of absolute positional encoding
+        mask_padding : bool
+            If True, PAD tokens are masked in attention
+        attention_type : ATTENTION_TYPE
+            type of attention for multi head attention
+        RPE_radius : int or None
+            radius of the relative positional encoding, or None if not used
+        sequence_length : int or None
+            Fixed size of the input sequence after padding.
+            Usefull if 'mask_padding' is False,
+            or if 'positional_encoding_type' is not None.
+        low_memory : bool
+            If True, uses gradient checkpointing to reduce memory usage during
+            training at the expense of computation time.
         """
         super().__init__(classes)
         self.mask_padding = mask_padding
-        self.input_sequence_length = input_sequence_length
+        self.sequence_length = sequence_length
         embedding_dim = projection_dim*n_heads
         self.tokenizer = tokenizer
         self.embedding = torch.nn.Embedding(self.tokenizer.n_tokens,
-                                            embedding_dim)
-        self.dropout = torch.nn.Dropout(dropout) if dropout is not None else None
+                                                  embedding_dim)
+        self.dropout_input = torch.nn.Dropout(dropout) if dropout is not None else None
         if positional_encoding_type == "sinusoidal":
             self.positional_encoding = SinusoidalPositionalEncoding()
         elif positional_encoding_type == "learned":
-            assert input_sequence_length is not None
-            self.positional_encoding = LearnedPositionalEncoding(input_sequence_length, embedding_dim)
+            assert sequence_length is not None
+            self.positional_encoding = LearnedPositionalEncoding(sequence_length, embedding_dim)
         elif positional_encoding_type is None:
             self.positional_encoding = None
         else:
@@ -49,7 +77,7 @@ class TextTranslator(NeuralNetworkClassifier):
                                                       dropout=dropout, activation=activation,
                                                       RPE_radius=RPE_radius, attention_type=attention_type,
                                                       low_memory=low_memory)
-        self.head = torch.nn.Linear(embedding_dim, len(self.classes))
+        self.head = torch.nn.Linear(embedding_dim, self.tokenizer.n_tokens)
 
     def forward(self, X: torch.Tensor, padding_mask: Optional[torch.Tensor]):
         """
@@ -67,15 +95,15 @@ class TextTranslator(NeuralNetworkClassifier):
         Returns
         -------
         torch.Tensor :
-            tensor of floats of shape (N, L, D) with D the embedding dimension
+            tensor of floats of shape (N, L, C) with C the number of classes
         """
         X = X.to(self.device)
         if padding_mask is not None:
             padding_mask = padding_mask.to(self.device)
         N, L = X.shape
-        X = self.embedding_input(X)
-        if self.positional_encoding_input is not None:
-            X = self.positional_encoding_input(X)
+        X = self.embedding(X)
+        if self.positional_encoding is not None:
+            X = self.positional_encoding(X)
         if self.dropout_input is not None:
             X = self.dropout_input(X.reshape(N*L, -1)).reshape(N, L, -1)
         X = self.transformer_encoder(X, padding_mask)
@@ -86,9 +114,9 @@ class TextTranslator(NeuralNetworkClassifier):
         Parameters
         ----------
         x : torch.Tensor
-            tensor of long of shape (N, Li)
+            tensor of long of shape (N, L)
         y_target : torch.Tensor
-            tensor of long of shape (N, Lt)
+            tensor of long of shape (N, L)
         """
         x, y_target = x.to(self.device), y_target.to(self.device)
         padding_mask = (x == self.tokenizer.PAD) if self.mask_padding else None
