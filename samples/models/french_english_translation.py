@@ -7,7 +7,7 @@ import IPython
 import torch
 
 path = pathlib.Path(__file__).parent
-data_path = path.parents[1] / "data"
+data_path = path.parent / "data"
 
 # Download the data
 ml.datasets.sentence_pairs(data_path)
