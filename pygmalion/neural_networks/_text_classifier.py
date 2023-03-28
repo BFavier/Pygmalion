@@ -77,9 +77,9 @@ class TextClassifier(NeuralNetworkClassifier):
                                                       dropout=dropout, activation=activation,
                                                       RPE_radius=RPE_radius, attention_type=attention_type,
                                                       low_memory=low_memory)
-        self.head = torch.nn.Linear(embedding_dim, self.tokenizer.n_tokens)
+        self.head = torch.nn.Linear(embedding_dim, len(self.classes))
 
-    def forward(self, X: torch.Tensor, padding_mask: Optional[torch.Tensor]):
+    def forward(self, X: torch.Tensor):
         """
         performs the encoding part of the network
 
@@ -89,8 +89,6 @@ class TextClassifier(NeuralNetworkClassifier):
             tensor of longs of shape (N, L) with:
             * N : number of sentences
             * L : words per sentence
-        padding_mask : torch.Tensor or None
-            tensor of booleans of shape (N, L)
 
         Returns
         -------
@@ -98,8 +96,7 @@ class TextClassifier(NeuralNetworkClassifier):
             tensor of floats of shape (N, C) with C the number of classes
         """
         X = X.to(self.device)
-        if padding_mask is not None:
-            padding_mask = padding_mask.to(self.device)
+        padding_mask = (X == self.tokenizer.PAD) if self.mask_padding else None
         N, L = X.shape
         X = self.embedding(X)
         if self.positional_encoding is not None:
@@ -119,8 +116,7 @@ class TextClassifier(NeuralNetworkClassifier):
             tensor of long of shape (N,)
         """
         x, y_target = x.to(self.device), y_target.to(self.device)
-        padding_mask = (x == self.tokenizer.PAD) if self.mask_padding else None
-        y_pred = self(x, padding_mask)
+        y_pred = self(x)
         return cross_entropy(y_pred, y_target, weights, class_weights)
 
     @property
