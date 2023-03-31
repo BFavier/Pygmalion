@@ -5,6 +5,7 @@ import torch
 from typing import Union, Sequence, Optional, Callable, Iterable, List
 from ._conversions import floats_to_tensor
 from pygmalion._model_base import ModelBase
+from pygmalion.datasets import download_bytes
 
 
 class NeuralNetwork(torch.nn.Module, ModelBase):
@@ -20,7 +21,8 @@ class NeuralNetwork(torch.nn.Module, ModelBase):
 
     @classmethod
     def load(cls, file_path: Union[str, pathlib.Path, io.IOBase]) -> "NeuralNetwork":
-        model = torch.load(file_path, map_location="cpu")
+        file = download_bytes(file_path) if str(file_path).startswith("https://") else file_path
+        model = torch.load(file, map_location="cpu")
         assert isinstance(model, cls)
         return model
 
