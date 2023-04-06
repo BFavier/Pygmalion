@@ -321,20 +321,24 @@ class TextTranslator(NeuralNetwork):
     def _x_to_tensor(self, x: List[str],
                      device: Optional[torch.device] = None,
                      max_input_sequence_length: Optional[int] = None,
-                     raise_on_longer_sequences: bool = False):
+                     raise_on_longer_sequences: bool = False,
+                     progress_bar: bool = False):
         return strings_to_tensor(x, self.tokenizer_input, device,
                                  max_sequence_length=self.input_sequence_length or max_input_sequence_length,
                                  raise_on_longer_sequences=raise_on_longer_sequences,
-                                 add_start_end_tokens=False)
+                                 add_start_end_tokens=False,
+                                 progress_bar=progress_bar)
 
     def _y_to_tensor(self, y: List[str],
                      device: Optional[torch.device] = None,
                      max_output_sequence_length: Optional[int] = None,
-                     raise_on_longer_sequences: bool = False) -> torch.Tensor:
+                     raise_on_longer_sequences: bool = False,
+                     progress_bar: bool = False) -> torch.Tensor:
         return strings_to_tensor(y, self.tokenizer_output, device,
                                  max_sequence_length=self.output_sequence_length or max_output_sequence_length,
                                  raise_on_longer_sequences=raise_on_longer_sequences,
-                                 add_start_end_tokens=True)
+                                 add_start_end_tokens=True,
+                                 progress_bar=progress_bar)
 
     def _tensor_to_y(self, tensor: torch.Tensor) -> np.ndarray:
         return tensor_to_sentences(tensor, self.tokenizer_output)

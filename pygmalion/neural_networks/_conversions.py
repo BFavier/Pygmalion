@@ -3,6 +3,7 @@ import pandas as pd
 import numpy as np
 from typing import List, Iterable, Optional, Union
 from warnings import warn
+from tqdm import tqdm
 from pygmalion.tokenizers._utilities import Tokenizer
 
 
@@ -153,6 +154,7 @@ def strings_to_tensor(strings: Iterable[str],
                       max_sequence_length: Optional[int] = None,
                       raise_on_longer_sequences: bool = False,
                       add_start_end_tokens: bool = False,
+                      progress_bar: bool = False,
                       **kwargs) -> torch.Tensor:
     """
     converts a list of sentences to tensor
@@ -190,6 +192,8 @@ def strings_to_tensor(strings: Iterable[str],
         and each scalar is the index of a word in the lexicon
     """
     pad = tokenizer.PAD
+    if progress_bar:
+        strings = tqdm(strings, "tokenizing")
     strings = [tokenizer.encode(s, **kwargs) for s in strings]
     if add_start_end_tokens:
         start, end = tokenizer.START, tokenizer.END
