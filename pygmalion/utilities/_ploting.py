@@ -79,7 +79,7 @@ def plot_bounding_boxes(bboxes: dict, ax: matplotlib.axes.Axes,
     ----------
     bounding_boxes : dict
         A dict containing the following keys:
-        * x1, y1, x2, y2 : list of int
+        * x, y, w, h : list of int or float
             The coordinates in pixel of each bboxe corner
         * class : list of str
             The name of the class predicted for eahc bboxe
@@ -92,22 +92,24 @@ def plot_bounding_boxes(bboxes: dict, ax: matplotlib.axes.Axes,
         Can be any color format supported by matplotlib
     default_color : str or list
         the default color for classes that are not present in class_colors
+        Can be either a string ("#ff0000", "r", ...)
+        or a RGB/RGBA list ([255, 0, 0], [255, 0, 0, 255], ...)
     """
-    coords = zip(bboxes["x1"], bboxes["y1"], bboxes["x2"], bboxes["y2"])
-    for i, (x1, y1, x2, y2) in enumerate(coords):
+    coords = zip(bboxes["x"], bboxes["y"], bboxes["w"], bboxes["h"])
+    for i, (x, y, w, h) in enumerate(coords):
+        x1, x2 = x-w/2, x+w/2
+        y1, y2 = y-h/2, y+h/2
         boxe_class = bboxes["class"][i]
         boxe_color = class_colors.get(boxe_class, default_color)
-        xinf, yinf = min(x1, x2), min(y1, y2)
-        w, h = abs(x2-x1), abs(y2-y1)
-        rect = patches.Rectangle((xinf, yinf), w, h,
+        rect = patches.Rectangle((x1, y1), w, h,
                                  linewidth=1, edgecolor=boxe_color,
                                  facecolor='none')
         if label_class:
             s = boxe_class
             confidence = bboxes.get("confidence", None)
             if confidence is not None:
-                s += f": {confidence[i]*100:.1f}%"
-            ax.text(xinf, yinf-1, s, color=boxe_color)
+                s += f": {confidence[i]:.1%}"
+            ax.text(x1, y1, s, color=boxe_color)
         ax.add_patch(rect)
     ax.set_xticks([])
     ax.set_yticks([])
