@@ -1,5 +1,6 @@
 import json
 import pathlib
+import pickle
 import torch
 from typing import Union, Type
 from io import IOBase
@@ -37,7 +38,7 @@ def load_model(file_path: Union[str, pathlib.Path, IOBase]) -> Model:
                 raise FileNotFoundError(f"The file does not exist or is not a file: '{file_path}'")
     try:
         return torch.load(file_path)
-    except:
+    except pickle.UnpicklingError:
         if isinstance(file_path, IOBase):
             file_path.seek(0)
         else:
