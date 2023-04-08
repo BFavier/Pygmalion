@@ -103,7 +103,7 @@ def classes_to_tensor(input: Iterable[Union[str, int]],
     The tensor contains for each input the index of the category.
     """
     indexes = {c: i for i, c in enumerate(classes)}
-    return longs_to_tensor([indexes[c] if isinstance(c, str) else int(c) for c in input],
+    return longs_to_tensor([indexes.get(c, c) for c in input],
                            device=device)
 
 
