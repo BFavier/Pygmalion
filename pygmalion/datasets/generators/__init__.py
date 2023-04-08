@@ -1,2 +1,3 @@
 from ._circles_generator import CirclesGenerator
 from ._roman_numerals_generator import RomanNumeralsGenerator
+from ._shapes_generator import ShapesGenerator
