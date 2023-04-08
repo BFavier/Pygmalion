@@ -15,15 +15,6 @@ class Activation(torch.nn.Module):
 
     """
 
-    def __new__(cls, activation: Union[str, Callable, torch.nn.Module],
-                *args, **kwargs) -> torch.nn.Module:
-        if isinstance(activation, torch.nn.Module):
-            return activation
-        else:
-            obj = super().__new__(cls)
-            cls.__init__(obj, activation, *args, **kwargs)
-            return obj
-
     def __init__(self, activation: Union[str, Callable]):
         super().__init__()
         assert isinstance(activation, str) or callable(activation)
