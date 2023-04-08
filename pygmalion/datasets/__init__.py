@@ -7,4 +7,3 @@ from ._titanic import titanic
 from ._sentence_pairs import sentence_pairs
 from ._airline_tweets import airline_tweets
 from ._aquarium import aquarium
-from ._download import download_bytes

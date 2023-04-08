@@ -1,6 +1,7 @@
 import requests
 import pathlib
 from io import IOBase, BytesIO
+from tqdm import tqdm
 
 
 def download(file_path: str, url: str):
@@ -44,30 +45,22 @@ def _download_to_stream(url: str, stream: IOBase, file_name: str="Download"):
     """
     Download the bytes of the give google drive file into the given IO stream
     """
-    # make the request
     session = requests.Session()
     response = session.get(_direct_url(url), stream=True)
     if response.status_code >= 400:
         raise RuntimeError(f"http error: {response.status_code}")
-    # get a confirmation token for large files
-    for key, value in response.cookies.items():
-        if key.startswith('download_warning'):
-            response = session.get(_direct_url(url), params={'confirm': value},
-                                   stream=True)
-            break
-    # save on disk
-    CHUNK_SIZE = 32768
-    print(f"{file_name}: 0. kB", end="", flush=True)
-    for i, chunk in enumerate(response.iter_content(CHUNK_SIZE)):
-        stream.write(chunk)
-        n_bytes = (i+1)*CHUNK_SIZE / 8.
-        for j, unit in enumerate(['Bytes', 'kB', 'MB', 'GB', 'TB']):
-            if n_bytes < 1024**(j+1):
-                break
-        progress = n_bytes / 10024**j
-        print(f"\r{file_name}: {progress:.1f} {unit}"+" "*10,
-                end="", flush=True)
-    print()
+    # # get a confirmation token for large files
+    # for key, value in response.cookies.items():
+    #     if key.startswith('download_warning'):
+    #         response = session.get(_direct_url(url), params={'confirm': value},
+    #                                stream=True)
+    #         break
+    total_size = int(response.headers['content-length'])
+    CHUNK_SIZE = 4096
+    with tqdm(unit="B", total=total_size, unit_scale=True, unit_divisor=1000) as pbar:
+        for chunk in response.iter_content(CHUNK_SIZE):
+            stream.write(chunk)
+            pbar.update(len(chunk))
 
 
 def _direct_url(url: str) -> str:

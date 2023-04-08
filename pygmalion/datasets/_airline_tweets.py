@@ -1,5 +1,5 @@
 import pathlib
-from ._download import download
+from pygmalion.utilities._download import download
 
 
 def airline_tweets(directory: str):

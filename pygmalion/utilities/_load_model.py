@@ -5,7 +5,7 @@ import torch
 from typing import Union, Type
 from io import IOBase
 from pygmalion._model import Model
-from pygmalion.datasets import download_bytes
+from ._download import download_bytes
 from pygmalion.unsupervised import *
 from pygmalion.neural_networks import *
 from pygmalion.tokenizers import *

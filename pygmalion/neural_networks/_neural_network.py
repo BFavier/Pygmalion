@@ -4,7 +4,6 @@ import pathlib
 import torch
 from typing import Union, Sequence, Optional, Callable, Iterable, List
 from ._conversions import floats_to_tensor
-from pygmalion.datasets import download_bytes
 from pygmalion._model import Model
 
 
