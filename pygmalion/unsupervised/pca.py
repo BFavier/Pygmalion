@@ -2,13 +2,13 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 from typing import Dict, Tuple, Optional
-from pygmalion._model_base import ModelBase
+from pygmalion._model import Model
 
 
-class PCA(ModelBase):
+class PCA(Model):
 
     @classmethod
-    def from_dump(cls, dump: dict):
+    def from_dump(cls, dump: dict) -> "PCA":
         """
         """
         assert dump["type"] == cls.__name__
@@ -80,7 +80,7 @@ class PCA(ModelBase):
         ax.set_xlabel("number of components")
 
     @property
-    def dump(self):
+    def dump(self) -> dict:
         offset = dict(self.offset)
         scale = dict(self.scale) if self.scale is not None else self.scale
         projection = {k: [v[0].tolist(), v[1]] for k, v in

@@ -1,10 +1,10 @@
 from typing import Optional, List, Tuple, Union, Iterable
 from unidecode import unidecode
-from pygmalion._model_base import ModelBase
+from pygmalion._model import Model
 from ._special_token import SpecialToken
 
 
-class Tokenizer(ModelBase):
+class Tokenizer(Model):
     """
     Tokenizer base is a base class for tokenizers
 

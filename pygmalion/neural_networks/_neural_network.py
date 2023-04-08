@@ -4,11 +4,11 @@ import pathlib
 import torch
 from typing import Union, Sequence, Optional, Callable, Iterable, List
 from ._conversions import floats_to_tensor
-from pygmalion._model_base import ModelBase
 from pygmalion.datasets import download_bytes
+from pygmalion._model import Model
 
 
-class NeuralNetwork(torch.nn.Module, ModelBase):
+class NeuralNetwork(torch.nn.Module, Model):
     """
     Abstract class for neural networks
     Implemented as a simple wrapper around torch.nn.Module
@@ -17,14 +17,7 @@ class NeuralNetwork(torch.nn.Module, ModelBase):
 
     def __init__(self):
         torch.nn.Module.__init__(self)
-        ModelBase.__init__(self)
-
-    @classmethod
-    def load(cls, file_path: Union[str, pathlib.Path, io.IOBase]) -> "NeuralNetwork":
-        file = download_bytes(file_path) if str(file_path).startswith("https://") else file_path
-        model = torch.load(file, map_location="cpu")
-        assert isinstance(model, cls)
-        return model
+        Model.__init__(self)
 
     def save(self, file_path: Union[str, pathlib.Path, io.IOBase],
              overwrite: bool = False, create_dir: bool = False):

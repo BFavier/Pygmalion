@@ -4,36 +4,10 @@ import io
 from typing import Union
 
 
-class ModelBase:
+class Model:
 
     def __repr__(self):
         return f"{type(self).__name__}()"
-
-    @classmethod
-    def load(cls, file_path: Union[str, pathlib.Path, io.IOBase]) -> "ModelBase":
-        """
-        Load a model from the disk (must be a .json)
-
-        Parameters
-        ----------
-        file : str or pathlib.Path or file like
-            path of the file to read
-        """
-        if not isinstance(file_path, io.IOBase):
-            file_path = pathlib.Path(file_path)
-            path = file_path.parent
-            suffix = file_path.suffix.lower()
-            if suffix != ".json":
-                raise ValueError(f"The file must be '.json' file, but got a '{suffix}'")
-            if not path.is_dir():
-                raise ValueError(f"The directory '{path}' does not exist")
-            if not file_path.is_file():
-                raise FileNotFoundError(f"The file '{file_path.name}' does not exist in '{path}'")
-            with open(file_path) as json_file:
-                dump = json.load(json_file)
-        else:
-            dump = json.load(file_path)
-        return cls.from_dump(dump)
 
     def save(self, file_path: Union[str, pathlib.Path, io.IOBase],
              overwrite: bool = False, create_dir: bool = False):
@@ -70,7 +44,7 @@ class ModelBase:
             json.dump(self.dump, file_path, ensure_ascii=False)
 
     @classmethod
-    def from_dump(cls, dump: dict) -> "ModelBase":
+    def from_dump(cls, dump: dict) -> "Model":
         raise NotImplementedError()
     
     @property
