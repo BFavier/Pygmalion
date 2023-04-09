@@ -77,6 +77,7 @@ def plot_bounding_boxes(bboxes: dict, ax: matplotlib.axes.Axes,
 
     Parameters
     ----------
+
     bounding_boxes : dict
         A dict containing the following keys:
         * x, y, w, h : list of int or float
@@ -85,11 +86,14 @@ def plot_bounding_boxes(bboxes: dict, ax: matplotlib.axes.Axes,
             The name of the class predicted for eahc bboxe
         * [confidence : list of float]
             The optional confidence of the bounding boxe
+
     ax : matplotlib.axes.Axes
         The matplotlib axes to draw on
+
     class_colors : dict
         A dictionary of {class: color} for the color of the boxes
         Can be any color format supported by matplotlib
+
     default_color : str or list
         the default color for classes that are not present in class_colors
         Can be either a string ("#ff0000", "r", ...)
@@ -106,7 +110,7 @@ def plot_bounding_boxes(bboxes: dict, ax: matplotlib.axes.Axes,
                                  facecolor='none')
         if label_class:
             s = boxe_class
-            confidence = bboxes.get("confidence", None)
+            confidence = bboxes.get("class confidence", None)
             if confidence is not None:
                 s += f": {confidence[i]:.1%}"
             ax.text(x1, y1, s, color=boxe_color)

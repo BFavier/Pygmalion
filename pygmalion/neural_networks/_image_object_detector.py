@@ -47,6 +47,25 @@ class ImageObjectDetector(NeuralNetworkClassifier):
         self.objects_class = torch.nn.Conv2d(out_features, len(self.classes), (1, 1))
 
     def forward(self, X: torch.Tensor):
+        """
+        Parameters
+        ----------
+        X : torch.Tensor
+            tensor of float images of shape (N, C, H, W)
+        
+        Returns
+        -------
+        tuple of torch.Tensor :
+            returns (detected, position, dimension, object_class) with
+            * 'detected' object detection probability in each cell,
+              tensor of floats of shape (N, h, w)
+            * 'position' relative (x, y) position of the detected object's center in each cell,
+               tensor of floats of shape (N, 2, h, w)
+            * 'dimension' relative (w, h) dimension of the detected object in each cell,
+              tensor of floats of shape (N, 2, h, w)
+            * 'object_class' probability (once softmaxed) of each class in each cell,
+              tensor of floats of shape (N, n_classes, h, w)
+        """
         X = X.to(self.device)
         for layer in self.layers:
             X = layer(X)
@@ -77,7 +96,7 @@ class ImageObjectDetector(NeuralNetworkClassifier):
             tensor of longs of shape (N, h, w) of target class for each cell
         """
         detected_pred, position_pred, dimension_pred, class_pred = self(x)
-        presence_loss = F.binary_cross_entropy(detected_pred, detected.float(), weight=weights)
+        presence_loss = F.binary_cross_entropy(detected_pred, detected.float().to(detected_pred.device), weight=weights)
         if detected.any():
             p_subset = detected.unsqueeze(1).expand(-1, 2, -1, -1)
             return (presence_loss
@@ -86,6 +105,55 @@ class ImageObjectDetector(NeuralNetworkClassifier):
                     + cross_entropy(class_pred.permute(0, 2, 3, 1)[detected], object_class[detected], weights=weights, class_weights=class_weights))
         else:
             return presence_loss
+    
+    def predict(self, images: np.ndarray, detection_treshold: float=0.5,
+                threshold_intersect: float = 0.8,
+                downscaling_factors: List[int] = [1]) -> List[dict]:
+        """
+        """
+        n = len(images)
+        predictions = [{"x": [], "y": [], "w": [], "h": [], "class": [],
+                        "detection confidence": [], "class confidence": []}
+                       for _ in range(n)]
+        self.eval()
+        X = self._x_to_tensor(images, self.device)
+        for df in downscaling_factors:
+            with torch.no_grad():
+                detected, position, dimension, object_class = self(F.avg_pool2d(X, kernel_size=(df, df)))
+            h_image, w_image = images.shape[1:3]
+            h_cell, w_cell = (f**self.n_stages for f in self.downscaling_factor)
+            # converting from grid coordinates to pixel coordinates
+            grid_pos = torch.stack(torch.meshgrid(torch.arange(0, w_image, w_cell, dtype=position.dtype, device=self.device),
+                                torch.arange(0, h_image, h_cell, dtype=position.dtype, device=self.device),
+                                indexing="xy"), dim=0)
+            cell_dimension = torch.tensor([w_cell, h_cell], dtype=torch.float, device=self.device).reshape(1, 2, 1, 1)
+            pixel_position = grid_pos.unsqueeze(0) + position * cell_dimension
+            pixel_dimension = dimension * cell_dimension
+            # selecting cells with detected objects
+            subset = detected > detection_treshold
+            probabilities, classes = torch.softmax(object_class, dim=1).max(dim=1)
+            for i, (sub, det, pos, dim, prob, cls) in enumerate(zip(subset, detected, pixel_position, pixel_dimension, probabilities, classes)):
+                det = det[sub]
+                pos = pos.permute(1, 2, 0)[sub]
+                dim = dim.permute(1, 2, 0)[sub]
+                prob = prob[sub]
+                cls = cls[sub]
+                predictions[i]["x"].extend(pos[:, 0].cpu().tolist())
+                predictions[i]["y"].extend(pos[:, 1].cpu().tolist())
+                predictions[i]["w"].extend(dim[:, 0].cpu().tolist())
+                predictions[i]["h"].extend(dim[:, 1].cpu().tolist())
+                predictions[i]["class"].extend([self.classes[i] for i in cls.cpu().tolist()])
+                predictions[i]["detection confidence"].extend(det.cpu().tolist())
+                predictions[i]["class confidence"].extend(prob.cpu().tolist())
+        # applying non max suppression
+        pass
+        return predictions
+
+    # def _non_max_suppression(self, bboxes: dict, threshold_intersect: float) -> dict:
+    #     """
+    #     Perform non max suppression
+    #     """
+    #     x, y, w, h, c = (bboxes[c] for c in ("x", "y", "w", "h", "class"))
 
     @property
     def device(self) -> torch.device:
@@ -108,7 +176,7 @@ class ImageObjectDetector(NeuralNetworkClassifier):
             X, Y, W, H = (floats_to_tensor(bboxes[v]) for v in ("x", "y", "w", "h"))
             C = classes_to_tensor(bboxes["class"], self.classes, device=device)
             i, j = (torch.div(Y, grid_h, rounding_mode="floor").long(), torch.div(X, grid_w, rounding_mode="floor").long())
-            py, px = (Y % grid_h, X % grid_w)
+            py, px = ((Y % grid_h) / grid_h, (X % grid_w) / grid_w)
             detected[n, i, j] = 1
             positions[n, :, i, j] = torch.stack([px, py], dim=0)
             dimensions[n, :, i, j] = torch.stack([W / grid_w, H / grid_h], dim=0)
@@ -119,6 +187,8 @@ class ImageObjectDetector(NeuralNetworkClassifier):
                        weights: Optional[Sequence[float]] = None,
                        class_weights: Optional[Sequence[float]] = None,
                        device: Optional[torch.device] = None, **kwargs) -> tuple:
+        """
+        """
         images = self._x_to_tensor(x, device, **kwargs)
         detected, positions, dimensions, classes = self._y_to_tensor(x, y, device, **kwargs)
         return images, detected, positions, dimensions, classes
