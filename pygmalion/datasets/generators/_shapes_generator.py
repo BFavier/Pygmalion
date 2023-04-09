@@ -10,9 +10,9 @@ class ShapesGenerator:
     """
 
     def __init__(self, batch_size: int, n_batches: int,
-                 image_size: Tuple[int, int] = (64, 64),
-                 n_max_shapes: int = 3,
-                 radius_fraction: Tuple[float, float] = (0.05, 0.2)):
+                 image_size: Tuple[int, int] = (256, 256),
+                 n_max_shapes: int = 5,
+                 radius_fraction: Tuple[float, float] = (0.05, 0.1)):
         """
         Parameters
         ----------
@@ -45,18 +45,21 @@ class ShapesGenerator:
         and 'bboxes' a list of dict describing the bounding boxes contained in each image
         """
         low, high = sorted(int(round(rf*min(self.height, self.width))) for rf in self.radius_fraction)
+        scale = max(self.radius_fraction)
+        pos_x, pos_y = np.meshgrid((np.arange(0., 1., 2*scale) + scale) * self.width + 0.5,
+                                   (np.arange(0., 1., 2*scale) + scale) * self.height + 0.5)
+        pos_idx = np.random.rand(n_images, pos_x.size).argsort(axis=1)[:, :self.n_max_shapes]
+        x = pos_x.reshape(-1)[pos_idx].reshape(n_images, self.n_max_shapes, 1, 1)
+        y = pos_y.reshape(-1)[pos_idx].reshape(n_images, self.n_max_shapes, 1, 1)
+        x += np.random.uniform(-scale, scale, size=(n_images, self.n_max_shapes, 1, 1)) * self.width
+        y += np.random.uniform(-scale, scale, size=(n_images, self.n_max_shapes, 1, 1)) * self.height
         r = np.random.rand(n_images, self.n_max_shapes, 1, 1) * (high - low) + low
-        n_pos = int(1/max(self.radius_fraction))
-        pos = np.arange(n_pos**2)
-        pos_idx = np.random.rand(n_images, n_pos**2).argsort(axis=1)[:, :self.n_max_shapes]
-        x = (pos[pos_idx] % n_pos + 0.5).reshape(n_images, self.n_max_shapes, 1, 1) / n_pos * self.width + 0.5
-        y = (pos[pos_idx] // n_pos + 0.5).reshape(n_images, self.n_max_shapes, 1, 1) / n_pos * self.height + 0.5
         X, Y = (v.reshape(1, 1, self.height, self.width) for v in
                 np.meshgrid(np.arange(self.width), np.arange(self.height)))
         Y, X = Y+0.5, X+0.5
         selected = (np.arange(self.n_max_shapes).reshape(1, self.n_max_shapes, 1, 1)
                     <= np.random.randint(1, self.n_max_shapes+1, size=(n_images, 1, 1, 1)))
-        is_circle = (np.random.rand(n_images, self.n_max_shapes) < 0.5).reshape(n_images, self.n_max_shapes, 1, 1)
+        is_circle = (np.random.rand(n_images, self.n_max_shapes, 1, 1) < 0.5)
         distances = np.sqrt((Y - y)**2 + (X - x)**2)
         images = np.any(((((distances <= r) & is_circle) |
                          ((np.abs(X-x) < r) & (np.abs(Y-y) < r) & ~is_circle)
