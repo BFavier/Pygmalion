@@ -193,7 +193,7 @@ def strings_to_tensor(strings: Iterable[str],
     """
     pad = tokenizer.PAD
     if progress_bar:
-        strings = tqdm(strings, "tokenizing")
+        strings = tqdm(strings, "tokenizing", unit_scale=True)
     strings = [tokenizer.encode(s, **kwargs) for s in strings]
     if add_start_end_tokens:
         start, end = tokenizer.START, tokenizer.END
@@ -214,7 +214,7 @@ def strings_to_tensor(strings: Iterable[str],
     return longs_to_tensor(data, device)
 
 
-def tensor_to_sentences(tensor: torch.Tensor, tokenizer: Tokenizer) -> List[str]:
+def tensor_to_strings(tensor: torch.Tensor, tokenizer: Tokenizer) -> List[str]:
     """
     converts a tensor to a list of sentences
 

@@ -5,7 +5,7 @@ from itertools import count
 from warnings import warn
 from .layers.transformers import TransformerEncoder, TransformerDecoder, ATTENTION_TYPE
 from .layers import LearnedPositionalEncoding, SinusoidalPositionalEncoding
-from ._conversions import strings_to_tensor, tensor_to_sentences
+from ._conversions import strings_to_tensor, tensor_to_strings
 from ._conversions import floats_to_tensor
 from ._neural_network import NeuralNetwork
 from ._loss_functions import cross_entropy
@@ -341,4 +341,4 @@ class TextTranslator(NeuralNetwork):
                                  progress_bar=progress_bar)
 
     def _tensor_to_y(self, tensor: torch.Tensor) -> np.ndarray:
-        return tensor_to_sentences(tensor, self.tokenizer_output)
+        return tensor_to_strings(tensor, self.tokenizer_output)
