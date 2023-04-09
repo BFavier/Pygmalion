@@ -51,8 +51,8 @@ class ShapesGenerator:
         pos_idx = np.random.rand(n_images, pos_x.size).argsort(axis=1)[:, :self.n_max_shapes]
         x = pos_x.reshape(-1)[pos_idx].reshape(n_images, self.n_max_shapes, 1, 1)
         y = pos_y.reshape(-1)[pos_idx].reshape(n_images, self.n_max_shapes, 1, 1)
-        x += np.random.uniform(-scale, scale, size=(n_images, self.n_max_shapes, 1, 1)) * self.width
-        y += np.random.uniform(-scale, scale, size=(n_images, self.n_max_shapes, 1, 1)) * self.height
+        x += np.random.uniform(-0.5*scale, 0.5*scale, size=(n_images, self.n_max_shapes, 1, 1)) * self.width
+        y += np.random.uniform(-0.5*scale, 0.5*scale, size=(n_images, self.n_max_shapes, 1, 1)) * self.height
         r = np.random.rand(n_images, self.n_max_shapes, 1, 1) * (high - low) + low
         X, Y = (v.reshape(1, 1, self.height, self.width) for v in
                 np.meshgrid(np.arange(self.width), np.arange(self.height)))
