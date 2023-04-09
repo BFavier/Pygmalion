@@ -115,7 +115,8 @@ class BytePairEncoder(Tokenizer):
                 if verbose:
                     print(f"\r\033[K\rMerge iteration {i}: "
                           f"{len(code)} tokens, "
-                          f"new token frequency={new_token_frequency:.3g}",
+                          f"new token frequency={new_token_frequency:.3g} "
+                          f"({pair_count} occurences)",
                           end="", flush=True)
         except KeyboardInterrupt:
             print("\nInterupted by the user", end="")
