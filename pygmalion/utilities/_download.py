@@ -49,12 +49,6 @@ def _download_to_stream(url: str, stream: IOBase, file_name: str="Download"):
     response = session.get(_direct_url(url), stream=True)
     if response.status_code >= 400:
         raise RuntimeError(f"http error: {response.status_code}")
-    # # get a confirmation token for large files
-    # for key, value in response.cookies.items():
-    #     if key.startswith('download_warning'):
-    #         response = session.get(_direct_url(url), params={'confirm': value},
-    #                                stream=True)
-    #         break
     total_size = int(response.headers['content-length'])
     CHUNK_SIZE = 4096
     with tqdm(unit="B", total=total_size, unit_scale=True, unit_divisor=1000) as pbar:
