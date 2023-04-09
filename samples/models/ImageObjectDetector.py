@@ -1,37 +1,25 @@
-import pathlib
+import torch
 import numpy as np
 import pygmalion as ml
 import matplotlib.pyplot as plt
-plt.style.use("bmh")
-data_path = pathlib.Path(__file__).parents[1] / "data"
 
-# # Download the data
-# ml.datasets.aquarium(data_path)
+model = ml.neural_networks.ImageObjectDetector(1, ["circle", "square"], features=[8, 16, 32, 64],
+                                               kernel_size=(3, 3), pooling_size=(2, 2), n_convs_per_block=3)
 
-# data = dict(np.load(data_path / "aquarium.npz"))
-# images = data["images"]
-# image_indexes = data["image_indexes"]
-# classes = [c.decode("utf-8") for c in data["class_names"].tolist()]
-# bboxes = [{"class": [classes[i] for i in data["class_indexes"][image_indexes == i]],
-#             **{k: data[k][image_indexes == i] for k in ("x", "y", "w", "h")}}
-#            for i in range(len(images))]
 
-# for i in np.random.permutation(len(images)):
-#     f, ax = plt.subplots()
-#     ax.imshow(images[i])
-#     ml.plot_bounding_boxes(bboxes[i], ax)
-#     plt.show()
+class Batchifyer:
 
-generator = ml.datasets.generators.ShapesGenerator(10, 1)
+    def __init__(self, batch_size: int, n_batches: int):
+        self.generator = ml.datasets.generators.ShapesGenerator(batch_size, n_batches)
 
-images, bboxes = next(iter(generator))
+    def __iter__(self):
+        for x, y in self.generator:
+            yield model.data_to_tensor(x, y)
 
-for image, bboxe in zip(images, bboxes):
-    f, ax = plt.subplots()
-    ax.imshow(image, cmap="gray")
-    ml.plot_bounding_boxes(bboxe, ax, class_colors={"circle": "r", "square": "b"})
-    plt.show()
 
-# if __name__ == "__main__":
-#     import IPython
-#     IPython.embed()
+optimizer = torch.optim.Adam(model.parameters())
+model.fit(training_data=Batchifyer(100, 1), optimizer=optimizer, n_steps=10000, keep_best=False)
+
+if __name__ == "__main__":
+    import IPython
+    IPython.embed()
