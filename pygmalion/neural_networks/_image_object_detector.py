@@ -112,7 +112,7 @@ class ImageObjectDetector(NeuralNetworkClassifier):
         # changing axes order and calculating weights
         confidence_pred, position_pred, dimension_pred, class_pred = (
             torch.moveaxis(t, 1, -1) for t in (confidence_pred, position_pred, dimension_pred, class_pred))  # reshape to (N, *, H, W, bboxes_per_cell)
-        weights = torch.softmax(confidence_pred, dim=-1)  # weights of shape (N, H, W, bboxes_per_cell)
+        weights = self._softscale(confidence_pred, dim=-1)  # weights of shape (N, H, W, bboxes_per_cell)
         # Compute losses
         absent = ~presence
         absence_loss = self._weighted_mean(-torch.log(1 - torch.sigmoid(confidence_pred[absent])), weights[absent])
@@ -123,8 +123,8 @@ class ImageObjectDetector(NeuralNetworkClassifier):
             presence_loss = self._weighted_mean(-torch.log(torch.sigmoid(confidence_pred[presence])), weights_presence)
             bboxe_confidence_loss = MSE(torch.sigmoid(confidence_pred[presence]), IoU[presence])
             return (absence_loss + presence_loss + bboxe_confidence_loss 
-                    + MSE(torch.sqrt(position_pred[presence_2d]), torch.sqrt(positions[presence_2d]).unsqueeze(-1), weights=weights_presence_2d)
-                    + MSE(dimension_pred[presence_2d], dimensions[presence_2d].unsqueeze(-1), weights=weights_presence_2d)
+                    + MSE(position_pred[presence_2d], positions[presence_2d].unsqueeze(-1), weights=weights_presence_2d)
+                    + MSE(torch.sqrt(dimension_pred[presence_2d]), torch.sqrt(dimensions[presence_2d]).unsqueeze(-1), weights=weights_presence_2d)
                     + cross_entropy(class_pred.moveaxis(1, -2)[presence],
                                     object_class[presence].unsqueeze(-1).expand(-1, self.bboxes_per_cell),
                                     weights=weights_presence,
@@ -250,6 +250,11 @@ class ImageObjectDetector(NeuralNetworkClassifier):
         # calculating union
         union = (Ah * Aw).unsqueeze(2) + (Bh * Bw).unsqueeze(1) - intersect
         return intersect / (union + eps)
+    
+    @staticmethod
+    def _softscale(X: torch.Tensor, dim: int=0) -> torch.Tensor:
+        X = torch.exp(X)
+        return X / X.max(dim=dim).values.unsqueeze(dim)
 
     @property
     def device(self) -> torch.device:
