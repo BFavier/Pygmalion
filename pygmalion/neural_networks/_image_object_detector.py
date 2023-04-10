@@ -16,6 +16,7 @@ class ImageObjectDetector(NeuralNetworkClassifier):
     def __init__(self, in_channels: int,
                  classes: Iterable[str],
                  features: Iterable[int],
+                 bboxes_per_cell: int = 5,
                  kernel_size: Tuple[int, int] = (3, 3),
                  pooling_size: Optional[Tuple[int, int]] = (2, 2),
                  stride: Tuple[int, int] = (1, 1),
@@ -33,6 +34,7 @@ class ImageObjectDetector(NeuralNetworkClassifier):
         self.downscaling_factor = tuple((s*mp) for s, mp in zip(stride, pooling_size or (1, 1)))
         self.n_stages = len(features)
         self.layers = torch.nn.ModuleList()
+        self.bboxes_per_cell = bboxes_per_cell
         in_features = in_channels
         for out_features in features:
             self.layers.append(
@@ -41,10 +43,10 @@ class ImageObjectDetector(NeuralNetworkClassifier):
             if pooling_size is not None:
                 self.layers.append(torch.nn.MaxPool2d(pooling_size))
             in_features = out_features
-        self.detected = torch.nn.Conv2d(out_features, 1, (1, 1))
-        self.positions = torch.nn.Conv2d(out_features, 2, (1, 1))
-        self.dimensions = torch.nn.Conv2d(out_features, 2, (1, 1))
-        self.objects_class = torch.nn.Conv2d(out_features, len(self.classes), (1, 1))
+        self.detected = torch.nn.Conv2d(out_features, self.bboxes_per_cell, (1, 1))
+        self.positions = torch.nn.Conv2d(out_features, self.bboxes_per_cell*2, (1, 1))
+        self.dimensions = torch.nn.Conv2d(out_features, self.bboxes_per_cell*2, (1, 1))
+        self.objects_class = torch.nn.Conv2d(out_features, self.bboxes_per_cell*len(self.classes), (1, 1))
 
     def forward(self, X: torch.Tensor):
         """
@@ -70,11 +72,13 @@ class ImageObjectDetector(NeuralNetworkClassifier):
         for layer in self.layers:
             X = layer(X)
         N, C, H, W = X.shape
-        detected = torch.sigmoid(self.detected(X).squeeze(1))
-        position = torch.sigmoid(self.positions(X))
-        dimension = torch.log(1 + torch.exp(self.dimensions(X)))
-        object_class = self.objects_class(X)
-        return detected, position, dimension, object_class
+        detected, indexes = self.detected(X).max(dim=1)
+        position, dimension, object_class = (
+            torch.gather(tensor.reshape(N, self.bboxes_per_cell, -1, H, W),
+                         1, indexes.reshape(N, 1, 1, H, W).expand(-1, -1, tensor.shape[1]//self.bboxes_per_cell, -1, -1)
+                         ).squeeze(1)
+            for tensor in (self.positions(X), self.dimensions(X), self.objects_class(X)))
+        return torch.sigmoid(detected), torch.sigmoid(position), torch.log(1 + torch.exp(dimension)), object_class
 
     def loss(self, x: torch.Tensor, detected: torch.Tensor,
              positions: torch.Tensor, dimensions: torch.Tensor,
