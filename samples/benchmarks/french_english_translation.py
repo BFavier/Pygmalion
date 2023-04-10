@@ -29,13 +29,13 @@ class Looper:
 
 
 tokenizer_in = ml.tokenizers.BytePairEncoder()
-tokenizer_in.fit(Looper(df.fr, 1000), max_vocabulary_size=10000)
+tokenizer_in.fit(Looper(df_train.fr, 1000), max_vocabulary_size=10000)
 
 tokenizer_out = ml.tokenizers.BytePairEncoder()
-tokenizer_out.fit(Looper(df.en, 1000), max_vocabulary_size=10000)
+tokenizer_out.fit(Looper(df_train.en, 1000), max_vocabulary_size=10000)
 
 model = ml.neural_networks.TextTranslator(tokenizer_in, tokenizer_out, n_stages=6, projection_dim=64, n_heads=8,
-                                          RPE_radius=8, dropout=0.1,
+                                          RPE_radius=8, dropout=0.1, label_smoothing=0.1,
                                           positional_encoding_type=None)
 model.to("cuda:0")
 
@@ -55,11 +55,11 @@ class Batchifyer:
             indexes = torch.randperm(len(self.x))[:self.batch_size]
             yield (self.x[indexes], self.y[indexes])
 
-train = Batchifyer(df_train, model, batch_size=800, n_batches=1)
-val = Batchifyer(df_val, model, batch_size=800, n_batches=1)
+train = Batchifyer(df_train, model, batch_size=500, n_batches=1)
+val = Batchifyer(df_val, model, batch_size=500, n_batches=1)
 optimizer = torch.optim.Adam(model.parameters(), lr=0., betas=(0.9, 0.98))
 train_losses, val_losses, grad, best_step = model.fit(train, val, optimizer,
-    n_steps=20000, patience=None, keep_best=True,
+    n_steps=100000, patience=None, keep_best=True,
     learning_rate=lambda step: 512**-0.5 * min((step+1)**-0.5, (step+1) * 4000**-1.5))
 
 ml.plot_losses(train_losses, val_losses, grad, best_step);plt.show()
