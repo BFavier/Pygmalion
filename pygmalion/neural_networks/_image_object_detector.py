@@ -42,7 +42,7 @@ class ImageObjectDetector(NeuralNetworkClassifier):
             if pooling_size is not None:
                 self.layers.append(torch.nn.MaxPool2d(pooling_size))
             in_features = out_features
-        self.detected = torch.nn.Conv2d(out_features, self.bboxes_per_cell, (1, 1))
+        self.confidence = torch.nn.Conv2d(out_features, self.bboxes_per_cell, (1, 1))
         self.positions = torch.nn.Conv2d(out_features, self.bboxes_per_cell*2, (1, 1))
         self.dimensions = torch.nn.Conv2d(out_features, self.bboxes_per_cell*2, (1, 1))
         self.objects_class = torch.nn.Conv2d(out_features, self.bboxes_per_cell*len(self.classes), (1, 1))
@@ -57,8 +57,8 @@ class ImageObjectDetector(NeuralNetworkClassifier):
         Returns
         -------
         tuple of torch.Tensor :
-            returns (detected, position, dimension, object_class) with
-            * 'detected' object detection probability in each cell,
+            returns (confidence, position, dimension, object_class) with
+            * 'confidence' predicted IoU of bounding boxe (once sigmoid is applied) in each cell,
               tensor of floats of shape (N, bboxes_per_cell, h, w)
             * 'position' relative (x, y) position of the detected object's center in each cell,
                tensor of floats of shape (N, bboxes_per_cell, 2, h, w)
@@ -71,13 +71,18 @@ class ImageObjectDetector(NeuralNetworkClassifier):
         for layer in self.layers:
             X = layer(X)
         N, C, H, W = X.shape
-        detected = self.detected(X).reshape(N, self.bboxes_per_cell, H, W)
+        confidence = self.confidence(X).reshape(N, self.bboxes_per_cell, H, W)
         position = torch.sigmoid(self.positions(X)).reshape(N, self.bboxes_per_cell, 2, H, W)
         dimension = torch.log(1 + torch.exp(self.dimensions(X))).reshape(N, self.bboxes_per_cell, 2, H, W)
         object_class = self.objects_class(X).reshape(N, self.bboxes_per_cell, len(self.classes), H, W)
-        return detected, position, dimension, object_class
+        return confidence, position, dimension, object_class
 
-    def loss(self, x: torch.Tensor, detected: torch.Tensor,
+    def _weighted_mean(self, tensor: torch.Tensor, weights: torch.Tensor) -> torch.Tensor:
+        """
+        """
+        return (tensor * weights).sum() / weights.sum()
+
+    def loss(self, x: torch.Tensor, presence: torch.Tensor,
              positions: torch.Tensor, dimensions: torch.Tensor,
              object_class: torch.Tensor,
              weights: Optional[torch.Tensor] = None,
@@ -87,43 +92,46 @@ class ImageObjectDetector(NeuralNetworkClassifier):
         ----------
         x : torch.Tensor
             tensor of float images of shape (N, C, H, W)
-        detected : torch.Tensor
+        presence : torch.Tensor
             tensor of booleans of shape (N, h, w) indicating presence of an object in a cell
         positions : torch.Tensor
-            tensor of floats of shape (N, 2, h, w) of (x, y) position of detected objects in the cells
+            tensor of floats of shape (N, 2, h, w) of (x, y) position of objects in the cells
         dimension : torch.Tensor
-            tensor of floats of shape (N, 2, h, w) of (width, height) of detected objects in each cell
+            tensor of floats of shape (N, 2, h, w) of (width, height) of objects in each cell
         object_class : torch.Tensor
             tensor of longs of shape (N, h, w) of target class for each cell
         """
-        detected, positions, dimensions, object_class = (t.to(self.device) for t in (detected, positions, dimensions, object_class))
-        detected_pred, position_pred, dimension_pred, class_pred = self(x)
-        N, H, W = detected.shape
-        # Choose bounding boxe responsible for prediction
+        presence, positions, dimensions, object_class = (t.to(self.device) for t in (presence, positions, dimensions, object_class))
+        confidence_pred, position_pred, dimension_pred, class_pred = self(x)
+        N, H, W = presence.shape
+        # Calculate IoU
         IoU = self._intersect_over_union(
             position_pred[:, :, 0, ...], position_pred[:, :, 1, ...], dimension_pred[:, :, 0, ...], dimension_pred[:, :, 1, ...],
             positions[:, 0, ...].unsqueeze(1), positions[:, 1, ...].unsqueeze(1), dimensions[:, 0, ...].unsqueeze(1), dimensions[:, 1, ...].unsqueeze(1)
-            ).squeeze(2)  # IoU of shape (N, bboxes_per_cell, H, W)
-        max_iou, bboxe_index = IoU.max(dim=1)
-        bboxe_index = torch.where(max_iou == 0., torch.randint(self.bboxes_per_cell, size=bboxe_index.shape), bboxe_index)
-        presence_pred, position_pred, dimension_pred, class_pred = (
-            torch.gather(tensor, 1, bboxe_index.reshape(N, 1, 1, H, W).expand(-1, -1, tensor.shape[2], -1, -1)).squeeze(1)
-            for tensor in (detected_pred.unsqueeze(2), position_pred, dimension_pred, class_pred))
-        presence_pred = presence_pred.squeeze(1)
+            ).squeeze(2).permute(0, 2, 3, 1)  # IoU of shape (N, H, W, bboxes_per_cell)
+        # changing axes order and calculating weights
+        confidence_pred, position_pred, dimension_pred, class_pred = (
+            torch.moveaxis(t, 1, -1) for t in (confidence_pred, position_pred, dimension_pred, class_pred))  # reshape to (N, *, H, W, bboxes_per_cell)
+        weights = torch.softmax(confidence_pred, dim=-1)  # weights of shape (N, H, W, bboxes_per_cell)
         # Compute losses
-        absent = ~detected
-        absence_loss = torch.mean(-torch.log(1 - torch.sigmoid(detected_pred.permute(0, 2, 3, 1)[absent])))
-        if detected.any():
-            p_subset = detected.unsqueeze(1).expand(-1, 2, -1, -1)
-            presence_loss = torch.mean(-torch.log(torch.sigmoid(presence_pred[detected])))
-            bboxe_choice_loss = cross_entropy(detected_pred.permute(0, 2, 3, 1)[detected], bboxe_index[detected])
-            return (absence_loss + presence_loss + bboxe_choice_loss 
-                    + MSE(position_pred[p_subset], positions[p_subset])
-                    + MSE(dimension_pred[p_subset], dimensions[p_subset])
-                    + cross_entropy(class_pred.permute(0, 2, 3, 1)[detected], object_class[detected], class_weights=class_weights))
+        absent = ~presence
+        absence_loss = self._weighted_mean(-torch.log(1 - torch.sigmoid(confidence_pred[absent])), weights[absent])
+        if presence.any():
+            weights_presence = weights[presence]
+            presence_2d = presence.unsqueeze(1).expand(-1, 2, -1, -1)
+            weights_presence_2d = weights.unsqueeze(1).expand(-1, 2, -1, -1, -1)[presence_2d]
+            presence_loss = self._weighted_mean(-torch.log(torch.sigmoid(confidence_pred[presence])), weights_presence)
+            bboxe_confidence_loss = MSE(torch.sigmoid(confidence_pred[presence]), IoU[presence])
+            return (absence_loss + presence_loss + bboxe_confidence_loss 
+                    + MSE(torch.sqrt(position_pred[presence_2d]), torch.sqrt(positions[presence_2d]).unsqueeze(-1), weights=weights_presence_2d)
+                    + MSE(dimension_pred[presence_2d], dimensions[presence_2d].unsqueeze(-1), weights=weights_presence_2d)
+                    + cross_entropy(class_pred.moveaxis(1, -2)[presence],
+                                    object_class[presence].unsqueeze(-1).expand(-1, self.bboxes_per_cell),
+                                    weights=weights_presence,
+                                    class_weights=class_weights))
         else:
             return absence_loss
-    
+
     def predict(self, images: np.ndarray, detection_treshold: float=0.5,
                 threshold_intersect: Optional[float] = 0.6,
                 downscaling_factors: List[int] = [1]) -> List[dict]:
@@ -131,22 +139,22 @@ class ImageObjectDetector(NeuralNetworkClassifier):
         """
         n = len(images)
         predictions = [{"x": [], "y": [], "w": [], "h": [], "class": [],
-                        "detection confidence": [], "class confidence": []}
+                        "bboxe confidence": [], "class confidence": []}
                        for _ in range(n)]
         self.eval()
         X = self._x_to_tensor(images, self.device)
         for df in downscaling_factors:
             with torch.no_grad():
-                detected, position, dimension, object_class = self(F.avg_pool2d(X, kernel_size=(df, df)))
+                confidence, position, dimension, object_class = self(F.avg_pool2d(X, kernel_size=(df, df)))
             h_image, w_image = images.shape[1:3]
             h_cell, w_cell = self.cells_dimensions
-            N, _, h_grid, w_grid = detected.shape
+            N, _, h_grid, w_grid = confidence.shape
             # select most confident bboxe for each cell
-            detected, bboxe_index = detected.max(dim=1)
+            confidence, bboxe_index = confidence.max(dim=1)
             position, dimension, object_class = (
                 torch.gather(tensor, 1, bboxe_index.reshape(N, 1, 1, h_grid, w_grid).expand(-1, -1, tensor.shape[2], -1, -1)).squeeze(1)
                 for tensor in (position, dimension, object_class))
-            detected = torch.sigmoid(detected)
+            confidence = torch.sigmoid(confidence)
             # converting from grid coordinates to pixel coordinates
             grid_pos = torch.stack(torch.meshgrid(torch.arange(0, w_image, w_cell, dtype=position.dtype, device=self.device),
                                 torch.arange(0, h_image, h_cell, dtype=position.dtype, device=self.device),
@@ -155,10 +163,10 @@ class ImageObjectDetector(NeuralNetworkClassifier):
             pixel_position = grid_pos.unsqueeze(0) + position * cell_dimension
             pixel_dimension = dimension * cell_dimension
             # selecting cells with detected objects
-            subset = detected > detection_treshold
+            subset = confidence > detection_treshold
             probabilities, classes = torch.softmax(object_class, dim=1).max(dim=1)
-            for i, (sub, det, pos, dim, prob, cls) in enumerate(zip(subset, detected, pixel_position, pixel_dimension, probabilities, classes)):
-                det = det[sub]
+            for i, (sub, conf, pos, dim, prob, cls) in enumerate(zip(subset, confidence, pixel_position, pixel_dimension, probabilities, classes)):
+                conf = conf[sub]
                 pos = pos.permute(1, 2, 0)[sub]
                 dim = dim.permute(1, 2, 0)[sub]
                 prob = prob[sub]
@@ -168,7 +176,7 @@ class ImageObjectDetector(NeuralNetworkClassifier):
                 predictions[i]["w"].extend(dim[:, 0].cpu().tolist())
                 predictions[i]["h"].extend(dim[:, 1].cpu().tolist())
                 predictions[i]["class"].extend([self.classes[i] for i in cls.cpu().tolist()])
-                predictions[i]["detection confidence"].extend(det.cpu().tolist())
+                predictions[i]["bboxe confidence"].extend(conf.cpu().tolist())
                 predictions[i]["class confidence"].extend(prob.cpu().tolist())
         # applying non max suppression
         if threshold_intersect is not None:
@@ -181,9 +189,10 @@ class ImageObjectDetector(NeuralNetworkClassifier):
         Perform non max suppression
         """
         # read and sort bboxes by increasing confidence
-        x, y, w, h, d = (bboxes[c] for c in ("x", "y", "w", "h", "detection confidence"))
-        indexes = [i for i, v in sorted(enumerate(d), key=lambda x: x[1])]
-        x, y, w, h, d = (torch.tensor([v[i] for i in indexes]).unsqueeze(0) for v in (x, y, w, h, d))
+        x, y, w, h, b, c = (bboxes[c] for c in ("x", "y", "w", "h", "bboxe confidence", "class confidence"))
+        confidence = [v1*v2 for v1, v2 in zip(b, c)]
+        indexes = [i for i, v in sorted(enumerate(confidence), key=lambda x: x[1])]
+        x, y, w, h, b, c = (torch.tensor([v[i] for i in indexes]).unsqueeze(0) for v in (x, y, w, h, b, c))
         # compute cross intersects over union
         IoU = ImageObjectDetector._intersect_over_union(x, y, w, h,
                                                         x, y, w, h)
@@ -244,7 +253,7 @@ class ImageObjectDetector(NeuralNetworkClassifier):
 
     @property
     def device(self) -> torch.device:
-        return self.detected.weight.device
+        return self.confidence.weight.device
 
     def _x_to_tensor(self, x: np.ndarray,
                      device: Optional[torch.device] = None):
@@ -255,7 +264,7 @@ class ImageObjectDetector(NeuralNetworkClassifier):
         grid_h, grid_w = self.cells_dimensions
         n, h, w = x.shape[:3]
         h, w = (h//grid_h, w//grid_w)
-        detected = torch.zeros((n, h, w), dtype=torch.bool)
+        presence = torch.zeros((n, h, w), dtype=torch.bool)
         positions = torch.zeros((n, 2, h, w), dtype=torch.float)
         dimensions = torch.zeros((n, 2, h, w), dtype=torch.float)
         classes = torch.zeros((n, h, w), dtype=torch.long)
@@ -264,21 +273,20 @@ class ImageObjectDetector(NeuralNetworkClassifier):
             C = classes_to_tensor(bboxes["class"], self.classes, device=device)
             i, j = (torch.div(Y, grid_h, rounding_mode="floor").long(), torch.div(X, grid_w, rounding_mode="floor").long())
             py, px = ((Y % grid_h) / grid_h, (X % grid_w) / grid_w)
-            detected[n, i, j] = 1
+            presence[n, i, j] = 1
             positions[n, :, i, j] = torch.stack([px, py], dim=0)
             dimensions[n, :, i, j] = torch.stack([W / grid_w, H / grid_h], dim=0)
             classes[n, i, j] = C
-        return detected, positions, dimensions, classes
+        return presence, positions, dimensions, classes
 
     def data_to_tensor(self, x: np.ndarray, y: List[dict],
-                       weights: Optional[Sequence[float]] = None,
                        class_weights: Optional[Sequence[float]] = None,
                        device: Optional[torch.device] = None, **kwargs) -> tuple:
         """
         """
         images = self._x_to_tensor(x, device, **kwargs)
-        detected, positions, dimensions, classes = self._y_to_tensor(x, y, device, **kwargs)
-        return images, detected, positions, dimensions, classes
+        presence, positions, dimensions, classes = self._y_to_tensor(x, y, device, **kwargs)
+        return images, presence, positions, dimensions, classes
 
     def _tensor_to_y(self, tensor: torch.Tensor) -> List[str]:
         return tensor_to_classes(tensor, self.classes)

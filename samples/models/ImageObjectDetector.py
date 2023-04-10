@@ -19,12 +19,12 @@ class Batchifyer:
             yield model.data_to_tensor(x, y)
 
 
+data = Batchifyer(100, 1)
 optimizer = torch.optim.Adam(model.parameters())
-model.fit(training_data=Batchifyer(100, 1), optimizer=optimizer, n_steps=1000, keep_best=False, learning_rate=1.0E-3)
+model.fit(training_data=data, optimizer=optimizer, n_steps=1000, keep_best=False, learning_rate=1.0E-3)
 
-generator = ml.datasets.generators.ShapesGenerator(10, 1)
-x, y_target = next(iter(generator))
-y_pred = model.predict(x, detection_treshold=0.1)
+x, y_target = data.generator.generate(10)
+y_pred = model.predict(x, detection_treshold=0.5)
 for img, bboxes, bboxes_pred in zip(x, y_target, y_pred):
     f, (ax1, ax2) = plt.subplots(figsize=[10, 5], ncols=2)
     ax1.set_title("predicted")

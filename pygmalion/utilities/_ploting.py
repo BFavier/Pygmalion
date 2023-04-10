@@ -84,8 +84,10 @@ def plot_bounding_boxes(bboxes: dict, ax: matplotlib.axes.Axes,
             The coordinates in pixel of each bboxe corner
         * class : list of str
             The name of the class predicted for eahc bboxe
-        * [confidence : list of float]
+        * [bboxe confidence : list of float]
             The optional confidence of the bounding boxe
+        * [class confidence : list of float]
+            The optional confidence of detected classes
 
     ax : matplotlib.axes.Axes
         The matplotlib axes to draw on
@@ -110,9 +112,11 @@ def plot_bounding_boxes(bboxes: dict, ax: matplotlib.axes.Axes,
                                  facecolor='none')
         if label_class:
             s = boxe_class
-            confidence = bboxes.get("class confidence", None)
-            if confidence is not None:
-                s += f": {confidence[i]:.1%}"
+            bboxe_confidence = bboxes.get("bboxe confidence", None)
+            class_confidence = bboxes.get("class confidence", None)
+            if bboxe_confidence is not None and class_confidence is not None:
+                confidence = class_confidence[i] * bboxe_confidence[i]
+                s += f": {confidence:.1%}"
             ax.text(x1, y1, s, color=boxe_color)
         ax.add_patch(rect)
     ax.set_xticks([])
