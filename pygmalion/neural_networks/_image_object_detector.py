@@ -117,17 +117,15 @@ class ImageObjectDetector(NeuralNetworkClassifier):
         absent = ~presence
         absence_loss = self._weighted_mean(-torch.log(1 - torch.sigmoid(confidence_pred[absent])), weights[absent])
         if presence.any():
-            weights_presence = weights[presence]
             presence_2d = presence.unsqueeze(1).expand(-1, 2, -1, -1)
             weights_presence_2d = weights.unsqueeze(1).expand(-1, 2, -1, -1, -1)[presence_2d]
-            presence_loss = self._weighted_mean(-torch.log(torch.sigmoid(confidence_pred[presence])), weights_presence)
             bboxe_confidence_loss = MSE(torch.sigmoid(confidence_pred[presence]), IoU[presence])
-            return (absence_loss + presence_loss + bboxe_confidence_loss 
+            return (absence_loss + bboxe_confidence_loss 
                     + MSE(position_pred[presence_2d], positions[presence_2d].unsqueeze(-1), weights=weights_presence_2d)
-                    + MSE(torch.sqrt(dimension_pred[presence_2d]), torch.sqrt(dimensions[presence_2d]).unsqueeze(-1), weights=weights_presence_2d)
+                    + MSE(dimension_pred[presence_2d], dimensions[presence_2d].unsqueeze(-1), weights=weights_presence_2d)
                     + cross_entropy(class_pred.moveaxis(1, -2)[presence],
                                     object_class[presence].unsqueeze(-1).expand(-1, self.bboxes_per_cell),
-                                    weights=weights_presence,
+                                    weights=weights[presence],
                                     class_weights=class_weights))
         else:
             return absence_loss
@@ -189,10 +187,9 @@ class ImageObjectDetector(NeuralNetworkClassifier):
         Perform non max suppression
         """
         # read and sort bboxes by increasing confidence
-        x, y, w, h, b, c = (bboxes[c] for c in ("x", "y", "w", "h", "bboxe confidence", "class confidence"))
-        confidence = [v1*v2 for v1, v2 in zip(b, c)]
-        indexes = [i for i, v in sorted(enumerate(confidence), key=lambda x: x[1])]
-        x, y, w, h, b, c = (torch.tensor([v[i] for i in indexes]).unsqueeze(0) for v in (x, y, w, h, b, c))
+        x, y, w, h, b = (bboxes[c] for c in ("x", "y", "w", "h", "bboxe confidence"))
+        indexes = [i for i, v in sorted(enumerate(b), key=lambda x: x[1])]
+        x, y, w, h = (torch.tensor(v).unsqueeze(0) for v in (x, y, w, h))
         # compute cross intersects over union
         IoU = ImageObjectDetector._intersect_over_union(x, y, w, h,
                                                         x, y, w, h)

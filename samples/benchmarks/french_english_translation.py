@@ -35,7 +35,7 @@ tokenizer_out = ml.tokenizers.BytePairEncoder()
 tokenizer_out.fit(Looper(df_train.en, 1000), max_vocabulary_size=10000)
 
 model = ml.neural_networks.TextTranslator(tokenizer_in, tokenizer_out, n_stages=6, projection_dim=64, n_heads=8,
-                                          RPE_radius=8, dropout=0.1, label_smoothing=0.1,
+                                          RPE_radius=8, dropout=0.1,
                                           positional_encoding_type=None)
 model.to("cuda:0")
 

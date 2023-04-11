@@ -10,7 +10,7 @@ class ShapesGenerator:
     """
 
     def __init__(self, batch_size: int, n_batches: int,
-                 image_size: Tuple[int, int] = (256, 256),
+                 image_size: Tuple[int, int] = (128, 128),
                  n_max_shapes: int = 5,
                  radius_fraction: Tuple[float, float] = (0.05, 0.1)):
         """
