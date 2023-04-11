@@ -37,7 +37,7 @@ def load_model(file_path: Union[str, pathlib.Path, IOBase]) -> Model:
             elif not file_path.is_file():
                 raise FileNotFoundError(f"The file does not exist or is not a file: '{file_path}'")
     try:
-        return torch.load(file_path)
+        return torch.load(file_path, map_location="cpu")
     except pickle.UnpicklingError:
         if isinstance(file_path, IOBase):
             file_path.seek(0)
