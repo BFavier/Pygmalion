@@ -59,7 +59,7 @@ train = Batchifyer(df_train, model, batch_size=500, n_batches=1)
 val = Batchifyer(df_val, model, batch_size=500, n_batches=1)
 optimizer = torch.optim.Adam(model.parameters(), lr=0., betas=(0.9, 0.98))
 train_losses, val_losses, grad, best_step = model.fit(train, val, optimizer,
-    n_steps=100000, patience=None, keep_best=True,
+    n_steps=100000, patience=None, keep_best=True, backup_path=path,
     learning_rate=lambda step: 512**-0.5 * min((step+1)**-0.5, (step+1) * 4000**-1.5))
 
 ml.plot_losses(train_losses, val_losses, grad, best_step);plt.show()
