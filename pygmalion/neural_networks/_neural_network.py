@@ -1,6 +1,7 @@
 import io
 import copy
 import pathlib
+import math
 import torch
 from typing import Union, Sequence, Optional, Callable, Iterable, List
 from ._conversions import floats_to_tensor
@@ -58,10 +59,12 @@ class NeuralNetwork(torch.nn.Module, Model):
             learning_rate: Union[float, Callable[[int], float]] = 1.0E-3,
             patience: Optional[int] = None,
             keep_best: bool = True,
-            loss: Optional[Callable] = None,
             L1: Optional[float] = None,
             L2: Optional[float] = None,
-            metric: Optional[Callable] = None,
+            gradient_cliping: Optional[float] = None,
+            backup_path: Optional[str] = None,
+            backup_prefix: str = "model",
+            backup_frequency: int = 10000,
             verbose: bool = True):
         """
         Trains a neural network model.
@@ -91,9 +94,25 @@ class NeuralNetwork(torch.nn.Module, Model):
             If True, the model is checkpointed at each step if there was
             improvement,
             and the best model is loaded back at the end of training
+        L1 : float or None
+            L1 regularization factor
+        L2 : float
+            L2 regularization factor
+        gradient_cliping : float or None
+            if provided, the gradient vector is cliped in the (-gradient_clipping, gradient_clipping) range
+        backup_path : str or path like or None
+            if provided, path where to backup the model (and optimizer) on disk
+        backup_prefix : str
+            prefix of the backup filename (the suffix is the current number step)
+        backup_frequency : int
+            number of steps before each on-disk backup
         verbose : bool
             If True the loss are displayed at each epoch
         """
+        if backup_path is not None:
+            backup_path = pathlib.Path(backup_path)
+            if not backup_path.is_dir():
+                raise NotADirectoryError(f"Backup path is not a valid directory: '{backup_path}'")
         best_step = 0
         best_state = copy.deepcopy(self.state_dict())
         best_metric = None
@@ -134,8 +153,13 @@ class NeuralNetwork(torch.nn.Module, Model):
                     for p in self.parameters():
                         if p.grad is not None:
                             p.grad /= n_batches
+                # gradient cliping
+                if gradient_cliping is not None:
+                    for p in self.parameters():
+                        if p.grad is not None:
+                            p.grad = torch.clip(p.grad, -gradient_cliping, gradient_cliping)
                 # gradient norm
-                grad_norms.append(self._norm((p.grad for p in self.parameters()), 1, average=False).item())
+                grad_norms.append(self._norm((p.grad for p in self.parameters() if p.grad is not None), 1).item())
                 # validation data
                 self.eval()
                 if validation_data is not None:
@@ -163,6 +187,14 @@ class NeuralNetwork(torch.nn.Module, Model):
                         print(f"Step {step}: train loss = {train_loss:.3g}, val loss = {val_loss:.3g}, grad = {grad_norms[-1]:.3g}")
                     else:
                         print(f"Step {step}: train loss = {train_loss:.3g}, grad = {grad_norms[-1]:.3g}")
+                # backup on disk
+                if (backup_path is not None) and (step % backup_frequency == 0) and (step > 0):
+                    dec = math.ceil(math.log10(n_steps))
+                    torch.save(self, backup_path / f"{backup_prefix}_{step:0{dec}}.pth")
+                    torch.save(optimizer, backup_path / f"optimizer_{backup_prefix}_{step:0{dec}}.pth")
+                    if verbose:
+                        print(f"Backed up on disk '{backup_prefix}_{step:0{dec}}.pth'")
+
         except KeyboardInterrupt:
             if verbose:
                 print("Training interrupted by the user")
