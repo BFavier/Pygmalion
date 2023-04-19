@@ -189,7 +189,7 @@ class NeuralNetwork(torch.nn.Module, Model):
                         print(f"Step {step}: train loss = {train_loss:.3g}, grad = {grad_norms[-1]:.3g}")
                 # backup on disk
                 if (backup_path is not None) and (step % backup_frequency == 0) and (step > 0):
-                    dec = math.ceil(math.log10(n_steps))
+                    dec = math.floor(math.log10(n_steps)) + 1
                     torch.save(self, backup_path / f"{backup_prefix}_{step:0{dec}}.pth")
                     torch.save(optimizer, backup_path / f"optimizer_{backup_prefix}_{step:0{dec}}.pth")
                     if verbose:
