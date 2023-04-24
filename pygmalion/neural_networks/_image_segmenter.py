@@ -2,7 +2,7 @@ import torch
 import pandas as pd
 import numpy as np
 from typing import List, Iterable, Tuple, Optional
-from .layers import ConvBlock, Upsampling2d, UPSAMPLING_METHOD
+from .layers import ConvBlock, Upsampling2d, PaddedConv2d, UPSAMPLING_METHOD
 from ._conversions import tensor_to_index
 from ._conversions import longs_to_tensor, images_to_tensor
 from ._conversions import tensor_to_floats
@@ -50,7 +50,7 @@ class ImageSegmenter(NeuralNetworkClassifier):
                  "convolutions": convolutions})
             self.decoder.append(layer)
             in_features = out_features
-        self.output = torch.nn.Conv2d(out_features, len(self.classes), kernel_size)
+        self.output = PaddedConv2d(out_features, len(self.classes), kernel_size)
 
     def forward(self, X: torch.Tensor):
         X = X.to(self.device)
