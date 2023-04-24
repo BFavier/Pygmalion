@@ -76,7 +76,7 @@ class ImageSegmenter(NeuralNetworkClassifier):
     
     @property
     def device(self) -> torch.device:
-        return self.output.weight.device
+        return self.output.conv.weight.device
 
     def _x_to_tensor(self, x: np.ndarray,
                      device: Optional[torch.device] = None):
