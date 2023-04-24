@@ -108,6 +108,11 @@ class NeuralNetwork(torch.nn.Module, Model):
             number of steps before each on-disk backup
         verbose : bool
             If True the loss are displayed at each epoch
+        
+        Returns
+        -------
+        tuple :
+            (train_losses, val_losses, grad_norms, best_step)
         """
         if backup_path is not None:
             backup_path = pathlib.Path(backup_path)
