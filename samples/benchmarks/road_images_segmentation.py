@@ -54,44 +54,24 @@ class Batchifyer:
             if self.data_augmentation:
                 n = len(idx)
                 max_theta = self.max_rotation_angle * (math.pi / 180.0)
-                grid = torch.stack(torch.meshgrid([torch.linspace(-1, 1, w, device=self.device), torch.linspace(-1, 1, h, device=self.device)], indexing="xy"), dim=-1)
+                wh = torch.tensor([w, h], dtype=torch.float32, device=self.device).reshape(1, 1, 1, 2)
+                grid = torch.stack(torch.meshgrid([torch.linspace(-w, w, w, device=self.device), torch.linspace(-h, h, h, device=self.device)], indexing="xy"), dim=-1)
                 theta = torch.rand(n, device=self.device) * (2*max_theta) -  max_theta
                 sin, cos = torch.sin(theta), torch.cos(theta)
                 rot = torch.stack([torch.stack([cos, -sin], dim=-1),
                                    torch.stack([sin, cos], dim=-1)], dim=-2)
                 grid = (rot.reshape(n, 1, 1, 2, 2) @ grid.reshape(1, h, w, 2, 1)).squeeze(-1)
-                # scale = (1 - torch.rand(n, device=self.device) * (1 - self.max_downscaling_factor)) / grid.reshape(n, -1).abs().max(dim=1).values
-                # grid = grid * scale.reshape(n, 1, 1, 1)
-                # delta = (1 - grid.reshape(n, -1, 2).max(dim=1).values)
-                # offset = torch.rand((n, 2), device=self.device) * (2*delta) - delta
-                # grid = grid + offset.reshape(n, 1, 1, 2)
-                X = F.grid_sample(X, grid, mode="bilinear", align_corners=False, padding_mode="border")
-                Y = F.grid_sample(Y.unsqueeze(1).float(), grid, mode="nearest", align_corners=False).squeeze(1).long()
+                scale = (1 - torch.rand(n, device=self.device) * (1 - self.max_downscaling_factor)) / (grid/wh).reshape(n, -1).abs().max(dim=1).values
+                grid = grid * scale.reshape(n, 1, 1, 1)
+                delta = (wh.reshape(1, 2) - grid.reshape(n, -1, 2).max(dim=1).values)
+                offset = torch.rand((n, 2), device=self.device) * (2*delta) - delta
+                grid = grid + offset.reshape(n, 1, 1, 2)
+                grid = grid / wh
+                X = F.grid_sample(X, grid, mode="bilinear", align_corners=True, padding_mode="border")
+                Y = F.grid_sample(Y.unsqueeze(1).float(), grid, mode="nearest", align_corners=True, padding_mode="border").squeeze(1).long()
             yield X, Y
 
 (x_val, y_val), (x_test, y_test) = ml.split(x_test, y_test, weights=[400, 100])
-
-test = Batchifyer(x_test, y_test, batch_size=5, n_batches=1, data_augmentation=True, max_rotation_angle=90)
-for batch in test:
-    for x, y_t in zip(*batch):
-        f, axes = plt.subplots(figsize=[10, 5], ncols=2)
-        for im, ax, title in zip([x, y_t], axes,
-                                ["image", "target"]):
-            if len(im.shape) == 2:
-                h, w = im.shape
-                n, c = colors.shape
-                im = np.take_along_axis(colors.reshape(1, 1, n, c),
-                                        im.cpu().numpy().astype("int").reshape(h, w, 1, 1),
-                                        axis=-2).reshape(h, w, c)
-            else:
-                im = (im.moveaxis(0, -1) * 255).cpu().numpy().astype("uint8")
-            ax.imshow(im)
-            ax.set_title(title)
-            ax.set_xticks([])
-            ax.set_yticks([])
-        f.tight_layout()
-plt.show()
-
 train_data = Batchifyer(x_train, y_train, batch_size=100, n_batches=5, data_augmentation=True, device=device)
 val_data = Batchifyer(x_val, y_val, batch_size=200, n_batches=2, device=device)
 train_losses, val_losses, grad_norms, best_step = model.fit(train_data, val_data,

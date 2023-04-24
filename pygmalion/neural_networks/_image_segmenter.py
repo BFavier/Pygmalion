@@ -50,7 +50,7 @@ class ImageSegmenter(NeuralNetworkClassifier):
                  "convolutions": convolutions})
             self.decoder.append(layer)
             in_features = out_features
-        self.output = torch.nn.Conv2d(out_features, len(self.classes), (1, 1))
+        self.output = torch.nn.Conv2d(out_features, len(self.classes), kernel_size)
 
     def forward(self, X: torch.Tensor):
         X = X.to(self.device)
