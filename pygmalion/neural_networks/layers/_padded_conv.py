@@ -21,7 +21,7 @@ class PaddedConv2d(torch.nn.Module):
             stride=stride, dilation=dilation, groups=groups, bias=bias,
             device=device, dtype=dtype)
         kernel_size = tuple(k + (k-1)*(d-1) for k, d in zip(conv.kernel_size, conv.dilation))
-        padding = [p for dim in kernel_size[::-1] for p in (dim//2, dim//2)]
+        padding = [p for dim in kernel_size[::-1] for p in ((dim-1)//2, (dim-1) - (dim-1)//2)]
         self.padding = torch.nn.ConstantPad2d(padding, 0.)
         self.conv = conv
 

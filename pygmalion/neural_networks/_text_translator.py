@@ -4,7 +4,7 @@ from typing import Union, List, Sequence, Optional, Literal
 from itertools import count
 from warnings import warn
 from .layers.transformers import TransformerEncoder, TransformerDecoder, ATTENTION_TYPE
-from .layers import LearnedPositionalEncoding, SinusoidalPositionalEncoding
+from .layers import LearnedPositionalEncoding, SinusoidalPositionalEncoding, Dropout
 from ._conversions import strings_to_tensor, tensor_to_strings
 from ._conversions import floats_to_tensor
 from ._neural_network import NeuralNetwork
@@ -77,8 +77,8 @@ class TextTranslator(NeuralNetwork):
                                                   embedding_dim)
         self.embedding_output = torch.nn.Embedding(self.tokenizer_output.n_tokens,
                                                 embedding_dim)
-        self.dropout_input = torch.nn.Dropout(dropout) if dropout is not None else None
-        self.dropout_output = torch.nn.Dropout(dropout) if dropout is not None else None
+        self.dropout_input = Dropout(dropout)
+        self.dropout_output = Dropout(dropout)
         if positional_encoding_type == "sinusoidal":
             self.positional_encoding_input = SinusoidalPositionalEncoding()
             self.positional_encoding_output = SinusoidalPositionalEncoding()
@@ -129,8 +129,7 @@ class TextTranslator(NeuralNetwork):
         X = self.embedding_input(X)
         if self.positional_encoding_input is not None:
             X = self.positional_encoding_input(X)
-        if self.dropout_input is not None:
-            X = self.dropout_input(X.reshape(N*L, -1)).reshape(N, L, -1)
+        X = self.dropout_input(X.reshape(N*L, -1)).reshape(N, L, -1)
         X = self.transformer_encoder(X, padding_mask)
         return X
 
@@ -161,8 +160,7 @@ class TextTranslator(NeuralNetwork):
         Y = self.embedding_output(Y)
         if self.positional_encoding_output is not None:
             Y = self.positional_encoding_output(Y)
-        if self.dropout_output is not None:
-            Y = self.dropout_output(Y.reshape(N*L, -1)).reshape(N, L, -1)
+        Y = self.dropout_output(Y.reshape(N*L, -1)).reshape(N, L, -1)
         Y = self.transformer_decoder(Y, encoded, encoded_padding_mask)
         return self.head(Y)
 

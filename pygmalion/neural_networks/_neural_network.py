@@ -5,6 +5,7 @@ import math
 import torch
 from typing import Union, Sequence, Optional, Callable, Iterable, List
 from ._conversions import floats_to_tensor
+from .layers import Dropout
 from pygmalion._model import Model
 
 
@@ -189,7 +190,7 @@ class NeuralNetwork(torch.nn.Module, Model):
                 # message printing
                 if verbose:
                     if val_loss is not None:
-                        print(f"Step {step}: train loss = {train_loss:.3g}, val loss = {val_loss:.3g}, grad = {grad_norms[-1]:.3g}")
+                        print(f"Step {step}: train loss = {train_loss:.3g}, val loss = {val_loss:.3g}, grad = {grad_norms[-1]:.3e}")
                     else:
                         print(f"Step {step}: train loss = {train_loss:.3g}, grad = {grad_norms[-1]:.3g}")
                 # backup on disk
@@ -231,6 +232,19 @@ class NeuralNetwork(torch.nn.Module, Model):
     
     def loss(x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
         raise NotImplementedError()
+    
+    @property
+    def dropout(self) -> Optional[float]:
+        for m in self.modules():
+            if isinstance(m, Dropout):
+                return m.p
+        return None
+
+    @dropout.setter
+    def dropout(self, other: Optional[float]):
+        for m in self.modules():
+            if isinstance(m, Dropout):
+                m.p = other
 
     def _x_to_tensor(self, x: object) -> torch.Tensor:
         raise NotImplementedError()

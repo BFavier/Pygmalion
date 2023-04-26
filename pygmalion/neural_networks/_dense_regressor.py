@@ -1,12 +1,12 @@
 import torch
 import pandas as pd
 import numpy as np
-from typing import Sequence, Union, Iterable, Optional
+from typing import Union, Iterable, Optional
 from ._conversions import floats_to_tensor, tensor_to_floats
 from ._conversions import named_to_tensor, tensor_to_dataframe
 from ._neural_network import NeuralNetwork
 from ._loss_functions import MSE
-from .layers import Activation, Normalizer
+from .layers import Activation, Normalizer, Dropout
 
 
 class DenseRegressor(NeuralNetwork):
@@ -53,8 +53,7 @@ class DenseRegressor(NeuralNetwork):
             if normalize:
                 self.layers.append(Normalizer(out_features))
             self.layers.append(Activation(activation))
-            if dropout is not None:
-                self.layers.append(torch.nn.Dropout(dropout))
+            self.layers.append(Dropout(dropout))
             in_features = out_features
         out_features = 1 if isinstance(target, str) else len(self.target)
         self.output = torch.nn.Linear(in_features, out_features)

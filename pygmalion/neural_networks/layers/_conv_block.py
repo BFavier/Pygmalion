@@ -3,6 +3,7 @@ from typing import Tuple, Optional
 from ._activation import Activation
 from ._normalizer import Normalizer
 from ._padded_conv import PaddedConv2d
+from ._dropout import Dropout2d
 
 class ConvBlock(torch.nn.Module):
     """
@@ -33,13 +34,14 @@ class ConvBlock(torch.nn.Module):
         super().__init__()
         self.layers = torch.nn.ModuleList()
         self.shortcut = torch.nn.Conv2d(in_features, out_features, (1, 1), stride) if residuals else None
-        self.dropout = None if dropout is None else torch.nn.Dropout2d(dropout)
+        self.dropout = Dropout2d(dropout)
         for i in range(1, n_convolutions+1):
-            self.layers.append(PaddedConv2d(in_features, out_features, kernel_size, stride))
+            features = min(in_features, out_features) if (i < n_convolutions) else out_features
+            self.layers.append(PaddedConv2d(in_features, features, kernel_size, stride))
             stride = (1, 1)
-            in_features = out_features
+            in_features = features
             if normalize:
-                self.layers.append(torch.nn.BatchNorm2d(out_features))
+                self.layers.append(torch.nn.BatchNorm2d(features))
             self.layers.append(Activation(activation))
 
     def forward(self, X):
@@ -49,8 +51,7 @@ class ConvBlock(torch.nn.Module):
             X = layer(X)
         if self.shortcut is not None:
             X = X + self.shortcut(input)
-        if self.dropout is not None:
-            X = self.dropout(X)
+        X = self.dropout(X)
         return X
 
     @property

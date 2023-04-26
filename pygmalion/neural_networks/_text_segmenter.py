@@ -2,7 +2,7 @@ import torch
 import pandas as pd
 from typing import Union, List, Optional, Literal, Iterable
 from .layers.transformers import TransformerEncoder, ATTENTION_TYPE
-from .layers import LearnedPositionalEncoding, SinusoidalPositionalEncoding
+from .layers import LearnedPositionalEncoding, SinusoidalPositionalEncoding, Dropout
 from ._conversions import strings_to_tensor, tensor_to_classes, tensor_to_probabilities
 from ._conversions import classes_to_tensor
 from ._neural_network import NeuralNetworkClassifier
@@ -63,7 +63,7 @@ class TextSegmenter(NeuralNetworkClassifier):
         self.tokenizer = tokenizer
         self.embedding = torch.nn.Embedding(self.tokenizer.n_tokens,
                                                   embedding_dim)
-        self.dropout_input = torch.nn.Dropout(dropout) if dropout is not None else None
+        self.dropout_input = Dropout(dropout)
         if positional_encoding_type == "sinusoidal":
             self.positional_encoding = SinusoidalPositionalEncoding()
         elif positional_encoding_type == "learned":
@@ -103,8 +103,7 @@ class TextSegmenter(NeuralNetworkClassifier):
         X = self.embedding(X)
         if self.positional_encoding is not None:
             X = self.positional_encoding(X)
-        if self.dropout_input is not None:
-            X = self.dropout_input(X.reshape(N*L, -1)).reshape(N, L, -1)
+        X = self.dropout_input(X.reshape(N*L, -1)).reshape(N, L, -1)
         X = self.transformer_encoder(X, padding_mask)
         return self.head(X)
 

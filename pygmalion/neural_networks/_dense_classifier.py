@@ -1,11 +1,11 @@
 import torch
 import pandas as pd
-from typing import List, Union, Iterable, Optional, Sequence
+from typing import List, Union, Iterable, Optional
 from ._conversions import classes_to_tensor, tensor_to_classes
 from ._conversions import named_to_tensor, tensor_to_probabilities
 from ._neural_network import NeuralNetworkClassifier
 from ._loss_functions import cross_entropy
-from .layers import Activation, Normalizer
+from .layers import Activation, Normalizer, Dropout
 
 
 class DenseClassifier(NeuralNetworkClassifier):
@@ -39,7 +39,7 @@ class DenseClassifier(NeuralNetworkClassifier):
                 self.layers.append(Normalizer(out_features))
             self.layers.append(Activation(activation))
             if dropout is not None:
-                self.layers.append(torch.nn.Dropout(dropout))
+                self.layers.append(Dropout(dropout))
             in_features = out_features
         out_features = len(self.classes)
         self.output = torch.nn.Linear(in_features, out_features)
