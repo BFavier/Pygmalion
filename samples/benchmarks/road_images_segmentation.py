@@ -26,7 +26,7 @@ y_test = data["test_segmented"]
 
 # Create and train the model
 device = "cuda:0"
-model = nn.ImageSegmenter(3, classes, [16, 32, 64, 128], pooling_size=(2, 2), stride=(2, 2), n_convs_per_block=3, dropout=0.1)
+model = nn.ImageSegmenter(3, classes, [16, 16, 32, 32, 64, 64, 128, 128], pooling_size=(2, 2), kernel_size=(3, 3), n_convs_per_block=1, dropout=None)
 model.to(device)
 
 class Batchifyer:
@@ -36,7 +36,7 @@ class Batchifyer:
                  device: torch.device = torch.device("cpu"),
                  data_augmentation: bool = False,
                  max_rotation_angle: float = 5.0,
-                 max_downscaling_factor: float = 0.9):
+                 max_downscaling_factor: float = 0.95):
         self.x, self.y = model.data_to_tensor(x, y)
         self.batch_size = batch_size
         self.n_batches = n_batches
@@ -68,12 +68,12 @@ class Batchifyer:
                 grid = grid + offset.reshape(n, 1, 1, 2)
                 grid = grid / wh
                 X = F.grid_sample(X, grid, mode="bilinear", align_corners=True, padding_mode="border")
-                Y = F.grid_sample(Y.unsqueeze(1).float(), grid, mode="nearest", align_corners=True, padding_mode="border").squeeze(1).long()
+                Y = F.grid_sample(Y.unsqueeze(1).float(), grid, mode="nearest", align_corners=True, padding_mode="reflection").squeeze(1).long()
             yield X, Y
 
 (x_val, y_val), (x_test, y_test) = ml.split(x_test, y_test, weights=[400, 100])
-train_data = Batchifyer(x_train, y_train, batch_size=100, n_batches=5, data_augmentation=True, device=device)
-val_data = Batchifyer(x_val, y_val, batch_size=200, n_batches=2, device=device)
+train_data = Batchifyer(x_train, y_train, batch_size=100, n_batches=1, data_augmentation=True, device=device)
+val_data = Batchifyer(x_val, y_val, batch_size=100, n_batches=1, device=device)
 train_losses, val_losses, grad_norms, best_step = model.fit(train_data, val_data,
     n_steps=50000, learning_rate=1.0E-4, patience=None, keep_best=True)
 

@@ -101,31 +101,35 @@ def soft_dice_loss(y_pred: torch.Tensor, y_target: torch.Tensor,
     Parameters
     ----------
     y_pred : torch.Tensor
-        A Tensor of float of shape [N_observations, N_classes, ...]
-        The probability of each class for eahc observation
+        A Tensor of float of shape (n, c, *)
+        The probability (pre-softmax) of each class for each observation
     y_target : torch.Tensor
-        A Tensor of long of shape [N_observations, 1, ...]
+        A Tensor of long of shape (n, *)
         The index of the class to be predicted
     weights : None or torch.Tensor
         The individual observation weights (ignored if None)
+        a tensor of floats shape (n,)
     class_weights : None or torch.Tensor
-        If None, all classes are equally weighted
         The class-wise weights (ignored if None)
+        a tensor of shape (c)
 
     Returns
     -------
     torch.Tensor :
         the scalar value of the loss
     """
-    if (weights is not None) or (class_weights is not None):
-        raise NotImplementedError("Weighting in soft_dice_loss is not implemented yet")
+    n, c = y_pred.shape[:2]
     y_target = y_target.to(y_pred.device)
-    n_classes = y_pred.shape[1]
-    pred = F.softmax(y_pred, dim=1)
+    y_pred = F.softmax(y_pred, dim=1)
     eps = 1.0E-5
-    target = F.one_hot(y_target, num_classes=n_classes).permute(0, 3, 1, 2)
-    intersect = torch.sum(pred * target, dim=[2, 3])
-    cardinality = torch.sum(pred + target, dim=[2, 3])
+    target = F.one_hot(y_target, num_classes=c).moveaxis(-1, 1)
+    intersect = y_pred * target
+    cardinality = (y_pred + target)
     dice_coeff = (2.*intersect + eps) / (cardinality + eps)
+    dice_coeff = dice_coeff.reshape(n, c, -1).mean(dim=-1)
+    if weights is not None:
+        dice_coeff = dice_coeff * weights.unsqueeze(1)
+    if class_weights is not None:
+        dice_coeff = dice_coeff * class_weights.unsqueeze(0)
     loss = 1. - torch.mean(dice_coeff)
     return loss
