@@ -7,7 +7,7 @@ model = ml.neural_networks.ImageObjectDetector(1, ["circle", "square"],
                                                features=[8, 16, 32, 64],
                                                bboxes_per_cell=5, kernel_size=(3, 3),
                                                pooling_size=(2, 2), n_convs_per_block=2)
-# model.to("cuda:0")
+model.to("cuda:0")
 
 class Batchifyer:
 

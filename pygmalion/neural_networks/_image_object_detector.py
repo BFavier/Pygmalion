@@ -3,13 +3,12 @@ import pandas as pd
 import numpy as np
 import torch.nn.functional as F
 from typing import List, Sequence, Iterable, Tuple, Optional
-from .layers import ConvBlock
-from .layers import PaddedConv2d
+from .layers.convolutions import ConvolutionalEncoder, PaddedConv2d
 from ._conversions import tensor_to_classes
 from ._conversions import classes_to_tensor, images_to_tensor, floats_to_tensor
 from ._conversions import tensor_to_probabilities
 from ._neural_network import NeuralNetworkClassifier
-from ._loss_functions import cross_entropy, MSE, RMSE
+from ._loss_functions import cross_entropy, RMSE
 
 
 class ImageObjectDetector(NeuralNetworkClassifier):
@@ -19,13 +18,14 @@ class ImageObjectDetector(NeuralNetworkClassifier):
                  features: Iterable[int],
                  bboxes_per_cell: int = 5,
                  kernel_size: Tuple[int, int] = (3, 3),
-                 pooling_size: Optional[Tuple[int, int]] = (2, 2),
+                 pooling_size: Tuple[int, int] = (2, 2),
                  stride: Tuple[int, int] = (1, 1),
                  activation: str = "relu",
                  n_convs_per_block: int = 1,
                  normalize: bool = True,
                  residuals: bool = True,
-                 dropout: Optional[float] = None):
+                 dropout: Optional[float] = None,
+                 low_memory: bool = True):
         """
         Parameters
         ----------
@@ -35,18 +35,13 @@ class ImageObjectDetector(NeuralNetworkClassifier):
         self.cells_dimensions = tuple((s*mp) ** len(features) for s, mp in zip(stride, pooling_size or (1, 1)))
         self.layers = torch.nn.ModuleList()
         self.bboxes_per_cell = bboxes_per_cell
-        in_features = in_channels
-        for out_features in features:
-            self.layers.append(
-                ConvBlock(in_features, out_features, kernel_size, stride, activation,
-                          normalize, residuals, n_convs_per_block, dropout))
-            if pooling_size is not None:
-                self.layers.append(torch.nn.MaxPool2d(pooling_size))
-            in_features = out_features
-        self.confidence = PaddedConv2d(out_features, self.bboxes_per_cell, kernel_size)
-        self.positions = PaddedConv2d(out_features, self.bboxes_per_cell*2, kernel_size)
-        self.dimensions = PaddedConv2d(out_features, self.bboxes_per_cell*2, kernel_size)
-        self.objects_class = PaddedConv2d(out_features, self.bboxes_per_cell*len(self.classes), kernel_size)
+        self.encoder = ConvolutionalEncoder(
+            in_channels, features, kernel_size, pooling_size, stride, activation,
+            n_convs_per_block, normalize, residuals, dropout, low_memory)
+        self.confidence = PaddedConv2d(features[-1], self.bboxes_per_cell, kernel_size)
+        self.positions = PaddedConv2d(features[-1], self.bboxes_per_cell*2, kernel_size)
+        self.dimensions = PaddedConv2d(features[-1], self.bboxes_per_cell*2, kernel_size)
+        self.objects_class = PaddedConv2d(features[-1], self.bboxes_per_cell*len(self.classes), kernel_size)
 
     def forward(self, X: torch.Tensor):
         """
@@ -69,8 +64,7 @@ class ImageObjectDetector(NeuralNetworkClassifier):
               tensor of floats of shape (N, bboxes_per_cell, n_classes, h, w)
         """
         X = X.to(self.device)
-        for layer in self.layers:
-            X = layer(X)
+        X = self.encoder(X)
         N, C, H, W = X.shape
         confidence = torch.sigmoid(self.confidence(X)).reshape(N, self.bboxes_per_cell, H, W)
         position = torch.sigmoid(self.positions(X)).reshape(N, self.bboxes_per_cell, 2, H, W)

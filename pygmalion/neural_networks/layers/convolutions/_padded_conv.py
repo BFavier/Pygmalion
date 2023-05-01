@@ -29,8 +29,7 @@ class PaddedConv2d(torch.nn.Module):
         return self.conv(self.padding(X))
 
     def forward(self, X: torch.Tensor):
-        if self.training:
-            X.requires_grad_(True)  # To ensure that the gradient is backpropagated in the convolution parameters
+        if self.training and X.requires_grad:
             return checkpoint(self._forward, X)
         else:
             return self._forward(X)

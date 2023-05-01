@@ -26,7 +26,7 @@ y_test = data["test_segmented"]
 
 # Create and train the model
 device = "cuda:0"
-model = nn.ImageSegmenter(3, classes, [16, 16, 32, 32, 64, 64, 128, 128], pooling_size=(2, 2), kernel_size=(3, 3), n_convs_per_block=1, dropout=None)
+model = nn.ImageSegmenter(3, classes, [8, 16, 32, 64, 128, 256, 512, 1024], pooling_size=(2, 2), kernel_size=(3, 3), n_convs_per_block=2, dropout=0.1)
 model.to(device)
 
 class Batchifyer:
@@ -55,31 +55,41 @@ class Batchifyer:
                 n = len(idx)
                 max_theta = self.max_rotation_angle * (math.pi / 180.0)
                 wh = torch.tensor([w, h], dtype=torch.float32, device=self.device).reshape(1, 1, 1, 2)
-                grid = torch.stack(torch.meshgrid([torch.linspace(-w, w, w, device=self.device), torch.linspace(-h, h, h, device=self.device)], indexing="xy"), dim=-1)
+                grid = torch.stack(torch.meshgrid([torch.linspace(-w/2, w/2, w, device=self.device),
+                                                   torch.linspace(-h/2, h/2, h, device=self.device)],
+                                   indexing="xy"), dim=-1)
+                # random horizontal flips
+                one = torch.ones(n, device=self.device)
+                factor = torch.stack([torch.where(torch.rand(n, device=self.device) > 0.5, one, -one), one], dim=-1)
+                grid = grid.reshape(1, h, w, 2) * factor.reshape(n, 1, 1, 2)
+                # random rotations
                 theta = torch.rand(n, device=self.device) * (2*max_theta) -  max_theta
                 sin, cos = torch.sin(theta), torch.cos(theta)
                 rot = torch.stack([torch.stack([cos, -sin], dim=-1),
                                    torch.stack([sin, cos], dim=-1)], dim=-2)
-                grid = (rot.reshape(n, 1, 1, 2, 2) @ grid.reshape(1, h, w, 2, 1)).squeeze(-1)
-                scale = (1 - torch.rand(n, device=self.device) * (1 - self.max_downscaling_factor)) / (grid/wh).reshape(n, -1).abs().max(dim=1).values
+                grid = (rot.reshape(n, 1, 1, 2, 2) @ grid.reshape(n, h, w, 2, 1)).squeeze(-1)
+                # random downscaling
+                scale = (1 - torch.rand(n, device=self.device) * (1 - self.max_downscaling_factor)) / (grid*2/wh).reshape(n, -1).abs().max(dim=1).values
                 grid = grid * scale.reshape(n, 1, 1, 1)
-                delta = (wh.reshape(1, 2) - grid.reshape(n, -1, 2).max(dim=1).values)
+                # random offset
+                delta = (wh.reshape(1, 2)/2 - grid.reshape(n, -1, 2).max(dim=1).values)
                 offset = torch.rand((n, 2), device=self.device) * (2*delta) - delta
                 grid = grid + offset.reshape(n, 1, 1, 2)
-                grid = grid / wh
+                # converting back to (-1, 1) range
+                grid = grid*2 / wh
                 X = F.grid_sample(X, grid, mode="bilinear", align_corners=True, padding_mode="border")
                 Y = F.grid_sample(Y.unsqueeze(1).float(), grid, mode="nearest", align_corners=True, padding_mode="reflection").squeeze(1).long()
             yield X, Y
 
 (x_val, y_val), (x_test, y_test) = ml.split(x_test, y_test, weights=[400, 100])
-train_data = Batchifyer(x_train, y_train, batch_size=100, n_batches=1, data_augmentation=True, device=device)
-val_data = Batchifyer(x_val, y_val, batch_size=100, n_batches=1, device=device)
+train_data = Batchifyer(x_train, y_train, batch_size=100, n_batches=4, data_augmentation=True, device=device)
+val_data = Batchifyer(x_val, y_val, batch_size=100, n_batches=4, device=device)
 train_losses, val_losses, grad_norms, best_step = model.fit(train_data, val_data,
     n_steps=50000, learning_rate=1.0E-4, patience=None, keep_best=True)
 
 # Plot results
 ml.plot_losses(train_losses, val_losses, grad_norms, best_step)
-y_predicted = model.predict(x_test)
+y_predicted = model.predict(x_test[:10])
 for x, y_t, y_p in zip(x_test[:10], y_test[:10], y_predicted[:10]):
     f, axes = plt.subplots(figsize=[15, 5], ncols=3)
     for im, ax, title in zip([x, y_p, y_t], axes,

@@ -1,8 +1,8 @@
 import torch
 import pandas as pd
 import numpy as np
-from typing import Union, List, Iterable, Tuple, Optional
-from .layers import ConvBlock
+from typing import List, Iterable, Tuple, Optional
+from .layers.convolutions import ConvolutionalEncoder
 from ._conversions import tensor_to_classes
 from ._conversions import classes_to_tensor, images_to_tensor
 from ._conversions import tensor_to_probabilities
@@ -16,34 +16,28 @@ class ImageClassifier(NeuralNetworkClassifier):
                  classes: Iterable[str],
                  features: Iterable[int],
                  kernel_size: Tuple[int, int] = (3, 3),
-                 pooling_size: Optional[Tuple[int, int]] = (2, 2),
+                 pooling_size: Tuple[int, int] = (2, 2),
                  stride: Tuple[int, int] = (1, 1),
                  activation: str = "relu",
                  n_convs_per_block: int = 1,
                  normalize: bool = True,
                  residuals: bool = True,
-                 dropout: Optional[float] = None):
+                 dropout: Optional[float] = None,
+                 low_memory: bool = True):
         """
         Parameters
         ----------
         ...
         """
         super().__init__(classes)
-        self.layers = torch.nn.ModuleList()
-        in_features = in_channels
-        for out_features in features:
-            self.layers.append(
-                ConvBlock(in_features, out_features, kernel_size, stride, activation,
-                          normalize, residuals, n_convs_per_block, dropout))
-            if pooling_size is not None:
-                self.layers.append(torch.nn.MaxPool2d(pooling_size))
-            in_features = out_features
-        self.output = torch.nn.Linear(out_features, len(self.classes))
+        self.encoder = ConvolutionalEncoder(
+            in_channels, features, kernel_size, pooling_size, stride, activation,
+            n_convs_per_block, normalize, residuals, dropout, low_memory)
+        self.output = torch.nn.Linear(features[-1], len(self.classes))
 
     def forward(self, X: torch.Tensor):
         X = X.to(self.device)
-        for layer in self.layers:
-            X = layer(X)
+        X = self.encoder(X)
         N, C, H, W = X.shape
         X = X.reshape(N, C, -1).mean(dim=-1)
         return self.output(X)

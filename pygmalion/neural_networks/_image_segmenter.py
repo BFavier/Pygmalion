@@ -2,12 +2,13 @@ import torch
 import pandas as pd
 import numpy as np
 from typing import List, Iterable, Tuple, Optional
-from .layers import ConvBlock, Upsampling2d, PaddedConv2d, UPSAMPLING_METHOD
+from .layers.convolutions import ConvBlock, Upsampling2d, PaddedConv2d, UPSAMPLING_METHOD
+from .layers.convolutions import ConvolutionalEncoder, ConvolutionalDecoder
 from ._conversions import tensor_to_index
 from ._conversions import longs_to_tensor, images_to_tensor
 from ._conversions import tensor_to_floats
 from ._neural_network import NeuralNetworkClassifier
-from ._loss_functions import cross_entropy
+from ._loss_functions import cross_entropy, soft_dice_loss
 
 
 class ImageSegmenter(NeuralNetworkClassifier):
@@ -23,60 +24,49 @@ class ImageSegmenter(NeuralNetworkClassifier):
                  normalize: bool = True,
                  residuals: bool = True,
                  upsampling_method: UPSAMPLING_METHOD = "nearest",
-                 dropout: Optional[float] = None):
+                 dropout: Optional[float] = None,
+                 entropy_dice_mixture: float = 0.9,
+                 low_memory: bool = True):
         """
         Parameters
         ----------
         ...
         """
         super().__init__(classes)
-        self.encoder = torch.nn.ModuleList()
+        self.entropy_dice_mixture = entropy_dice_mixture
         scale_factor = tuple(a*b for a, b in zip(stride, pooling_size or (1, 1)))
-        in_features = in_channels
-        for out_features in features:
-            layer = torch.nn.ModuleDict(
-                {"convolutions": ConvBlock(in_features, out_features, kernel_size, stride, activation,
-                                           normalize, residuals, n_convs_per_block, dropout),
-                 "downsampling": torch.nn.MaxPool2d(pooling_size) if pooling_size is not None else None})
-            self.encoder.append(layer)
-            in_features = out_features
-        self.decoder = torch.nn.ModuleList()
-        for out_features, add_features in zip(features[::-1], features[-2::-1]+[in_channels]):
-            convolutions = ConvBlock(in_features+add_features, out_features,
-                                     kernel_size, (1, 1), activation, normalize,
-                                     residuals, n_convs_per_block, dropout)
-            layer = torch.nn.ModuleDict(
-                {"upsampling": Upsampling2d(scale_factor, method=upsampling_method) if scale_factor != (1, 1) else None,
-                 "convolutions": convolutions})
-            self.decoder.append(layer)
-            in_features = out_features
-        self.output = PaddedConv2d(out_features, len(self.classes), kernel_size)
+        self.encoder = ConvolutionalEncoder(in_channels, features, kernel_size,
+                                            pooling_size, stride, activation,
+                                            n_convs_per_block, normalize,
+                                            residuals, dropout, low_memory)
+        self.intermediate = ConvBlock(
+            features[-1], features[-1], kernel_size, stride, activation,
+            normalize, residuals, n_convs_per_block, dropout)
+        self.decoder = ConvolutionalDecoder(features[-1], features[::-1], features[::-1],
+                                            kernel_size, scale_factor, upsampling_method,
+                                            activation, n_convs_per_block, normalize,
+                                            residuals, dropout, low_memory)
+        self.output = torch.nn.Conv2d(features[0], len(self.classes), (1, 1))
 
     def forward(self, X: torch.Tensor):
         X = X.to(self.device)
         encoded = []
-        for layer in self.encoder:
-            encoded.append(X)
-            convolutions, downsampling = layer["convolutions"], layer["downsampling"], 
-            X = convolutions(X)
-            if downsampling is not None:
-                X = downsampling(X)
-        for layer, feature_map in zip(self.decoder, encoded[::-1]):
-            upsampling, convolutions = layer["upsampling"], layer["convolutions"]
-            upsampled = upsampling(X) if upsampling is not None else X
-            X = torch.cat([feature_map, upsampled], dim=1)
-            X = convolutions(X)
+        X = self.encoder(X, encoded)
+        X = self.intermediate(X)
+        X = self.decoder(X, encoded[::-1])
         return self.output(X)
 
     def loss(self, x: torch.Tensor, y_target: torch.Tensor,
              weights: Optional[torch.Tensor] = None,
              class_weights: Optional[torch.Tensor] = None):
+        assert 0.0 <= self.entropy_dice_mixture <= 1.0
+        alpha = self.entropy_dice_mixture
         y_pred = self(x)
-        return cross_entropy(y_pred, y_target, weights, class_weights)
-    
+        return alpha * cross_entropy(y_pred, y_target, weights, class_weights) + (1-alpha) * soft_dice_loss(y_pred, y_target, weights, class_weights)
+
     @property
     def device(self) -> torch.device:
-        return self.output.conv.weight.device
+        return self.output.weight.device
 
     def _x_to_tensor(self, x: np.ndarray,
                      device: Optional[torch.device] = None):

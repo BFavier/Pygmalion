@@ -1,9 +1,10 @@
 import torch
 from typing import Tuple, Optional
-from ._activation import Activation
-from ._normalizer import Normalizer
+from pygmalion.neural_networks.layers._activation import Activation
+from pygmalion.neural_networks.layers._normalizer import Normalizer
+from pygmalion.neural_networks.layers._dropout import Dropout2d
 from ._padded_conv import PaddedConv2d
-from ._dropout import Dropout2d
+
 
 class ConvBlock(torch.nn.Module):
     """
@@ -14,7 +15,8 @@ class ConvBlock(torch.nn.Module):
                  kernel_size: Tuple[int, int], stride: Tuple[int, int] = (1, 1),
                  activation: str = "relu", normalize: bool=True,
                  residuals: bool = True, n_convolutions: int = 1,
-                 dropout: Optional[float] = None):
+                 dropout: Optional[float] = None,
+                 intermediate_features: Optional[int] = None):
         """
         Parameters
         ----------
@@ -33,25 +35,28 @@ class ConvBlock(torch.nn.Module):
         """
         super().__init__()
         self.layers = torch.nn.ModuleList()
-        self.shortcut = torch.nn.Conv2d(in_features, out_features, (1, 1), stride) if residuals else None
         self.dropout = Dropout2d(dropout)
+        self.shortcut = torch.nn.Conv2d(in_features, out_features, (1, 1), stride) if residuals else None
         for i in range(1, n_convolutions+1):
-            features = min(in_features, out_features) if (i < n_convolutions) else out_features
+            if (i < n_convolutions):
+                features = (intermediate_features or max(in_features, out_features))
+            else:
+                features = out_features
             self.layers.append(PaddedConv2d(in_features, features, kernel_size, stride))
-            stride = (1, 1)
-            in_features = features
             if normalize:
                 self.layers.append(torch.nn.BatchNorm2d(features))
             self.layers.append(Activation(activation))
+            stride = (1, 1)
+            in_features = features
 
     def forward(self, X):
         X = X.to(self.device)
         input = X
         for layer in self.layers:
             X = layer(X)
+        X = self.dropout(X)
         if self.shortcut is not None:
             X = X + self.shortcut(input)
-        X = self.dropout(X)
         return X
 
     @property
