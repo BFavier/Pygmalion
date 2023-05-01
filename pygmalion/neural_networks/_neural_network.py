@@ -7,6 +7,7 @@ from typing import Union, Sequence, Optional, Callable, Iterable, List
 from ._conversions import floats_to_tensor
 from .layers import Dropout
 from pygmalion._model import Model
+from datetime import datetime
 
 
 class NeuralNetwork(torch.nn.Module, Model):
@@ -189,10 +190,11 @@ class NeuralNetwork(torch.nn.Module, Model):
                     break
                 # message printing
                 if verbose:
+                    time = datetime.now().strftime("[%Y/%m/%d-%H:%M:%S]")
                     if val_loss is not None:
-                        print(f"Step {step}: train loss = {train_loss:.3g}, val loss = {val_loss:.3g}, grad = {grad_norms[-1]:.3e}")
+                        print(f"{time} Step {step}: train loss = {train_loss:.3g}, val loss = {val_loss:.3g}, grad = {grad_norms[-1]:.3e}")
                     else:
-                        print(f"Step {step}: train loss = {train_loss:.3g}, grad = {grad_norms[-1]:.3e}")
+                        print(f"{time} Step {step}: train loss = {train_loss:.3g}, grad = {grad_norms[-1]:.3e}")
                 # backup on disk
                 if (backup_path is not None) and (step % backup_frequency == 0) and (step > 0):
                     dec = math.floor(math.log10(n_steps)) + 1
