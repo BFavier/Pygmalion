@@ -26,7 +26,8 @@ y_test = data["test_segmented"]
 
 # Create and train the model
 device = "cuda:0"
-model = nn.ImageSegmenter(3, classes, [8, 16, 32, 64, 128, 256, 512, 1024], pooling_size=(2, 2), kernel_size=(3, 3), n_convs_per_block=2, dropout=0.1)
+model = nn.ImageSegmenter(3, classes, [16, 32, 64, 128, 256, 512], pooling_size=(2, 2), kernel_size=(3, 3),
+                          n_convs_per_block=2, dropout=0.5, low_memory=True, upsampling_method="nearest", entropy_dice_mixture=1.0)
 model.to(device)
 
 class Batchifyer:
@@ -82,10 +83,10 @@ class Batchifyer:
             yield X, Y
 
 (x_val, y_val), (x_test, y_test) = ml.split(x_test, y_test, weights=[400, 100])
-train_data = Batchifyer(x_train, y_train, batch_size=100, n_batches=4, data_augmentation=True, device=device)
-val_data = Batchifyer(x_val, y_val, batch_size=100, n_batches=4, device=device)
+train_data = Batchifyer(x_train, y_train, batch_size=70, n_batches=1, data_augmentation=True, device=device)
+val_data = Batchifyer(x_val, y_val, batch_size=70, n_batches=3, device=device)
 train_losses, val_losses, grad_norms, best_step = model.fit(train_data, val_data,
-    n_steps=50000, learning_rate=1.0E-4, patience=None, keep_best=True)
+    n_steps=50000, learning_rate=1.0E-4, patience=None, keep_best=True, L2=0.1)
 
 # Plot results
 ml.plot_losses(train_losses, val_losses, grad_norms, best_step)
