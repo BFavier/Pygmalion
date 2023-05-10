@@ -86,7 +86,7 @@ class Batchifyer:
 train_data = Batchifyer(x_train, y_train, batch_size=50, n_batches=1, data_augmentation=True)
 val_data = Batchifyer(x_val, y_val, batch_size=100, n_batches=1)
 train_losses, val_losses, grad_norms, best_step = model.fit(train_data, val_data,
-    n_steps=50000, learning_rate=1.0E-4, patience=None, keep_best=True, L2=0.3)
+    n_steps=15000, learning_rate=1.0E-4, patience=None, keep_best=True, L2=0.3)
 
 # Plot results
 ml.plot_losses(train_losses, val_losses, grad_norms, best_step)
