@@ -77,16 +77,16 @@ class Batchifyer:
                 offset = torch.rand((n, 2), device=self.device) * (2*delta) - delta
                 grid = grid + offset.reshape(n, 1, 1, 2)
                 # converting back to (-1, 1) range
-                grid = grid*2 / wh
+                grid = torch.clip(grid*2 / wh, -1, 1)
                 X = F.grid_sample(X, grid, mode="bilinear", align_corners=True, padding_mode="border")
                 Y = F.grid_sample(Y.unsqueeze(1).float(), grid, mode="nearest", align_corners=True, padding_mode="reflection").squeeze(1).long()
             yield X, Y
 
 (x_val, y_val), (x_test, y_test) = ml.split(x_test, y_test, weights=[400, 100])
-train_data = Batchifyer(x_train, y_train, batch_size=70, n_batches=1, data_augmentation=True, device=device)
-val_data = Batchifyer(x_val, y_val, batch_size=70, n_batches=3, device=device)
+train_data = Batchifyer(x_train, y_train, batch_size=50, n_batches=1, data_augmentation=True)
+val_data = Batchifyer(x_val, y_val, batch_size=100, n_batches=1)
 train_losses, val_losses, grad_norms, best_step = model.fit(train_data, val_data,
-    n_steps=50000, learning_rate=1.0E-4, patience=None, keep_best=True, L2=0.1)
+    n_steps=50000, learning_rate=1.0E-4, patience=None, keep_best=True, L2=0.3)
 
 # Plot results
 ml.plot_losses(train_losses, val_losses, grad_norms, best_step)

@@ -60,6 +60,7 @@ class ImageSegmenter(NeuralNetworkClassifier):
              weights: Optional[torch.Tensor] = None,
              class_weights: Optional[torch.Tensor] = None):
         assert 0.0 <= self.entropy_dice_mixture <= 1.0
+        assert ((0 <= y_target) & (y_target < len(self.classes))).all()
         alpha = self.entropy_dice_mixture
         y_pred = self(x)
         return alpha * cross_entropy(y_pred, y_target, weights, class_weights) + (1-alpha) * soft_dice_loss(y_pred, y_target, weights, class_weights)

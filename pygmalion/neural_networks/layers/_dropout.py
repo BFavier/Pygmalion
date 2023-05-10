@@ -22,7 +22,7 @@ class Dropout(torch.nn.Module):
             tensor of shape (*)
         """
         if self.p is not None:
-            return F.dropout2d(X, self.p, self.training)
+            return F.dropout(X, self.p, self.training)
         else:
             return X
 

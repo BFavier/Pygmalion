@@ -6,7 +6,7 @@ from ._conversions import floats_to_tensor, tensor_to_floats
 from ._conversions import named_to_tensor, tensor_to_dataframe
 from ._neural_network import NeuralNetwork
 from ._loss_functions import MSE
-from .layers import Activation, Normalizer, Dropout
+from .layers import Activation, Normalizer, FeaturesNorm, Dropout
 
 
 class DenseRegressor(NeuralNetwork):
@@ -46,24 +46,21 @@ class DenseRegressor(NeuralNetwork):
         self.target = target if isinstance(target, str) else tuple(target)
         self.layers = torch.nn.ModuleList()
         in_features = len(inputs)
-        if normalize:
-            self.layers.append(Normalizer(in_features, affine=False))
+        self.input_normalizer = Normalizer(1, in_features, affine=False)
         for out_features in hidden_layers:
             self.layers.append(torch.nn.Linear(in_features, out_features))
             if normalize:
-                self.layers.append(Normalizer(out_features))
+                self.layers.append(FeaturesNorm(1, out_features))
             self.layers.append(Activation(activation))
             self.layers.append(Dropout(dropout))
             in_features = out_features
         out_features = 1 if isinstance(target, str) else len(self.target)
         self.output = torch.nn.Linear(in_features, out_features)
-        if normalize:
-            self.target_norm = Normalizer(out_features, affine=False)
-        else:
-            self.target_norm = None
+        self.target_normalizer = Normalizer(1, out_features, affine=False)
 
     def forward(self, X: torch.Tensor):
         X = X.to(self.device)
+        X = self.input_normalizer(X)
         for layer in self.layers:
             X = layer(X)
         return self.output(X)
@@ -71,8 +68,7 @@ class DenseRegressor(NeuralNetwork):
     def loss(self, x: torch.Tensor, y_target: torch.Tensor,
              weights: Optional[torch.Tensor] = None):
         y_pred = self(x)
-        if self.target_norm is not None:
-            y_target = self.target_norm(y_target)
+        y_target = self.target_normalizer(y_target)
         return MSE(y_pred, y_target, weights)
 
     @property
@@ -89,8 +85,8 @@ class DenseRegressor(NeuralNetwork):
         return named_to_tensor(y, target, device=device)
 
     def _tensor_to_y(self, tensor: torch.Tensor) -> np.ndarray:
-        if self.target_norm is not None:
-            tensor = self.target_norm.unscale(tensor)
+        if self.target_normalizer is not None:
+            tensor = self.target_normalizer.unscale(tensor)
         if isinstance(self.target, str):
             return tensor_to_floats(tensor).reshape(-1)
         else:
