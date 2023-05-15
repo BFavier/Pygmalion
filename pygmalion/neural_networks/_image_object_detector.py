@@ -3,6 +3,7 @@ import pandas as pd
 import numpy as np
 import torch.nn.functional as F
 from typing import List, Sequence, Iterable, Tuple, Optional
+from itertools import count
 from .layers.convolutions import ConvolutionalEncoder, PaddedConv2d
 from ._conversions import tensor_to_classes
 from ._conversions import classes_to_tensor, images_to_tensor, floats_to_tensor
@@ -32,7 +33,8 @@ class ImageObjectDetector(NeuralNetworkClassifier):
         ...
         """
         super().__init__(classes)
-        self.cells_dimensions = tuple((s*mp) ** len(features) for s, mp in zip(stride, pooling_size or (1, 1)))
+        self.downsampling_window = tuple((s*mp) for s, mp in zip(stride or (1, 1), pooling_size or (1, 1)))
+        self.cells_dimensions = tuple(dw ** len(features) for dw in self.downsampling_window)
         self.layers = torch.nn.ModuleList()
         self.bboxes_per_cell = bboxes_per_cell
         self.encoder = ConvolutionalEncoder(
@@ -127,19 +129,21 @@ class ImageObjectDetector(NeuralNetworkClassifier):
 
     def predict(self, images: np.ndarray, detection_treshold: float=0.5,
                 threshold_intersect: Optional[float] = 0.6,
-                downscaling_factors: List[int] = [1]) -> List[dict]:
+                multiscale: bool = False) -> List[dict]:
         """
         """
-        n = len(images)
+        n, h_image, w_image = images.shape[:3]
         predictions = [{"x": [], "y": [], "w": [], "h": [], "class": [],
                         "bboxe confidence": [], "class confidence": []}
                        for _ in range(n)]
         self.eval()
         X = self._x_to_tensor(images, self.device)
-        for df in downscaling_factors:
+        for i in count():
+            h_down, w_down = tuple(s**i for s in self.downsampling_window)
+            if any(s // d == 0 for s, d in zip((h_image, w_image), (h_down, w_down))):
+                break
             with torch.no_grad():
-                confidence, position, dimension, object_class = self(F.avg_pool2d(X, kernel_size=(df, df)))
-            h_image, w_image = images.shape[1:3]
+                confidence, position, dimension, object_class = self(F.avg_pool2d(X, kernel_size=(h_down, w_down)))
             h_cell, w_cell = self.cells_dimensions
             N, _, h_grid, w_grid = confidence.shape
             # select most confident bboxe for each cell
@@ -148,9 +152,10 @@ class ImageObjectDetector(NeuralNetworkClassifier):
                 torch.gather(tensor, 1, bboxe_index.reshape(N, 1, 1, h_grid, w_grid).expand(-1, -1, tensor.shape[2], -1, -1)).squeeze(1)
                 for tensor in (position, dimension, object_class))
             # converting from grid coordinates to pixel coordinates
-            grid_pos = torch.stack(torch.meshgrid(torch.arange(0, w_image, w_cell, dtype=position.dtype, device=self.device),
-                                torch.arange(0, h_image, h_cell, dtype=position.dtype, device=self.device),
-                                indexing="xy"), dim=0)
+            grid_pos = torch.stack(torch.meshgrid(torch.arange(0, w_image, w_cell*w_down, dtype=position.dtype, device=self.device),
+                                                  torch.arange(0, h_image, h_cell*h_down, dtype=position.dtype, device=self.device),
+                                                  indexing="xy"),
+                                   dim=0)
             cell_dimension = torch.tensor([w_cell, h_cell], dtype=torch.float, device=self.device).reshape(1, 2, 1, 1)
             pixel_position = grid_pos.unsqueeze(0) + position * cell_dimension
             pixel_dimension = dimension * cell_dimension
@@ -170,6 +175,8 @@ class ImageObjectDetector(NeuralNetworkClassifier):
                 predictions[i]["class"].extend([self.classes[i] for i in cls.cpu().tolist()])
                 predictions[i]["bboxe confidence"].extend(conf.cpu().tolist())
                 predictions[i]["class confidence"].extend(prob.cpu().tolist())
+            if not multiscale:
+                break
         # applying non max suppression
         if threshold_intersect is not None:
             predictions = [self._non_max_suppression(bboxes, threshold_intersect) for bboxes in predictions]
