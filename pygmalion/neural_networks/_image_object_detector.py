@@ -255,23 +255,23 @@ class ImageObjectDetector(NeuralNetworkClassifier):
                      device: Optional[torch.device] = None):
         return images_to_tensor(x, device=device)
 
-    def _y_to_tensor(self, x: np.ndarray, y: Iterable[dict],
+    def _y_to_tensor(self, y: Iterable[dict], image_h: int, image_w: int,
                      device: Optional[torch.device] = None) -> torch.Tensor:
-        grid_h, grid_w = self.cells_dimensions
-        n, h, w = x.shape[:3]
-        h, w = (h//grid_h, w//grid_w)
-        presence = torch.zeros((n, h, w), dtype=torch.bool)
-        positions = torch.zeros((n, 2, h, w), dtype=torch.float)
-        dimensions = torch.zeros((n, 2, h, w), dtype=torch.float)
-        classes = torch.zeros((n, h, w), dtype=torch.long)
+        n = len(y)
+        cell_h, cell_w = self.cells_dimensions
+        grid_h, grid_w = (image_h//cell_h, image_w//cell_w)
+        presence = torch.zeros((n, grid_h, grid_w), dtype=torch.bool)
+        positions = torch.zeros((n, 2, grid_h, grid_w), dtype=torch.float)
+        dimensions = torch.zeros((n, 2, grid_h, grid_w), dtype=torch.float)
+        classes = torch.zeros((n, grid_h, grid_w), dtype=torch.long)
         for n, bboxes in enumerate(y):
             X, Y, W, H = (floats_to_tensor(bboxes[v]) for v in ("x", "y", "w", "h"))
             C = classes_to_tensor(bboxes["class"], self.classes, device=device)
-            i, j = (torch.div(Y, grid_h, rounding_mode="floor").long(), torch.div(X, grid_w, rounding_mode="floor").long())
-            py, px = ((Y % grid_h) / grid_h, (X % grid_w) / grid_w)
+            i, j = (torch.div(Y, cell_h, rounding_mode="floor").long(), torch.div(X, cell_w, rounding_mode="floor").long())
+            py, px = ((Y % cell_h) / cell_h, (X % cell_w) / cell_w)
             presence[n, i, j] = 1
             positions[n, :, i, j] = torch.stack([px, py], dim=0)
-            dimensions[n, :, i, j] = torch.stack([W / grid_w, H / grid_h], dim=0)
+            dimensions[n, :, i, j] = torch.stack([W / cell_w, H / cell_h], dim=0)
             classes[n, i, j] = C
         return presence, positions, dimensions, classes
 
@@ -281,7 +281,8 @@ class ImageObjectDetector(NeuralNetworkClassifier):
         """
         """
         images = self._x_to_tensor(x, device, **kwargs)
-        presence, positions, dimensions, classes = self._y_to_tensor(x, y, device, **kwargs)
+        h, w = x.shape[1:3]
+        presence, positions, dimensions, classes = self._y_to_tensor(y, h, w, device, **kwargs)
         return images, presence, positions, dimensions, classes
 
     def _tensor_to_y(self, tensor: torch.Tensor) -> List[str]:
