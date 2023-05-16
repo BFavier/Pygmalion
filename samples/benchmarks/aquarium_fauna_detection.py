@@ -20,7 +20,7 @@ bboxes = [{"class": [classes[i] for i in data["class_indexes"][image_indexes == 
             **{k: data[k][image_indexes == i] for k in ("x", "y", "w", "h")}}
            for i in range(len(images))]
 
-model = ml.neural_networks.ImageObjectDetector(3, classes, [8, 16, 32, 64, 128], n_convs_per_block=1, dropout=None)
+model = ml.neural_networks.ImageObjectDetector(3, classes, [8, 16, 32, 64, 128], n_convs_per_block=2, dropout=0.1)
 model.to("cuda:0")
 
 class Batchifyer:
@@ -75,14 +75,14 @@ class Batchifyer:
                     # converting bboxe coordinates
                     wh = wh.reshape(1, 2)
                     coords = [tuple(Yb[k] for k in "xywh") for Yb in Y]
-                    corners = [torch.stack([torch.stack([torch.tensor(x) - torch.tensor(w)/2,
-                                                         torch.tensor(y) - torch.tensor(h)/2], dim=-1)/wh,
-                                            torch.stack([torch.tensor(x) + torch.tensor(w)/2,
-                                                         torch.tensor(y) - torch.tensor(h)/2], dim=-1)/wh,
-                                            torch.stack([torch.tensor(x) + torch.tensor(w)/2,
-                                                         torch.tensor(y) + torch.tensor(h)/2], dim=-1)/wh,
-                                            torch.stack([torch.tensor(x) - torch.tensor(w)/2,
-                                                         torch.tensor(y) + torch.tensor(h)/2], dim=-1)/wh], dim=1)
+                    corners = [torch.stack([torch.stack([torch.tensor(x, dtype=torch.float) - torch.tensor(w, dtype=torch.float)/2,
+                                                         torch.tensor(y, dtype=torch.float) - torch.tensor(h, dtype=torch.float)/2], dim=-1)/wh,
+                                            torch.stack([torch.tensor(x, dtype=torch.float) + torch.tensor(w, dtype=torch.float)/2,
+                                                         torch.tensor(y, dtype=torch.float) - torch.tensor(h, dtype=torch.float)/2], dim=-1)/wh,
+                                            torch.stack([torch.tensor(x, dtype=torch.float) + torch.tensor(w, dtype=torch.float)/2,
+                                                         torch.tensor(y, dtype=torch.float) + torch.tensor(h, dtype=torch.float)/2], dim=-1)/wh,
+                                            torch.stack([torch.tensor(x, dtype=torch.float) - torch.tensor(w, dtype=torch.float)/2,
+                                                         torch.tensor(y, dtype=torch.float) + torch.tensor(h, dtype=torch.float)/2], dim=-1)/wh], dim=1)
                                for x, y, w, h in coords]
                     grid = (grid+1)/2
                     M = grid[:, 0, 0, :]
@@ -102,32 +102,62 @@ class Batchifyer:
                     gh, gw = grid.shape[1:-1]
                     x, y = [m[:, 0]*gw for m in mean], [m[:, 1]*gh for m in mean]
                     w, h = [(s[:, 0] - i[:, 0])*gw for i, s in zip(inf, sup)], [(s[:, 1] - i[:, 1])*gh for i, s in zip(inf, sup)]
+                    # create interpolated bboxes
+                    Yinterp = [{"class": cls, "x": _x, "y": _y, "w": _w, "h": _h}
+                               for _x, _y, _w, _h, cls in zip(x, y, w, h, classes)]
+                else:
+                    Xinterp, Yinterp = X, Y
+                if self.multiscale:
                     # filter based on bboxe size
                     if self.resolution_range is not None:
                         inf, sup = min(self.resolution_range), max(self.resolution_range)
+                        x, y, w, h, classes = ([Yb[k] for Yb in Yinterp] for k in ("x", "y", "w", "h", "class"))
                         length = [np.minimum(_w, _h) for _w, _h in zip(w, h)]
                         keep = [(_l >= inf) & (_l <= sup) for _l in length]
                         x, y, w, h = ([b[k].tolist() for b, k in zip(v, keep)] for v in (x, y, w, h))
                         classes = [[c for c, k in zip(cls, kp) if k] for cls, kp in zip(classes, keep)]
-                    Yinterp = [{"class": cls, "x": _x, "y": _y, "w": _w, "h": _h}
-                               for _x, _y, _w, _h, cls in zip(x, y, w, h, classes)]
+                        Yinterp = [{"class": cls, "x": _x, "y": _y, "w": _w, "h": _h}
+                                for _x, _y, _w, _h, cls in zip(x, y, w, h, classes)]
                 yield (Xinterp, *model._y_to_tensor(Yinterp, image_h, image_w, device=self.device))
+                # update image dimensions or exit
                 if self.multiscale:
                     h_down, w_down = model.downsampling_window
                     X = F.avg_pool2d(X, model.downsampling_window)
                     image_h, image_w = X.shape[-2:]
                     Y = [{"class": Yb["class"],
-                          "x": [x // w_down for x in Yb["x"]],
-                          "y": [y // h_down for y in Yb["y"]],
-                          "w": [w // w_down for w in Yb["w"]],
-                          "h": [h // h_down for h in Yb["h"]]}
+                          "x": [x / w_down for x in Yb["x"]],
+                          "y": [y / h_down for y in Yb["y"]],
+                          "w": [w / w_down for w in Yb["w"]],
+                          "h": [h / h_down for h in Yb["h"]]}
                          for Yb in Y]
                 else:
                     break
 
-train, val, test = [Batchifyer(*dataset, 50, 1) for dataset in ml.split(images, bboxes, weights=[0.7, 0.2, 0.1])]
+train, val, (x_test, y_test) = ml.split(images, bboxes, weights=[0.8, 0.1, 0.1])
+train = Batchifyer(*train, 40, 1, data_augmentation=True, multi_scale=True)
+val = Batchifyer(*val, 40, 1, data_augmentation=True, multi_scale=True)
 
 optimizer = torch.optim.Adam(model.parameters(), betas=(0.9, 0.98))
-train_loss, val_loss, grad, best_step = model.fit(training_data=train, validation_data=val, optimizer=optimizer, n_steps=1000, keep_best=False, learning_rate=lambda step: 1.0E-3/(0.1 * step**0.5 + 1))
+train_loss, val_loss, grad, best_step = model.fit(training_data=train, validation_data=val, optimizer=optimizer,
+                                                  n_steps=10000, keep_best=False,
+                                                  learning_rate=1.0E-3)
 ml.plot_losses(train_loss, val_loss, grad, best_step)
 plt.show()
+
+y_pred = model.predict(x_test, detection_treshold=0.5, threshold_intersect=0.8, multi_scale=True)
+for img, bboxes, bboxes_pred, _ in zip(x_test, y_test, y_pred, range(10)):
+    h, w = img.shape[:2]
+    f, (ax1, ax2) = plt.subplots(figsize=[10, 5], ncols=2)
+    ax1.set_title("predicted")
+    ax1.imshow(img, cmap="gray")
+    ax1.set_xlim([0, w-1])
+    ax1.set_ylim([h-1, 0])
+    ml.plot_bounding_boxes(bboxes_pred, ax1, class_colors={"circle": "r", "square": "b"})
+    ax2.set_title("target")
+    ax2.imshow(img, cmap="gray")
+    ml.plot_bounding_boxes(bboxes, ax2, class_colors={"circle": "r", "square": "b"})
+plt.show()
+
+if __name__ == "__main__":
+    import IPython
+    IPython.embed()

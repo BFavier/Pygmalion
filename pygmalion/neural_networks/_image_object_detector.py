@@ -129,7 +129,7 @@ class ImageObjectDetector(NeuralNetworkClassifier):
 
     def predict(self, images: np.ndarray, detection_treshold: float=0.5,
                 threshold_intersect: Optional[float] = 0.6,
-                multiscale: bool = False) -> List[dict]:
+                multi_scale: bool = False) -> List[dict]:
         """
         """
         n, h_image, w_image = images.shape[:3]
@@ -140,7 +140,7 @@ class ImageObjectDetector(NeuralNetworkClassifier):
         X = self._x_to_tensor(images, self.device)
         for i in count():
             h_down, w_down = tuple(s**i for s in self.downsampling_window)
-            if any(s // d == 0 for s, d in zip((h_image, w_image), (h_down, w_down))):
+            if any(s // (d*g) == 0 for s, d, g in zip((h_image, w_image), (h_down, w_down), self.cells_dimensions)):
                 break
             with torch.no_grad():
                 confidence, position, dimension, object_class = self(F.avg_pool2d(X, kernel_size=(h_down, w_down)))
