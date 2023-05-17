@@ -175,7 +175,7 @@ class ImageObjectDetector(NeuralNetworkClassifier):
                 predictions[i]["class"].extend([self.classes[i] for i in cls.cpu().tolist()])
                 predictions[i]["bboxe confidence"].extend(conf.cpu().tolist())
                 predictions[i]["class confidence"].extend(prob.cpu().tolist())
-            if not multiscale:
+            if not multi_scale:
                 break
         # applying non max suppression
         if threshold_intersect is not None:
