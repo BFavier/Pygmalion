@@ -27,7 +27,9 @@ class Batchifyer:
 
     def __init__(self, images: np.ndarray, bboxes: list, batch_size: int, n_batches: int,
                  data_augmentation: bool = True, device: torch.device = "cpu",
-                 max_rotation_angle: float = 5.0, multi_scale: bool = True,
+                 max_rotation_angle: float = 5.0,
+                 max_downscaling_factor: float = 0.95,
+                 multi_scale: bool = True,
                  resolution_range: Optional[tuple[int, int]] = (32, 64)):
         self.images, self.bboxes = model._x_to_tensor(images), bboxes
         self.batch_size = batch_size
@@ -35,6 +37,7 @@ class Batchifyer:
         self.device = device
         self.data_augmentation = data_augmentation
         self.max_rotation_angle = max_rotation_angle
+        self.max_downscaling_factor = max_downscaling_factor
         self.resolution_range = resolution_range
         self.multiscale = multi_scale
 
@@ -57,14 +60,19 @@ class Batchifyer:
                     one = torch.ones(n, device=self.device)
                     factor = torch.stack([torch.where(torch.rand(n, device=self.device) > 0.5, one, -one), one], dim=-1)
                     grid = grid.reshape(1, image_h, image_w, 2) * factor.reshape(n, 1, 1, 2)
+                    # random vertical flips
+                    one = torch.ones(n, device=self.device)
+                    factor = torch.stack([one, torch.where(torch.rand(n, device=self.device) > 0.5, one, -one)], dim=-1)
+                    grid = grid * factor.reshape(n, 1, 1, 2)
                     # random rotations
                     theta = torch.rand(n, device=self.device) * (2*max_theta) -  max_theta
                     sin, cos = torch.sin(theta), torch.cos(theta)
                     rot = torch.stack([torch.stack([cos, -sin], dim=-1),
                                        torch.stack([sin, cos], dim=-1)], dim=-2)
                     grid = (rot.reshape(n, 1, 1, 2, 2) @ grid.reshape(n, image_h, image_w, 2, 1)).squeeze(-1)
-                    # scaling to stay in image range
-                    grid = grid / (grid*2/wh).reshape(n, -1).abs().max(dim=1).values.reshape(n, 1, 1, 1)
+                    # random downscaling
+                    scale = (1 - torch.rand(n, device=self.device) * (1 - self.max_downscaling_factor)) / (grid*2/wh).reshape(n, -1).abs().max(dim=1).values
+                    grid = grid * scale.reshape(n, 1, 1, 1)
                     # random offset
                     delta = (wh.reshape(1, 2)/2 - grid.reshape(n, -1, 2).max(dim=1).values)
                     offset = torch.rand((n, 2), device=self.device) * (2*delta) - delta
@@ -114,7 +122,7 @@ class Batchifyer:
                         x, y, w, h, classes = ([Yb[k] for Yb in Yinterp] for k in ("x", "y", "w", "h", "class"))
                         length = [np.minimum(_w, _h) for _w, _h in zip(w, h)]
                         keep = [(_l >= inf) & (_l <= sup) for _l in length]
-                        x, y, w, h = ([b[k].tolist() for b, k in zip(v, keep)] for v in (x, y, w, h))
+                        x, y, w, h = ([[scl for scl, kp in zip(b, k) if kp] for b, k in zip(v, keep)] for v in (x, y, w, h))
                         classes = [[c for c, k in zip(cls, kp) if k] for cls, kp in zip(classes, keep)]
                         Yinterp = [{"class": cls, "x": _x, "y": _y, "w": _w, "h": _h}
                                 for _x, _y, _w, _h, cls in zip(x, y, w, h, classes)]
@@ -135,7 +143,7 @@ class Batchifyer:
 
 train, val, (x_test, y_test) = ml.split(images, bboxes, weights=[0.8, 0.1, 0.1])
 train = Batchifyer(*train, 40, 1, data_augmentation=True, multi_scale=True)
-val = Batchifyer(*val, 40, 1, data_augmentation=True, multi_scale=True)
+val = Batchifyer(*val, 40, 1, data_augmentation=False, multi_scale=True)
 
 optimizer = torch.optim.Adam(model.parameters(), betas=(0.9, 0.98))
 train_loss, val_loss, grad, best_step = model.fit(training_data=train, validation_data=val, optimizer=optimizer,
