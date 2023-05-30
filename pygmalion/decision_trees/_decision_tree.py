@@ -1,29 +1,45 @@
 import pandas as pd
+import numpy as np
 import torch
-from typing import List, Callable
+from typing import List, Callable, Optional
 
 
 class Branch:
 
-    def __init__(self, depth: int, device: torch.device, max_depth: int, min_leaf_size: int):
-        self.device = device
-        self.variable, self.threshold, self.criterion = self._best_split() if depth < max_depth else (None,)*3
+    def __init__(self, df: pd.DataFrame, input_columns: List[str], target: str,
+                 max_depth: Optional[int], min_leaf_size: int, loss: Callable,
+                 evaluator: Callable, depth: int, device: torch.device):
+        self._df = df
+        self._input_columns, self._target = input_columns, target
+        self._loss = loss
+        self._evaluator = evaluator
+        self._max_depth = max_depth
+        self._min_leaf_size = min_leaf_size
+        self._device = device
+        self.depth = depth
+        self.value = evaluator(df[target])
+        if max_depth is None or (depth <= max_depth):
+            self.variable, self.threshold, self.criterion = self._best_split()
+        else:
+            self.variable, self.threshold, self.criterion = None, None, None
         self.inferior_or_equal, self.superior = None, None
+        if not self.is_splitable:
+            del self._df
 
-    def _best_split(self, df: pd.DataFrame, input_columns: List[str], target: str, criterion: Callable, min_leaf_size: int):
+    def _best_split(self):
         """
         Of all possible splits of the data, gets the best split
         """
-        inputs = [torch.from_numpy(df[col].to_numpy()).to(self.device) for col in input_columns]
-        target = torch.from_numpy(df[target].to_numpy()).to(self.device)
+        inputs = [torch.from_numpy(self._df[col].to_numpy(dtype=np.float32)).to(self._device) for col in self._input_columns]
+        target = torch.from_numpy(self._df[target].to_numpy(dtype=np.float32)).to(self._device)
         uniques = (X.unique(sorted=True) for X in inputs)
         non_nan = (X[~torch.isnan(X)] for X in uniques)
         low_high = ((X, torch.cat([X[1:], X[-1:]], dim=0)) for X in non_nan)
         boundaries = [(0.5*low + 0.5*high) for low, high in low_high]
         all_splits = [X.reshape(-1, 1) > b.reshape(1, -1) for X, b in zip(inputs, boundaries)]
         scores = [torch.min(
-                            torch.masked_fill(criterion(target, splits).to("cpu"),
-                                              ((splits.sum(dim=-1) < min_leaf_size) | (~splits.sum(dim=-1) < min_leaf_size)).unsqueeze(-1),
+                            torch.masked_fill(self._loss(target, splits).to("cpu"),
+                                              ((splits.sum(dim=-1) < self._min_leaf_size) | (~splits.sum(dim=-1) < self._min_leaf_size)),
                                               float("inf")),
                             dim=0)
                   for splits in all_splits]
@@ -31,5 +47,37 @@ class Branch:
         crit = crit.item()
         if not torch.isfinite(crit):
             return None, None, None
-        return input_columns[col], boundaries[col][i].item(), crit
+        return self._input_columns[col], boundaries[col][i].item(), crit
+
+    def grow(self):
+        """
+        grows
+        """
+        if not self.is_leaf():
+            raise RuntimeError("Cannot grow an already grown non-leaf Branch")
+        if not self.is_splitable():
+            raise ValueError("Cannot grow a non-splitable Branch")
+        self.inferior_or_equal = Branch(self._df[self._df[self.variable] <= self.threshold],
+                                        self._input_columns, self._target,
+                                        self._max_depth, self._min_leaf_size,
+                                        self._loss, self._evaluator, self.depth+1, self._device)
+        self.superior = Branch(self._df[self._df[self.variable] > self.threshold],
+                               self._input_columns, self._target,
+                               self._max_depth, self._min_leaf_size,
+                               self._loss, self._evaluator, self.depth+1, self._device)
+        del self._df
+
+    @property
+    def is_splitable(self) -> bool:
+        """
+        returns True if the branch can be further splited
+        """
+        return (self.variable is not None) and (self.threshold is not None)
+
+    @property
+    def is_leaf(self) -> bool:
+        """
+        Returns true if the branch is not splited further (yet)
+        """
+        return (self.inferior_or_equal is None) or (self.superior is None)
 
