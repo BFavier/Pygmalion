@@ -37,13 +37,13 @@ class Branch:
         low_high = ((X, torch.cat([X[1:], X[-1:]], dim=0)) for X in non_nan)
         boundaries = [(0.5*low + 0.5*high) for low, high in low_high]
         all_splits = [X.reshape(-1, 1) > b.reshape(1, -1) for X, b in zip(inputs, boundaries)]
-        scores = [torch.min(
+        losses = [torch.min(
                             torch.masked_fill(self._loss(target, splits).to("cpu"),
                                               ((splits.sum(dim=-1) < self._min_leaf_size) | (~splits.sum(dim=-1) < self._min_leaf_size)),
                                               float("inf")),
                             dim=0)
                   for splits in all_splits]
-        col, (crit, i) = min(enumerate(scores), key=lambda x: x[1].values)
+        col, (crit, i) = min(enumerate(losses), key=lambda x: x[1].values)
         crit = crit.item()
         if not torch.isfinite(crit):
             return None, None, None
