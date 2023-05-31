@@ -15,7 +15,7 @@ df_train, df_test = ml.split(df, weights=(0.8, 0.2))
 target = "medv"
 inputs = [c for c in df.columns if c != target]
 model = ml.decision_trees.DecisionTreeRegressor(inputs, target)
-model.fit(df_train, max_depth=10, max_leaf_count=500, min_leaf_size=10, device="cuda:0")
+model.fit(df_train, max_depth=10, max_leaf_count=500, min_leaf_size=10)
 
 # Plot results
 f, ax = plt.subplots()

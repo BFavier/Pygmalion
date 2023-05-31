@@ -2,6 +2,7 @@ from typing import List, Set, Optional, Union
 import pandas as pd
 import numpy as np
 import torch
+import torch.nn.functional as F
 from ._branch import Branch
 
 
@@ -10,7 +11,7 @@ class DecisionTree:
     def __repr__(self):
         max_depth = max(leaf.depth for leaf in self.leafs)
         n_leafs = len(self.leafs)
-        return type(self).__name__+f"(n_leafs={n_leafs}, max_depth={max_depth})"
+        return type(self).__name__+f"(target={self.target}, inputs={self.inputs}, n_leafs={n_leafs}, max_depth={max_depth})"
 
     def __init__(self, inputs: List[str], target: str):
         self._n_observations = None
@@ -43,6 +44,12 @@ class DecisionTree:
             tensor of losses of shape (n_splits)
         """
         raise NotImplementedError()
+    
+    def target_preprocessor(self, data: pd.Series) -> torch.Tensor:
+        """
+        Converts the pd.Series into a torch.Tensor
+        """
+        return torch.from_numpy(data.to_numpy(dtype=np.float32))
 
     def fit(self, df: pd.DataFrame, max_depth: Optional[int]=None, min_leaf_size: int=1, max_leaf_count: Optional[int]=None, device: torch.device="cpu") -> str:
         """
@@ -62,7 +69,7 @@ class DecisionTree:
             the device on which to perform the best split search
         """
         self._n_observations = len(df)
-        self.root = Branch(df, self.inputs, self.target, max_depth, min_leaf_size, self.gain, self.evaluator, 0, device)
+        self.root = Branch(df, self.inputs, self.target, max_depth, min_leaf_size, self.target_preprocessor, self.gain, self.evaluator, 0, device)
         self.leafs = {self.root}
         while True:
             if (max_leaf_count is not None) and (len(self.leafs) >= max_leaf_count):
@@ -78,7 +85,7 @@ class DecisionTree:
         for leaf in self.leafs:
             leaf._df = None
     
-    def predict(self, df: pd.DataFrame):
+    def predict(self, df: pd.DataFrame) -> np.ndarray:
         """
         make a prediction
         """
@@ -126,15 +133,21 @@ class DecisionTreeRegressor(DecisionTree):
 
 class DecisionTreeClassifier(DecisionTree):
 
+    def target_preprocessor(self, data: pd.Series) -> torch.Tensor:
+        """
+        Converts the pd.Series into a torch.Tensor
+        """
+        return torch.tensor([self._class_to_index[c] for c in data], dtype=torch.long)
+
     def evaluator(self, series: pd.Series):
         """
         From a pandas series of target values returns the model prediction for the given leaf
         """
-        return series.mean()
+        return series.mode().iloc[0]
 
     def gain(self, target: torch.Tensor, splits: torch.Tensor):
         """
-        Returns the MSE (Mean Squared Error) gain associated to each split
+        Returns the Gini gain associated to each split
 
         Parameters
         ----------
@@ -146,14 +159,33 @@ class DecisionTreeClassifier(DecisionTree):
         Returns
         -------
         torch.Tensor :
-            tensor of losses of shape (n_splits)
+            tensor of gains of shape (n_splits)
         """
-        mean = target.sum(dim=0)
-        var = ((target - mean)**2).sum(dim=0)
-        mean_left, mean_right = (target * splits).sum(dim=0), (target * ~splits).sum(dim=0)
-        var_left, var_right = ((target - mean_left)**2 * splits).sum(dim=0), ((target - mean_right)**2 * ~splits).sum(dim=0)
-        return (var - var_left - var_right) / self._n_observations
+        n_obs, n_splits = splits.shape
+        classes = F.one_hot(target)
+        p = classes.sum(dim=0) / n_obs
+        gini = (p * (1-p)).sum()
+        count_left = torch.einsum("ik, ij -> jk", classes, splits.long())
+        count_right = n_obs - count_left
+        p_left, p_right = count_left / n_obs, count_right / n_obs
+        gini_left, gini_right = (p_left * (1 - p_left)).sum(dim=-1), (p_right * (1 - p_right)).sum(dim=-1)
+        return (gini - gini_left - gini_right) * n_obs / self._n_observations
 
     def __init__(self, inputs: List[str], target: str, classes: List[str]):
         super().__init__(inputs, target)
         self.classes = classes
+        self._class_to_index = {c: i for i, c in enumerate(classes)}
+
+    def predict(self, df: pd.DataFrame) -> np.ndarray:
+        """
+        make a prediction
+        """
+        if self.root is None:
+            raise RuntimeError("Cannot evaluate model before it was fited")
+        self.root.propagate(df.reset_index(drop=True)[self.inputs])
+        result = np.array([None]*len(df))
+        for leaf in self.leafs:
+            sub = leaf._df.index
+            result[sub] = leaf.value
+            leaf._df = None
+        return result

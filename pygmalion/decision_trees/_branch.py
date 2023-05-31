@@ -8,15 +8,17 @@ class Branch:
 
     def __repr__(self):
         if self.is_leaf:
-            return f"Branch(value={self.value:.3g}, depth={self.depth}, n_observations={self.n_observations:.3g})"
+            gain = None if self.gain is None else f"{self.gain:.3g}"
+            return f"Branch(value={self.value:.3g}, depth={self.depth}, n_observations={self.n_observations:.3g}, gain={gain})"
         else:
             return f"Branch(variable={self.variable}, threshold={self.threshold:.3g}, gain={self.gain:.3g})"
 
     def __init__(self, df: pd.DataFrame, input_columns: List[str], target: str,
-                 max_depth: Optional[int], min_leaf_size: int, gain: Callable,
-                 evaluator: Callable, depth: int, device: torch.device):
+                 max_depth: Optional[int], min_leaf_size: int, target_preprocessor: Callable,
+                 gain: Callable, evaluator: Callable, depth: int, device: torch.device):
         self._df = df
         self._input_columns, self._target = input_columns, target
+        self._target_preprocessor = target_preprocessor
         self._gain = gain
         self._evaluator = evaluator
         self._max_depth = max_depth
@@ -25,7 +27,7 @@ class Branch:
         self.n_observations = len(df)
         self.depth = depth
         self.value = evaluator(df[target])
-        if max_depth is None or (depth <= max_depth):
+        if max_depth is None or (depth < max_depth):
             self.variable, self.threshold, self.gain = self._best_split()
         else:
             self.variable, self.threshold, self.gain = None, None, None
@@ -38,7 +40,7 @@ class Branch:
         Of all possible splits of the data, gets the best split
         """
         inputs = [torch.from_numpy(self._df[col].to_numpy(dtype=np.float32)).to(self._device) for col in self._input_columns]
-        target = torch.from_numpy(self._df[self._target].to_numpy(dtype=np.float32)).to(self._device)
+        target = self._target_preprocessor(self._df[self._target]).to(self._device)
         uniques = (X.unique(sorted=True) for X in inputs)
         non_nan = (X[~torch.isnan(X)] for X in uniques)
         inf = torch.full((1,), float("inf"), dtype=torch.float32, device=self._device)
@@ -68,11 +70,13 @@ class Branch:
         self.inferior_or_equal = Branch(self._df[self._df[self.variable] <= self.threshold],
                                         self._input_columns, self._target,
                                         self._max_depth, self._min_leaf_size,
-                                        self._gain, self._evaluator, self.depth+1, self._device)
+                                        self._target_preprocessor, self._gain, self._evaluator,
+                                        self.depth+1, self._device)
         self.superior = Branch(self._df[self._df[self.variable] > self.threshold],
                                self._input_columns, self._target,
                                self._max_depth, self._min_leaf_size,
-                               self._gain, self._evaluator, self.depth+1, self._device)
+                               self._target_preprocessor, self._gain, self._evaluator,
+                               self.depth+1, self._device)
         del self._df
     
     def propagate(self, df: pd.DataFrame):
