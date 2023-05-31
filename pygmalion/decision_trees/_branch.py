@@ -7,11 +7,11 @@ from typing import List, Callable, Optional
 class Branch:
 
     def __init__(self, df: pd.DataFrame, input_columns: List[str], target: str,
-                 max_depth: Optional[int], min_leaf_size: int, loss: Callable,
+                 max_depth: Optional[int], min_leaf_size: int, gain: Callable,
                  evaluator: Callable, depth: int, device: torch.device):
         self._df = df
         self._input_columns, self._target = input_columns, target
-        self._loss = loss
+        self._gain = gain
         self._evaluator = evaluator
         self._max_depth = max_depth
         self._min_leaf_size = min_leaf_size
@@ -19,9 +19,9 @@ class Branch:
         self.depth = depth
         self.value = evaluator(df[target])
         if max_depth is None or (depth <= max_depth):
-            self.variable, self.threshold, self.criterion = self._best_split()
+            self.variable, self.threshold, self.gain = self._best_split()
         else:
-            self.variable, self.threshold, self.criterion = None, None, None
+            self.variable, self.threshold, self.gain = None, None, None
         self.inferior_or_equal, self.superior = None, None
         if not self.is_splitable:
             del self._df
@@ -34,20 +34,21 @@ class Branch:
         target = torch.from_numpy(self._df[target].to_numpy(dtype=np.float32)).to(self._device)
         uniques = (X.unique(sorted=True) for X in inputs)
         non_nan = (X[~torch.isnan(X)] for X in uniques)
-        low_high = ((X, torch.cat([X[1:], X[-1:]], dim=0)) for X in non_nan)
+        inf = torch.full((1,), float("inf"), dtype=torch.float32, device=self.device)
+        low_high = ((X, torch.cat([X[1:], inf], dim=0)) for X in non_nan)
         boundaries = [(0.5*low + 0.5*high) for low, high in low_high]
-        all_splits = [X.reshape(-1, 1) > b.reshape(1, -1) for X, b in zip(inputs, boundaries)]
-        losses = [torch.min(
-                            torch.masked_fill(self._loss(target, splits).to("cpu"),
+        all_splits = [X.reshape(-1, 1) <= b.reshape(1, -1) for X, b in zip(inputs, boundaries)]
+        losses = [torch.max(
+                            torch.masked_fill(self._gain(target, splits).to("cpu"),
                                               ((splits.sum(dim=-1) < self._min_leaf_size) | (~splits.sum(dim=-1) < self._min_leaf_size)),
                                               float("inf")),
                             dim=0)
                   for splits in all_splits]
-        col, (crit, i) = min(enumerate(losses), key=lambda x: x[1].values)
-        crit = crit.item()
-        if not torch.isfinite(crit):
+        col, (gain, i) = max(enumerate(losses), key=lambda x: x[1].values)
+        gain = gain.item()
+        if not torch.isfinite(gain):
             return None, None, None
-        return self._input_columns[col], boundaries[col][i].item(), crit
+        return self._input_columns[col], boundaries[col][i].item(), gain
 
     def grow(self):
         """
@@ -60,11 +61,11 @@ class Branch:
         self.inferior_or_equal = Branch(self._df[self._df[self.variable] <= self.threshold],
                                         self._input_columns, self._target,
                                         self._max_depth, self._min_leaf_size,
-                                        self._loss, self._evaluator, self.depth+1, self._device)
+                                        self._gain, self._evaluator, self.depth+1, self._device)
         self.superior = Branch(self._df[self._df[self.variable] > self.threshold],
                                self._input_columns, self._target,
                                self._max_depth, self._min_leaf_size,
-                               self._loss, self._evaluator, self.depth+1, self._device)
+                               self._gain, self._evaluator, self.depth+1, self._device)
         del self._df
     
     def propagate(self, df: pd.DataFrame):

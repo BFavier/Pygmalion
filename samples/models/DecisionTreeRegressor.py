@@ -21,7 +21,7 @@ plt.show()
 # Create and train the model
 target = "medv"
 inputs = [c for c in df.columns if c != target]
-model = ml.decision_trees.DecisionTreesRegressor(inputs, target)
+model = ml.decision_trees.DecisionTreeRegressor(inputs, target)
 train_losses, val_losses, grad, best_step = model.fit(df_train)
 
 # Plot losses
