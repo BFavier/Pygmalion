@@ -1,10 +1,16 @@
 from typing import List, Set, Optional, Union
 import pandas as pd
+import numpy as np
 import torch
 from ._branch import Branch
 
 
 class DecisionTree:
+
+    def __repr__(self):
+        max_depth = max(leaf.depth for leaf in self.leafs)
+        n_leafs = len(self.leafs)
+        return type(self).__name__+f"(n_leafs={n_leafs}, max_depth={max_depth})"
 
     def __init__(self, inputs: List[str], target: str):
         self._n_observations = None
@@ -55,18 +61,22 @@ class DecisionTree:
         device : torch.device
             the device on which to perform the best split search
         """
-        self._n_observations
+        self._n_observations = len(df)
         self.root = Branch(df, self.inputs, self.target, max_depth, min_leaf_size, self.gain, self.evaluator, 0, device)
         self.leafs = {self.root}
         while True:
             if (max_leaf_count is not None) and (len(self.leafs) >= max_leaf_count):
-                return "max leaf count reached"
+                break
             splitable_leafs = [leaf for leaf in self.leafs if leaf.is_splitable]
             if len(splitable_leafs) == 0:
-                return "no more splitable leafs"
+                break
             splited = max(splitable_leafs, key=lambda x: x.gain)
-            self.leafs.pop(splited)
+            self.leafs.remove(splited)
             splited.grow()
+            self.leafs.add(splited.inferior_or_equal)
+            self.leafs.add(splited.superior)
+        for leaf in self.leafs:
+            leaf._df = None
     
     def predict(self, df: pd.DataFrame):
         """
@@ -75,7 +85,12 @@ class DecisionTree:
         if self.root is None:
             raise RuntimeError("Cannot evaluate model before it was fited")
         self.root.propagate(df.reset_index(drop=True)[self.inputs])
-        ...
+        result = np.full((len(df),), float("nan"), dtype=np.float64)
+        for leaf in self.leafs:
+            sub = leaf._df.index
+            result[sub] = leaf.value
+            leaf._df = None
+        return result
 
 
 class DecisionTreeRegressor(DecisionTree):
@@ -104,8 +119,8 @@ class DecisionTreeRegressor(DecisionTree):
         """
         mean = target.sum(dim=0)
         var = ((target - mean)**2).sum(dim=0)
-        mean_left, mean_right = (target * splits).sum(dim=0), (target * ~splits).sum(dim=0)
-        var_left, var_right = ((target - mean_left)**2 * splits).sum(dim=0), ((target - mean_right)**2 * ~splits).sum(dim=0)
+        mean_left, mean_right = (target.unsqueeze(-1) * splits).sum(dim=0), (target.unsqueeze(-1) * ~splits).sum(dim=0)
+        var_left, var_right = ((target.unsqueeze(-1) - mean_left)**2 * splits).sum(dim=0), ((target.unsqueeze(-1) - mean_right)**2 * ~splits).sum(dim=0)
         return (var - var_left - var_right) / self._n_observations
 
 
