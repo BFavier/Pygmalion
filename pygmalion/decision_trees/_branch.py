@@ -51,7 +51,7 @@ class Branch:
 
     def grow(self):
         """
-        grows
+        grows the branch by creating two sub-branches
         """
         if not self.is_leaf():
             raise RuntimeError("Cannot grow an already grown non-leaf Branch")
@@ -66,6 +66,16 @@ class Branch:
                                self._max_depth, self._min_leaf_size,
                                self._loss, self._evaluator, self.depth+1, self._device)
         del self._df
+    
+    def propagate(self, df: pd.DataFrame):
+        """
+        propagate a dataframe to the subbranches and save subset in leafs
+        """
+        if self.is_leaf:
+            self._df = df
+        else:
+            self.inferior_or_equal.propagate(df[df[self.variable] <= self.threshold])
+            self.superior.propagate(df[df[self.variable] > self.threshold])
 
     @property
     def is_splitable(self) -> bool:
