@@ -8,10 +8,10 @@ class Branch:
 
     def __repr__(self):
         if self.is_leaf:
-            gain = None if self.gain is None else f"{self.gain:.3g}"
-            return f"Branch(value={self.value:.3g}, depth={self.depth}, n_observations={self.n_observations:.3g}, gain={gain})"
+            value = f"'{self.value}'" if isinstance(self.value, str) else f"{self.value:.3g}"
+            return f"Branch(value={value}, depth={self.depth}, n_observations={self.n_observations:.3g}, is_leaf=True)"
         else:
-            return f"Branch(variable={self.variable}, threshold={self.threshold:.3g}, gain={self.gain:.3g})"
+            return f"Branch(variable='{self.variable}', threshold={self.threshold:.3g}, gain={self.gain:.3g}, n_observations={self.n_observations:.3g}, is_leaf=False)"
 
     def __init__(self, df: pd.DataFrame, input_columns: List[str], target: str,
                  max_depth: Optional[int], min_leaf_size: int, target_preprocessor: Callable,
