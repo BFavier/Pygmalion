@@ -1,27 +1,10 @@
 import pandas as pd
 import numpy as np
 import torch
-from typing import List, Callable, Optional
+from typing import List, Iterable, Callable, Optional
 
 
 class Branch:
-
-    @classmethod
-    def from_dump(cls, dump: dict) -> "Branch":
-        obj = cls.__new__()
-        obj.n_observations = dump["n_observations"]
-        obj.depth = dump["depth"]
-        obj.value = dump["value"]
-        obj.variable = dump["variable"]
-        obj.threshold = dump["threshold"]
-        obj.gain = dump["gain"]
-        obj.inferior_or_equal = dump["inferior_or_equal"]
-        if isinstance(obj.inferior_or_equal, dict):
-            obj.inferior_or_equal = cls.from_dump(obj.inferior_or_equal)
-        obj.superior = dump["superior"]
-        if isinstance(obj.superior, dict):
-            obj.superior = cls.from_dump(obj.superior)
-        return obj
 
     def __repr__(self):
         if self.is_leaf:
@@ -98,7 +81,7 @@ class Branch:
     
     def propagate(self, df: pd.DataFrame):
         """
-        propagate a dataframe to the subbranches and save subset in leafs
+        propagate recursively a dataframe to the subbranches and save subset in leafs
         """
         if self.is_leaf:
             self._df = df
@@ -120,6 +103,32 @@ class Branch:
         """
         return (self.inferior_or_equal is None) or (self.superior is None)
     
+    @property
+    def childs(self) -> Iterable["Branch"]:
+        """
+        Recursively returns all the branch below this one
+        """
+        return (branch for direct_child in (self.inferior_or_equal, self.superior) if direct_child is not None
+                for iterable in ([direct_child], direct_child.childs)
+                for branch in iterable)
+
+    @classmethod
+    def from_dump(cls, dump: dict) -> "Branch":
+        obj = cls.__new__(cls)
+        obj.n_observations = dump["n_observations"]
+        obj.depth = dump["depth"]
+        obj.value = dump["value"]
+        obj.variable = dump["variable"]
+        obj.threshold = dump["threshold"]
+        obj.gain = dump["gain"]
+        obj.inferior_or_equal = dump["inferior_or_equal"]
+        if isinstance(obj.inferior_or_equal, dict):
+            obj.inferior_or_equal = cls.from_dump(obj.inferior_or_equal)
+        obj.superior = dump["superior"]
+        if isinstance(obj.superior, dict):
+            obj.superior = cls.from_dump(obj.superior)
+        return obj
+
     @property
     def dump(self) -> dict:
         return {"n_observations": self.n_observations,

@@ -8,6 +8,7 @@ from pygmalion._model import Model
 from ._download import download_bytes
 from pygmalion.unsupervised import *
 from pygmalion.neural_networks import *
+from pygmalion.decision_trees import *
 from pygmalion.tokenizers import *
 
 

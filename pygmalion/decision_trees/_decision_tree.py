@@ -4,9 +4,10 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 from ._branch import Branch
+from pygmalion._model import Model
 
 
-class DecisionTree:
+class DecisionTree(Model):
 
     def __repr__(self):
         max_depth = max(leaf.depth for leaf in self.leafs)
@@ -14,7 +15,7 @@ class DecisionTree:
         return type(self).__name__+f"(target={self.target}, inputs={self.inputs}, n_leafs={n_leafs}, max_depth={max_depth})"
 
     def __init__(self, inputs: List[str], target: str):
-        self._n_observations = None
+        self.n_observations = None
         self.leafs: Set[Branch] = set()
         self.root = None
         self.inputs = inputs
@@ -51,7 +52,8 @@ class DecisionTree:
         """
         return torch.from_numpy(data.to_numpy(dtype=np.float32))
 
-    def fit(self, df: pd.DataFrame, max_depth: Optional[int]=None, min_leaf_size: int=1, max_leaf_count: Optional[int]=None, device: torch.device="cpu") -> str:
+    def fit(self, df: pd.DataFrame, max_depth: Optional[int]=None, min_leaf_size: int=1,
+            max_leaf_count: Optional[int]=None, device: torch.device="cpu") -> str:
         """
         Fit the decision tree to observations
 
@@ -68,7 +70,7 @@ class DecisionTree:
         device : torch.device
             the device on which to perform the best split search
         """
-        self._n_observations = len(df)
+        self.n_observations = len(df)
         self.root = Branch(df, self.inputs, self.target, max_depth, min_leaf_size, self.target_preprocessor, self.gain, self.evaluator, 0, device)
         self.leafs = {self.root}
         while True:
@@ -83,7 +85,8 @@ class DecisionTree:
             self.leafs.add(splited.inferior_or_equal)
             self.leafs.add(splited.superior)
         for leaf in self.leafs:
-            leaf._df = None
+            if hasattr(leaf, "_df"):
+                del leaf._df
     
     def predict(self, df: pd.DataFrame) -> np.ndarray:
         """
@@ -91,6 +94,13 @@ class DecisionTree:
         """
         if self.root is None:
             raise RuntimeError("Cannot evaluate model before it was fited")
+        if isinstance(df, dict):
+            df = pd.DataFrame.from_dict(df)
+        elif not isinstance(df, pd.DataFrame):
+            data = np.array(df)
+            if len(data.shape) == 1:
+                data = data[None, ...]
+            df = pd.DataFrame(data=data, columns=self.inputs)
         self.root.propagate(df.reset_index(drop=True)[self.inputs])
         result = np.full((len(df),), float("nan"), dtype=np.float64)
         for leaf in self.leafs:
@@ -98,6 +108,22 @@ class DecisionTree:
             result[sub] = leaf.value
             leaf._df = None
         return result
+    
+    @property
+    def dump(self) -> dict:
+        return {"type": type(self).__name__,
+                "branches": self.root.dump,
+                "inputs": list(self.inputs),
+                "target": self.target}
+
+    @classmethod
+    def from_dump(cls, dump: dict) -> "DecisionTree":
+        obj = cls.__new__(cls)
+        obj.root = Branch.from_dump(dump["branches"])
+        obj.inputs = dump["inputs"]
+        obj.target = dump["target"]
+        obj.leafs = {obj.root} if obj.root.is_leaf else set(b for b in obj.root.childs if b.is_leaf)
+        return obj
 
 
 class DecisionTreeRegressor(DecisionTree):
@@ -128,7 +154,7 @@ class DecisionTreeRegressor(DecisionTree):
         var = ((target - mean)**2).sum(dim=0)
         mean_left, mean_right = (target.unsqueeze(-1) * splits).sum(dim=0), (target.unsqueeze(-1) * ~splits).sum(dim=0)
         var_left, var_right = ((target.unsqueeze(-1) - mean_left)**2 * splits).sum(dim=0), ((target.unsqueeze(-1) - mean_right)**2 * ~splits).sum(dim=0)
-        return (var - var_left - var_right) / self._n_observations
+        return (var - var_left - var_right) / self.n_observations
 
 
 class DecisionTreeClassifier(DecisionTree):
@@ -169,7 +195,7 @@ class DecisionTreeClassifier(DecisionTree):
         count_right = n_obs - count_left
         p_left, p_right = count_left / n_obs, count_right / n_obs
         gini_left, gini_right = (p_left * (1 - p_left)).sum(dim=-1), (p_right * (1 - p_right)).sum(dim=-1)
-        return (gini - gini_left - gini_right) * n_obs / self._n_observations
+        return (gini - gini_left - gini_right) * n_obs / self.n_observations
 
     def __init__(self, inputs: List[str], target: str, classes: List[str]):
         super().__init__(inputs, target)
