@@ -1,4 +1,4 @@
-from typing import List, Set, Optional, Union
+from typing import List, Set, Iterable, Optional, Union
 import pandas as pd
 import numpy as np
 import torch
@@ -88,19 +88,13 @@ class DecisionTree(Model):
             if hasattr(leaf, "_df"):
                 del leaf._df
     
-    def predict(self, df: pd.DataFrame) -> np.ndarray:
+    def predict(self, df: Union[pd.DataFrame, dict, Iterable]) -> np.ndarray:
         """
         make a prediction
         """
         if self.root is None:
             raise RuntimeError("Cannot evaluate model before it was fited")
-        if isinstance(df, dict):
-            df = pd.DataFrame.from_dict(df)
-        elif not isinstance(df, pd.DataFrame):
-            data = np.array(df)
-            if len(data.shape) == 1:
-                data = data[None, ...]
-            df = pd.DataFrame(data=data, columns=self.inputs)
+        df = self._as_dataframe(df)
         self.root.propagate(df.reset_index(drop=True)[self.inputs])
         result = np.full((len(df),), float("nan"), dtype=np.float64)
         for leaf in self.leafs:
@@ -124,6 +118,19 @@ class DecisionTree(Model):
         obj.target = dump["target"]
         obj.leafs = {obj.root} if obj.root.is_leaf else set(b for b in obj.root.childs if b.is_leaf)
         return obj
+    
+    def _as_dataframe(self, data: Union[pd.DataFrame, dict, Iterable]) -> pd.DataFrame:
+        """
+        Converts any ill formated input into a DataFrame
+        """
+        if isinstance(data, dict):
+            data = pd.DataFrame.from_dict(data)
+        elif not isinstance(data, pd.DataFrame):
+            data = np.array(data)
+            if len(data.shape) == 1:
+                data = data[None, ...]
+            data = pd.DataFrame(data=data, columns=self.inputs)
+        return data
 
 
 class DecisionTreeRegressor(DecisionTree):
@@ -208,6 +215,7 @@ class DecisionTreeClassifier(DecisionTree):
         """
         if self.root is None:
             raise RuntimeError("Cannot evaluate model before it was fited")
+        df = self._as_dataframe(df)
         self.root.propagate(df.reset_index(drop=True)[self.inputs])
         result = np.array([None]*len(df))
         for leaf in self.leafs:
