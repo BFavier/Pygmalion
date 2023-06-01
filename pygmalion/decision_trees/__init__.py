@@ -1,1 +1,2 @@
 from ._decision_tree import DecisionTreeRegressor, DecisionTreeClassifier
+from ._gradient_boosting_regressor import GradientBoostingRegressor
