@@ -6,6 +6,23 @@ from typing import List, Callable, Optional
 
 class Branch:
 
+    @classmethod
+    def from_dump(cls, dump: dict) -> "Branch":
+        obj = cls.__new__()
+        obj.n_observations = dump["n_observations"]
+        obj.depth = dump["depth"]
+        obj.value = dump["value"]
+        obj.variable = dump["variable"]
+        obj.threshold = dump["threshold"]
+        obj.gain = dump["gain"]
+        obj.inferior_or_equal = dump["inferior_or_equal"]
+        if isinstance(obj.inferior_or_equal, dict):
+            obj.inferior_or_equal = cls.from_dump(obj.inferior_or_equal)
+        obj.superior = dump["superior"]
+        if isinstance(obj.superior, dict):
+            obj.superior = cls.from_dump(obj.superior)
+        return obj
+
     def __repr__(self):
         if self.is_leaf:
             gain = None if self.gain is None else f"{self.gain:.3g}"
@@ -102,4 +119,15 @@ class Branch:
         Returns true if the branch is not splited further (yet)
         """
         return (self.inferior_or_equal is None) or (self.superior is None)
+    
+    @property
+    def dump(self) -> dict:
+        return {"n_observations": self.n_observations,
+                "depth": self.depth,
+                "value": self.value,
+                "variable": self.variable,
+                "threshold": self.threshold,
+                "gain": self.gain,
+                "inferior_or_equal": None if self.inferior_or_equal is None else self.inferior_or_equal.dump,
+                "superior": None if self.superior is None else self.superior.dump}
 
