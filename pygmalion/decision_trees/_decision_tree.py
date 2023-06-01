@@ -104,6 +104,16 @@ class DecisionTree(Model):
         return result
     
     @property
+    def branches(self) -> Iterable[Branch]:
+        """
+        Returns all the branches of the decision tree
+        """
+        if self.root is None:
+            return (b for b in [])
+        else:
+            return (b for iterable in ([self.root], self.root.childs) for b in iterable)
+
+    @property
     def dump(self) -> dict:
         return {"type": type(self).__name__,
                 "branches": self.root.dump,
@@ -116,7 +126,7 @@ class DecisionTree(Model):
         obj.root = Branch.from_dump(dump["branches"])
         obj.inputs = dump["inputs"]
         obj.target = dump["target"]
-        obj.leafs = {obj.root} if obj.root.is_leaf else set(b for b in obj.root.childs if b.is_leaf)
+        obj.leafs = set(b for b in obj.branches if b.is_leaf)
         return obj
     
     def _as_dataframe(self, data: Union[pd.DataFrame, dict, Iterable]) -> pd.DataFrame:
