@@ -28,11 +28,11 @@ class Batchifyer:
     def __iter__(self):
         if self.batch_size is None:
             # returns the whole dataset as a single batch at each optimization step
-            return iter([(self.x, self.y)])
+            yield (self.x, self.y)
         else:
             # returns a single batch of size batch_size
             indexes = torch.randperm(len(self.x))[:self.batch_size]
-            return iter([(self.x[indexes], self.y[indexes])])
+            yield (self.x[indexes], self.y[indexes])
 
 # Create and train the model
 hidden_layers = [8, 8, 8]

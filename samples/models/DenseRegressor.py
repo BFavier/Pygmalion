@@ -11,13 +11,6 @@ ml.datasets.boston_housing(data_path)
 df = pd.read_csv(data_path / "boston_housing.csv")
 df_train, df_val, df_test = ml.split(df, weights=(0.7, 0.2, 0.1))
 
-# Plot the correlation matrix between data
-f, ax = plt.subplots()
-ml.plot_matrix(df.corr(), ax=ax, cmap="coolwarm", color_bar=True,
-               write_values=True, fontsize=5., vmin=-1., vmax=1., format=".2f")
-ax.set_title("Correlation matrix")
-plt.show()
-
 # Defines the batch loader
 class Batchifyer:
 
@@ -26,7 +19,7 @@ class Batchifyer:
 
     def __iter__(self):
         # returns the whole dataset as a single batch at each optimization step
-        return iter([self.data])
+        yield self.data
 
 # Create and train the model
 target = "medv"
