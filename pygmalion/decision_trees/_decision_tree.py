@@ -167,11 +167,11 @@ class DecisionTreeRegressor(DecisionTree):
         torch.Tensor :
             tensor of losses of shape (n_splits)
         """
-        mean = target.sum(dim=0)
-        var = ((target - mean)**2).sum(dim=0)
-        mean_left, mean_right = (target.unsqueeze(-1) * splits).sum(dim=0), (target.unsqueeze(-1) * ~splits).sum(dim=0)
-        var_left, var_right = ((target.unsqueeze(-1) - mean_left)**2 * splits).sum(dim=0), ((target.unsqueeze(-1) - mean_right)**2 * ~splits).sum(dim=0)
-        return (var - var_left - var_right) / self.n_observations
+        pred = target.mean()
+        SSE = ((target - pred)**2).sum()
+        pred_left, pred_right = (target.unsqueeze(-1) * splits).sum(dim=0) / splits.sum(dim=0), (target.unsqueeze(-1) * ~splits).sum(dim=0) / (~splits).sum(dim=0)
+        SSE_left, SSE_right = ((target.unsqueeze(-1) - pred_left)**2 * splits).sum(dim=0), ((target.unsqueeze(-1) - pred_right)**2 * ~splits).sum(dim=0)
+        return (SSE - SSE_left - SSE_right) / self.n_observations
 
 
 class DecisionTreeClassifier(DecisionTree):

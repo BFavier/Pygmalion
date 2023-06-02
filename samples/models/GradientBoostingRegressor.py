@@ -15,7 +15,7 @@ df_train, df_test = ml.split(df, weights=(0.8, 0.2))
 target = "medv"
 inputs = [c for c in df.columns if c != target]
 model = ml.decision_trees.GradientBoostingRegressor(inputs, target)
-model.fit(df_train, n_trees=1000, learning_rate=0.5, max_leaf_count=15, min_leaf_size=10)
+model.fit(df_train, n_trees=100, learning_rate=0.3, max_leaf_count=5)
 
 # Plot results
 f, ax = plt.subplots()

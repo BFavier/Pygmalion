@@ -28,7 +28,7 @@ class GradientBoostingRegressor:
         try:
             for _ in counter:
                 if verbose:
-                    counter.set_postfix(residuals_variance=f"{df[self.target].var(ddof=0):.3g}")
+                    counter.set_postfix(**{"variance or residuals": f"{df[self.target].var(ddof=0):.3g}"})
                 lr = 1.0 if len(self.trees) == 0 else learning_rate
                 md = 0 if len(self.trees) == 0 else max_depth
                 tree = DecisionTreeRegressor(self.inputs, self.target)
