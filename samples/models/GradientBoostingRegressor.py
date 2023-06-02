@@ -17,6 +17,13 @@ inputs = [c for c in df.columns if c != target]
 model = ml.decision_trees.GradientBoostingRegressor(inputs, target)
 model.fit(df_train, n_trees=100, learning_rate=0.3, max_leaf_count=5)
 
+# Plot validation loss progress
+f, ax = plt.subplots()
+ax.set_title("Performance on test data against number of trees")
+ax.scatter(list(range(1, len(model.trees)+1)), list(ml.RMSE(pred, df_test[target]) for pred in model.predict_partial(df_test)))
+ax.set_xlabel("number of trees")
+ax.set_ylabel("RMSE")
+
 # Plot results
 f, ax = plt.subplots()
 ml.plot_fitting(df_train[target], model.predict(df_train), ax=ax, label="training")
