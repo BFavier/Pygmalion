@@ -7,57 +7,91 @@ from typing import List, Iterable, Callable, Optional
 class Branch:
 
     def __repr__(self):
-        if self.is_leaf:
-            value = f"'{self.value}'" if isinstance(self.value, str) else f"{self.value:.3g}"
-            return f"Branch(value={value}, depth={self.depth}, n_observations={self.n_observations:.3g}, is_leaf=True)"
-        else:
-            return f"Branch(variable='{self.variable}', threshold={self.threshold:.3g}, gain={self.gain:.3g}, n_observations={self.n_observations:.3g}, is_leaf=False)"
+        attrs = ("depth", "n_observations", "value", "variable", "threshold", "gain")
+        values = [getattr(self, attr) for attr in attrs]
+        reprs = [f"{attr}='{val}" if isinstance(val, str) else f"{attr}={val:.3g}" for attr, val in zip(attrs, values) if val is not None]
+        return "Branch("+", ".join(reprs+[f"is_leaf={self.is_leaf}"])+")"
 
-    def __init__(self, df: pd.DataFrame, input_columns: List[str], target: str,
-                 max_depth: Optional[int], min_leaf_size: int, target_preprocessor: Callable,
-                 gain: Callable, evaluator: Callable, depth: int, device: torch.device):
-        self._df = df
-        self._input_columns, self._target = input_columns, target
-        self._target_preprocessor = target_preprocessor
+    def __init__(self, inputs: List[torch.Tensor], target: torch.Tensor,
+                 variables: List[str], depth: int,
+                 max_depth: Optional[int], min_leaf_size: int,
+                 gain: Callable, evaluator: Callable):
+        """
+        Parameters
+        ----------
+        inputs : torch.Tensor
+            tensor of shape (n_observations, n_features)
+        target : torch.Tensor
+            tensor of shape (n_observations,)
+        variables : list of str
+            name of each feature to use as input
+        depth : int
+            current depth of the Branch in the DecisionTree
+        max_depth : int or None
+            maximum depth of the DecisionTree
+        min_leaf_size : int
+            minimum number of observations in a leaf for a split to be valid
+        gain : Callable
+            the gain function used to evaluate splits
+        evaluator : Callable
+            the evaluation function used to get the prediction for a leaf
+        """
+        self._inputs = inputs
+        self._target = target
+        self._variables = variables
         self._gain = gain
         self._evaluator = evaluator
         self._max_depth = max_depth
         self._min_leaf_size = min_leaf_size
-        self._device = device
-        self.n_observations = len(df)
+        self.n_observations = len(inputs)
         self.depth = depth
-        self.value = evaluator(df[target])
+        self.value = evaluator(target)
         if max_depth is None or (depth < max_depth):
             self.variable, self.threshold, self.gain = self._best_split()
         else:
             self.variable, self.threshold, self.gain = None, None, None
         self.inferior_or_equal, self.superior = None, None
         if not self.is_splitable:
-            del self._df
+            self._clean()
 
-    def _best_split(self):
+    def _best_split(self) -> tuple:
         """
-        Of all possible splits of the data, gets the best split
+        Of all possible splits of the data, gets the best split.
+
+        Returns
+        -------
+        tuple :
+            The tuple of (variable_index, threshold, gain) achieved with the best split.
+            (can be a tuple of None if no valid split were found)
         """
-        inputs = [torch.from_numpy(self._df[col].to_numpy(dtype=np.float32)).to(self._device) for col in self._input_columns]
-        target = self._target_preprocessor(self._df[self._target]).to(self._device)
-        uniques = (X.unique(sorted=True) for X in inputs)
+        if len(self._inputs) == 0:
+            return (None, None, None)
+        uniques = (X.unique(sorted=True) for X in self._inputs)
         non_nan = (X[~torch.isnan(X)] for X in uniques)
-        inf = torch.full((1,), float("inf"), dtype=torch.float32, device=self._device)
+        inf = torch.full((1,), float("inf"), dtype=self._inputs[0].dtype, device=self._inputs[0].device)
         low_high = ((X, torch.cat([X[1:], inf], dim=0)) for X in non_nan)
         boundaries = [(0.5*low + 0.5*high) for low, high in low_high]
-        all_splits = [X.reshape(-1, 1) <= b.reshape(1, -1) for X, b in zip(inputs, boundaries)]
-        gains = [torch.max(
-                            torch.masked_fill(self._gain(target, splits).cpu(),
-                                              ((splits.sum(dim=0).cpu() < self._min_leaf_size) | ((~splits).sum(dim=0).cpu() < self._min_leaf_size)),
-                                              -float("inf")),
-                            dim=0)
-                  for splits in all_splits]
-        col, (gain, i) = max(enumerate(gains), key=lambda x: x[1].values)
-        if not torch.isfinite(gain):
+        all_splits = [X.reshape(1, -1) <= b.reshape(-1, 1) for X, b in zip(self._inputs, boundaries)]
+        var_indexes = torch.cat([torch.full((len(S),), i, device=S.device, dtype=torch.long) for i, S in enumerate(all_splits)], dim=0)
+        boundaries = torch.cat(boundaries, dim=0)
+        all_splits = torch.cat(all_splits, dim=0)
+        leaf_size_check = (all_splits.sum(dim=1) >= self._min_leaf_size) & ((~all_splits).sum(dim=1) >= self._min_leaf_size)
+        if not leaf_size_check.any():
+            return (None, None, None)
+        all_splits, var_indexes, boundaries = all_splits[leaf_size_check], var_indexes[leaf_size_check], boundaries[leaf_size_check]
+        gain, i = torch.max(self._gain(self._target, all_splits), dim=0)
+        if torch.isnan(gain):
             return None, None, None
-        gain = gain.item()
-        return self._input_columns[col], boundaries[col][i].item(), gain
+        gain = gain.cpu().item()
+        variable = self._variables[var_indexes[i].cpu().item()]
+        threshold = boundaries[i].cpu().item()
+        return variable, threshold, gain
+
+    def _clean(self):
+        """
+        Remove useless attributes from the objet after training
+        """
+        del self._inputs, self._target, self._variables, self._gain, self._evaluator, self._max_depth, self._min_leaf_size
 
     def grow(self):
         """
@@ -67,18 +101,18 @@ class Branch:
             raise RuntimeError("Cannot grow an already grown non-leaf Branch")
         if not self.is_splitable:
             raise ValueError("Cannot grow a non-splitable Branch")
-        self.inferior_or_equal = Branch(self._df[self._df[self.variable] <= self.threshold],
-                                        self._input_columns, self._target,
-                                        self._max_depth, self._min_leaf_size,
-                                        self._target_preprocessor, self._gain, self._evaluator,
-                                        self.depth+1, self._device)
-        self.superior = Branch(self._df[self._df[self.variable] > self.threshold],
-                               self._input_columns, self._target,
-                               self._max_depth, self._min_leaf_size,
-                               self._target_preprocessor, self._gain, self._evaluator,
-                               self.depth+1, self._device)
-        del self._df
-    
+        inf = (self._inputs[self._variables.index(self.variable)] <= self.threshold)
+        self.inferior_or_equal = Branch(inputs=[X[inf] for X in self._inputs], target=self._target[inf],
+                                        variables=self._variables, depth=self.depth+1,
+                                        max_depth=self._max_depth, min_leaf_size=self._min_leaf_size,
+                                        gain=self._gain, evaluator=self._evaluator)
+        sup = (self._inputs[self._variables.index(self.variable)] > self.threshold)
+        self.superior = Branch(inputs=[X[sup] for X in self._inputs], target=self._target[sup],
+                               variables=self._variables, depth=self.depth+1,
+                               max_depth=self._max_depth, min_leaf_size=self._min_leaf_size,
+                               gain=self._gain, evaluator=self._evaluator)
+        self._clean()
+
     def propagate(self, df: pd.DataFrame):
         """
         propagate recursively a dataframe to the subbranches and save subset in leafs

@@ -21,9 +21,9 @@ class DecisionTree(Model):
         self.inputs = inputs
         self.target = target
 
-    def evaluator(self, series: pd.Series):
+    def evaluator(self, target: torch.Tensor):
         """
-        From a pandas series of target values returns the model prediction for the given leaf
+        From a torch.Tensor of target values returns the model prediction for the given leaf
         """
         raise NotImplementedError()
 
@@ -46,14 +46,14 @@ class DecisionTree(Model):
         """
         raise NotImplementedError()
     
-    def target_preprocessor(self, data: pd.Series) -> torch.Tensor:
+    def target_preprocessor(self, data: pd.Series, dtype: np.dtype) -> torch.Tensor:
         """
         Converts the pd.Series into a torch.Tensor
         """
-        return torch.from_numpy(data.to_numpy(dtype=np.float32))
+        return torch.from_numpy(data.to_numpy(dtype=dtype))
 
-    def fit(self, df: pd.DataFrame, max_depth: Optional[int]=None, min_leaf_size: int=1,
-            max_leaf_count: Optional[int]=None, device: torch.device="cpu") -> str:
+    def fit(self, df: pd.DataFrame, target: Optional[pd.Series]=None, max_depth: Optional[int]=None, min_leaf_size: int=1,
+            max_leaf_count: Optional[int]=None, device: torch.device="cpu", dtype=np.float64) -> str:
         """
         Fit the decision tree to observations
 
@@ -61,6 +61,8 @@ class DecisionTree(Model):
         ----------
         df : pd.DataFrame
             the dataframe to fit on
+        target : pd.Series or None
+            the target if it should not be read from the dataframe
         max_depth : int or None
             the maximum depth of the tree
         min_leaf_size : int
@@ -71,7 +73,11 @@ class DecisionTree(Model):
             the device on which to perform the best split search
         """
         self.n_observations = len(df)
-        self.root = Branch(df, self.inputs, self.target, max_depth, min_leaf_size, self.target_preprocessor, self.gain, self.evaluator, 0, device)
+        inputs = [torch.from_numpy(df[col].to_numpy(dtype=dtype)).to(device) for col in self.inputs]
+        target = self.target_preprocessor(df[self.target] if target is None else target, dtype).to(device)
+        self.root = Branch(inputs=inputs, target=target, variables=self.inputs,
+                           depth=0, max_depth=max_depth, min_leaf_size=min_leaf_size,
+                           gain=self.gain, evaluator=self.evaluator)
         self.leafs = {self.root}
         while True:
             if (max_leaf_count is not None) and (len(self.leafs) >= max_leaf_count):
@@ -85,8 +91,8 @@ class DecisionTree(Model):
             self.leafs.add(splited.inferior_or_equal)
             self.leafs.add(splited.superior)
         for leaf in self.leafs:
-            if hasattr(leaf, "_df"):
-                del leaf._df
+            if leaf.is_splitable:
+                leaf._clean()
     
     def predict(self, df: Union[pd.DataFrame, dict, Iterable]) -> np.ndarray:
         """
@@ -145,11 +151,11 @@ class DecisionTree(Model):
 
 class DecisionTreeRegressor(DecisionTree):
 
-    def evaluator(self, series: pd.Series):
+    def evaluator(self, target: torch.Tensor):
         """
-        From a pandas series of target values returns the model prediction for the given leaf
+        From a torch.Tensor of target values returns the model prediction for the given leaf
         """
-        return series.mean()
+        return target.mean().cpu().item()
 
     def gain(self, target: torch.Tensor, splits: torch.Tensor):
         """
@@ -160,7 +166,7 @@ class DecisionTreeRegressor(DecisionTree):
         target : torch.Tensor
             tensor of shape (n_observations)
         split : torch.Tensor
-            tensor of shape (n_observations, n_splits)
+            tensor of shape (n_splits, n_observations)
         
         Returns
         -------
@@ -169,24 +175,24 @@ class DecisionTreeRegressor(DecisionTree):
         """
         pred = target.mean()
         SSE = ((target - pred)**2).sum()
-        pred_left, pred_right = (target.unsqueeze(-1) * splits).sum(dim=0) / splits.sum(dim=0), (target.unsqueeze(-1) * ~splits).sum(dim=0) / (~splits).sum(dim=0)
-        SSE_left, SSE_right = ((target.unsqueeze(-1) - pred_left)**2 * splits).sum(dim=0), ((target.unsqueeze(-1) - pred_right)**2 * ~splits).sum(dim=0)
+        pred_left, pred_right = (target.unsqueeze(0) * splits).sum(dim=1) / splits.sum(dim=1), (target.unsqueeze(0) * ~splits).sum(dim=1) / (~splits).sum(dim=1)
+        SSE_left, SSE_right = ((target.unsqueeze(0) - pred_left.unsqueeze(1))**2 * splits).sum(dim=1), ((target.unsqueeze(0) - pred_right.unsqueeze(1))**2 * ~splits).sum(dim=1)
         return (SSE - SSE_left - SSE_right) / self.n_observations
 
 
 class DecisionTreeClassifier(DecisionTree):
 
-    def target_preprocessor(self, data: pd.Series) -> torch.Tensor:
+    def target_preprocessor(self, data: pd.Series, dtype: np.dtype) -> torch.Tensor:
         """
         Converts the pd.Series into a torch.Tensor
         """
         return torch.tensor([self._class_to_index[c] for c in data], dtype=torch.long)
 
-    def evaluator(self, series: pd.Series):
+    def evaluator(self, series: torch.Tensor):
         """
-        From a pandas series of target values returns the model prediction for the given leaf
+        From a torch.Tensor of target values returns the model prediction for the given leaf
         """
-        return series.mode().iloc[0]
+        return series.mode().values.cpu().item()
 
     def gain(self, target: torch.Tensor, splits: torch.Tensor):
         """
@@ -197,31 +203,40 @@ class DecisionTreeClassifier(DecisionTree):
         target : torch.Tensor
             tensor of shape (n_observations)
         split : torch.Tensor
-            tensor of shape (n_observations, n_splits)
+            tensor of shape (n_splits, n_observations)
         
         Returns
         -------
         torch.Tensor :
             tensor of gains of shape (n_splits)
         """
-        n_obs, n_splits = splits.shape
+        n_splits, n_obs = splits.shape
         classes = F.one_hot(target)
         p = classes.sum(dim=0) / n_obs
-        gini = (p * (1-p)).sum()
-        count_left = torch.einsum("ik, ij -> jk", classes, splits.long())
-        count_right = n_obs - count_left
-        p_left, p_right = count_left / n_obs, count_right / n_obs
-        gini_left, gini_right = (p_left * (1 - p_left)).sum(dim=-1), (p_right * (1 - p_right)).sum(dim=-1)
-        return (gini - gini_left - gini_right) * n_obs / self.n_observations
+        gini = (p * (1-p)).mean()
+        n_left = splits.sum(dim=1)
+        n_right = n_obs - n_left
+        count_left = (classes.unsqueeze(0) * splits.long().unsqueeze(-1)).sum(dim=1)
+        count_right = (classes.unsqueeze(0) * (~splits).long().unsqueeze(-1)).sum(dim=1)
+        p_left, p_right = count_left / n_left.unsqueeze(-1), count_right / n_right.unsqueeze(-1)
+        gini_left, gini_right = (p_left * (1 - p_left)).mean(dim=-1), (p_right * (1 - p_right)).mean(dim=-1)
+        return (gini*n_obs - gini_left*n_left - gini_right*n_right) / self.n_observations
 
     def __init__(self, inputs: List[str], target: str, classes: List[str]):
         super().__init__(inputs, target)
         self.classes = classes
         self._class_to_index = {c: i for i, c in enumerate(classes)}
 
-    def predict(self, df: pd.DataFrame) -> np.ndarray:
+    def predict(self, df: Union[pd.DataFrame, dict, np.ndarray], indexes: bool=False) -> Union[List[str], np.ndarray]:
         """
         make a prediction
+
+        Parameters
+        ----------
+        df : pd.dataFrame
+            inputs to predict on
+        indexes : bool
+            if True return indexes of predicted classes instead of list of class names
         """
         if self.root is None:
             raise RuntimeError("Cannot evaluate model before it was fited")
@@ -232,4 +247,6 @@ class DecisionTreeClassifier(DecisionTree):
             sub = leaf._df.index
             result[sub] = leaf.value
             leaf._df = None
+        if not indexes:
+            result = [self.classes[i] for i in result]
         return result
