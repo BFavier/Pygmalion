@@ -36,7 +36,7 @@ class GradientBoostingRegressor:
                 df[self.target] -= lr * tree.predict(df)
                 if verbose:
                     RMSE = np.mean(df[self.target]**2)**0.5
-                    counter.set_postfix(**{"RMSE": f"{RMSE:.3g}"})
+                    counter.set_postfix(**{"train RMSE": f"{RMSE:.3g}"})
         except KeyboardInterrupt:
             pass
 
