@@ -3,7 +3,7 @@ import pandas as pd
 import numpy as np
 from tqdm import tqdm
 import torch
-from ._decision_tree import DecisionTreeRegressor
+from ._decision_tree import DecisionTreeRegressor, DATAFRAME_LIKE
 
 
 class GradientBoostingRegressor:
@@ -40,7 +40,7 @@ class GradientBoostingRegressor:
         except KeyboardInterrupt:
             pass
 
-    def predict(self, df: pd.DataFrame) -> np.ndarray:
+    def predict(self, df: DATAFRAME_LIKE) -> np.ndarray:
         """
         Returns the prediction of the model
         """
@@ -48,7 +48,7 @@ class GradientBoostingRegressor:
             pass
         return res
 
-    def predict_partial(self, df: pd.DataFrame) -> Iterable[np.ndarray]:
+    def predict_partial(self, df: DATAFRAME_LIKE) -> Iterable[np.ndarray]:
         """
         Predict the target after each tree is succesively applied
         """

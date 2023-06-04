@@ -7,6 +7,9 @@ from ._branch import Branch
 from pygmalion._model import Model
 
 
+DATAFRAME_LIKE = Union[pd.DataFrame, dict, Iterable]
+
+
 class DecisionTree(Model):
 
     def __repr__(self):
@@ -94,7 +97,7 @@ class DecisionTree(Model):
             if leaf.is_splitable:
                 leaf._clean()
     
-    def predict(self, df: Union[pd.DataFrame, dict, Iterable]) -> np.ndarray:
+    def predict(self, df: DATAFRAME_LIKE) -> np.ndarray:
         """
         make a prediction
         """
@@ -135,7 +138,7 @@ class DecisionTree(Model):
         obj.leafs = set(b for b in obj.branches if b.is_leaf)
         return obj
     
-    def _as_dataframe(self, data: Union[pd.DataFrame, dict, Iterable]) -> pd.DataFrame:
+    def _as_dataframe(self, data: DATAFRAME_LIKE) -> pd.DataFrame:
         """
         Converts any ill formated input into a DataFrame
         """
@@ -227,7 +230,7 @@ class DecisionTreeClassifier(DecisionTree):
         self.classes = classes
         self._class_to_index = {c: i for i, c in enumerate(classes)}
 
-    def predict(self, df: Union[pd.DataFrame, dict, np.ndarray], indexes: bool=False) -> Union[List[str], np.ndarray]:
+    def predict(self, df: DATAFRAME_LIKE, indexes: bool=False) -> Union[List[str], np.ndarray]:
         """
         make a prediction
 
