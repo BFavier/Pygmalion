@@ -4,9 +4,13 @@ import numpy as np
 from tqdm import tqdm
 import torch
 from ._decision_tree import DecisionTreeRegressor, DATAFRAME_LIKE
+from pygmalion._model import Model
 
 
-class GradientBoostingRegressor:
+class GradientBoostingRegressor(Model):
+
+    def __repr__(self) -> str:
+        return type(self).__name__+f"(target={self.target}, inputs={self.inputs}, n_trees={len(self.trees)})"
 
     def __init__(self, inputs: List[str], target: str):
         """
@@ -57,3 +61,18 @@ class GradientBoostingRegressor:
         for lr, tree in self.trees:
             predicted = predicted + lr * tree.predict(df)
             yield predicted
+
+    @property
+    def dump(self) -> dict:
+        return {"type": type(self).__name__,
+                "inputs": list(self.inputs),
+                "target": self.target,
+                "trees": [[lr, tree.dump] for lr, tree in self.trees]}
+
+    @classmethod
+    def from_dump(cls, dump: dict) -> "GradientBoostingRegressor":
+        obj = cls.__new__(cls)
+        obj.trees = [(lr, DecisionTreeRegressor.from_dump(tree)) for lr, tree in dump["trees"]]
+        obj.inputs = dump["inputs"]
+        obj.target = dump["target"]
+        return obj

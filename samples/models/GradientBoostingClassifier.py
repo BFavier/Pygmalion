@@ -20,14 +20,14 @@ device = "cuda:0"
 
 # Create and train the model
 model = dt.GradientBoostingClassifier(inputs, target, classes)
-model.fit(df_train, n_trees=100, learning_rate=0.3, max_leaf_count=5)
+model.fit(df_train, n_trees=100, learning_rate=0.5, max_leaf_count=3)
 
 # Plot validation loss progress
 f, ax = plt.subplots()
 ax.set_title("Performance on test data against number of trees")
 ax.scatter(list(range(1, len(model.trees)+1)), list(ml.accuracy(pred, df_test[target]) for pred in model.predict_partial(df_test)))
 ax.set_xlabel("number of trees")
-ax.set_ylabel("RMSE")
+ax.set_ylabel("accuracy")
 
 # Plot results
 y_pred = model.predict(df_test)

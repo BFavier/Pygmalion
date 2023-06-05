@@ -4,9 +4,13 @@ import pandas as pd
 import numpy as np
 import torch
 from tqdm import tqdm
+from pygmalion._model import Model
 
 
-class GradientBoostingClassifier:
+class GradientBoostingClassifier(Model):
+
+    def __repr__(self):
+        return type(self).__name__+f"(target={self.target}, inputs={self.inputs}, classes={self.classes}, n_trees={len(self.trees)})"
 
     def __init__(self, inputs: List[str], target: str, classes: list):
         self.inputs = inputs
@@ -57,34 +61,56 @@ class GradientBoostingClassifier:
         except KeyboardInterrupt:
             pass
 
-    def _predicted(self, df: DATAFRAME_LIKE) -> np.ndarray:
+    def _predicted(self, df: DATAFRAME_LIKE) -> Iterable[np.ndarray]:
+        """
+        Returns all individual prediction stages without formating
+        """
         predicted = np.zeros((len(self.classes), len(df)))
         for lr, trees in self.trees:
             predicted += lr * np.stack([tree.predict(df) for tree in trees], axis=0)
             yield predicted
+        
+    def _format_prediction(self, predicted: np.ndarray, probabilities: bool=False, index: bool=False) -> Union[pd.DataFrame, np.ndarray, List[str]]:
+        """
+        format a prediction of the model
+        """
+        if probabilities:
+                p = np.transpose(np.exp(predicted))
+                p /= p.sum(axis=-1)[:, None]
+                return pd.DataFrame(data=p, columns=self.classes)
+        elif index:
+            return np.argmax(predicted, axis=0)
+        else:
+            return [self.classes[c] for c in np.argmax(predicted, axis=0)]
 
-    def predict(self, df: DATAFRAME_LIKE, probabilites: bool=False, index: bool=False) -> Union[pd.DataFrame, np.ndarray, List[str]]:
+    def predict(self, df: DATAFRAME_LIKE, probabilities: bool=False, index: bool=False) -> Union[pd.DataFrame, np.ndarray, List[str]]:
         """
         Returns the prediction of the model
         """
         for res in self._predicted(df):
             pass
-        if probabilites:
-                return pd.DataFrame(data=np.transpose(res), columns=self.inputs)
-        elif index:
-            return np.argmax(res, axis=0)
-        else:
-            return [self.classes[c] for c in np.argmax(res, axis=0)]
+        return self._format_prediction(res, probabilities, index)
 
-    def predict_partial(self, df: DATAFRAME_LIKE, probabilites: bool=False, index: bool=False) -> Iterable[Union[pd.DataFrame, np.ndarray, List[str]]]:
+    def predict_partial(self, df: DATAFRAME_LIKE, probabilities: bool=False, index: bool=False) -> Iterable[Union[pd.DataFrame, np.ndarray, List[str]]]:
         """
         Predict the target after each tree is succesively applied
         """
         for predicted in self._predicted(df):
-            if probabilites:
-                yield pd.DataFrame(data=np.transpose(predicted), columns=self.inputs)
-            elif index:
-                yield np.argmax(predicted, axis=0)
-            else:
-                yield [self.classes[c] for c in np.argmax(predicted, axis=0)]
+            yield self._format_prediction(predicted, probabilities, index)
 
+    @property
+    def dump(self) -> dict:
+        return {"type": type(self).__name__,
+                "inputs": list(self.inputs),
+                "target": self.target,
+                "classes": list(self.classes),
+                "trees": [[lr, [tree.dump for tree in trees]] for lr, trees in self.trees]}
+
+    @classmethod
+    def from_dump(cls, dump: dict) -> "GradientBoostingClassifier":
+        obj = cls.__new__(cls)
+        obj.trees = [(lr, [DecisionTreeRegressor.from_dump(tree) for tree in trees]) for lr, trees in dump["trees"]]
+        obj.inputs = dump["inputs"]
+        obj.target = dump["target"]
+        obj.classes = dump["classes"]
+        return obj
