@@ -19,7 +19,7 @@ class GradientBoostingRegressor(Model):
         self.target = target
         self.trees = []
     
-    def fit(self, df: pd.DataFrame, n_trees: int, learning_rate: float = 0.3,
+    def fit(self, df: pd.DataFrame, n_trees: int=100, learning_rate: float=0.1,
             max_depth: Optional[int]=None, min_leaf_size: int=1,
             max_leaf_count: Optional[int]=None, verbose: bool=True,
             device: torch.device="cpu"):

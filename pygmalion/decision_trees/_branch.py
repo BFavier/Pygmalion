@@ -80,7 +80,7 @@ class Branch:
             return (None, None, None)
         all_splits, var_indexes, boundaries = all_splits[leaf_size_check], var_indexes[leaf_size_check], boundaries[leaf_size_check]
         gain, i = torch.max(self._gain(self._target, all_splits), dim=0)
-        if torch.isnan(gain):
+        if not (gain > -float("inf")):
             return None, None, None
         gain = gain.cpu().item()
         variable = self._variables[var_indexes[i].cpu().item()]

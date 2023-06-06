@@ -1,5 +1,6 @@
 from ._decision_tree import DecisionTreeRegressor, DATAFRAME_LIKE
 from typing import List, Iterable, Optional, Union
+from warnings import warn
 import pandas as pd
 import numpy as np
 import torch
@@ -16,17 +17,17 @@ class GradientBoostingClassifier(Model):
         self.inputs = inputs
         self.target = target
         self.classes = classes
+        self.trees = []
         self._class_to_index = {c: i for i, c in enumerate(classes)}
 
-    def fit(self, df: pd.DataFrame, n_trees: int, learning_rate: float = 0.3,
+    def fit(self, df: pd.DataFrame, n_trees: int=100, learning_rate: float=0.1,
             max_depth: Optional[int]=None, min_leaf_size: int=1,
             max_leaf_count: Optional[int]=None, verbose: bool=True,
             device: torch.device="cpu", dtype: np.dtype=np.float64):
-        self.trees = []
         frequencies = df[self.target].value_counts(normalize=True)
         for c in self.classes:
             if c not in frequencies.index:
-                raise ValueError(f"Target class '{c}' is not present in the training dataset")
+                warn(f"Target class '{c}' is not present in the training dataset")
         predicted = np.zeros((len(self.classes), len(df)), dtype=dtype)
         class_indexes = np.array([self._class_to_index[c] for c in df[self.target]], dtype=np.uint32)
         observation_indexes = np.arange(len(df))

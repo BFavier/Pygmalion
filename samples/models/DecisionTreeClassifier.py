@@ -20,7 +20,7 @@ device = "cuda:0"
 
 # Create and train the model
 model = dt.DecisionTreeClassifier(inputs, target, classes)
-model.fit(df_train, min_leaf_size=10)
+model.fit(df_train, max_leaf_count=10)
 
 # Plot results
 y_pred = model.predict(df_test)
