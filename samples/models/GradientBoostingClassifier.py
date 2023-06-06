@@ -20,7 +20,7 @@ device = "cuda:0"
 
 # Create and train the model
 model = dt.GradientBoostingClassifier(inputs, target, classes)
-model.fit(df_train, n_trees=100, learning_rate=0.5, max_leaf_count=3)
+model.fit(df_train, n_trees=100, learning_rate=0.3, max_leaf_count=3)
 
 # Plot validation loss progress
 f, ax = plt.subplots()

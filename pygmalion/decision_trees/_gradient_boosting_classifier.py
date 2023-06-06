@@ -39,7 +39,7 @@ class GradientBoostingClassifier(Model):
             for _ in counter:
                 trees = []
                 if len(self.trees) == 0:
-                    target = np.repeat(np.array([[np.log(frequencies.get(c, 0.))] for c in self.classes]), len(df), axis=1)
+                    target = np.repeat(np.array([[np.log(frequencies.get(c, 1.0E-10))] for c in self.classes]), len(df), axis=1)
                     for trg in target:
                         tree = DecisionTreeRegressor(self.inputs, self.target)
                         tree.fit(df, pd.Series(trg), max_depth=0, device=device, dtype=dtype)
@@ -49,7 +49,7 @@ class GradientBoostingClassifier(Model):
                     denominator = (1 / np.exp(predicted).sum(axis=0))
                     for pred, kronecker in zip(predicted, class_mask):
                         tree = DecisionTreeRegressor(self.inputs, self.target)
-                        trg = kronecker - pred/denominator
+                        trg = kronecker - 1/denominator
                         tree.fit(df, pd.Series(trg), max_depth=max_depth, min_leaf_size=min_leaf_size, max_leaf_count=max_leaf_count, device=device, dtype=dtype)
                         trees.append(tree)
                     self.trees.append((learning_rate, trees))
