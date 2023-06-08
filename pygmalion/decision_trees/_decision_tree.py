@@ -1,11 +1,11 @@
-from typing import List, Set, Iterable, Optional, Union
+from typing import List, Dict, Set, Iterable, Optional, Union
 import pandas as pd
 import numpy as np
 import torch
 import torch.nn.functional as F
 from ._branch import Branch
+from ._monotonicity import MONOTONICITY
 from pygmalion._model import Model
-
 
 DATAFRAME_LIKE = Union[pd.DataFrame, dict, Iterable]
 
@@ -30,7 +30,7 @@ class DecisionTree(Model):
         """
         raise NotImplementedError()
 
-    def gain(self, target: torch.Tensor, split: torch.Tensor):
+    def gain(self, target: torch.Tensor, split: torch.Tensor, variable_indexes: torch.Tensor):
         """
         Returns the gain associated to each split.
         Can be set to -inf to ignore a split.
@@ -41,14 +41,16 @@ class DecisionTree(Model):
             tensor of shape (n_observations)
         split : torch.Tensor
             tensor of shape (n_observations, n_splits)
-        
+        variable_index : torch.Tensor
+            tensor of shape (n_splits) of variable index along which the split is performed
+
         Returns
         -------
         torch.Tensor :
             tensor of losses of shape (n_splits)
         """
         raise NotImplementedError()
-    
+
     def target_preprocessor(self, data: pd.Series, dtype: np.dtype) -> torch.Tensor:
         """
         Converts the pd.Series into a torch.Tensor
@@ -56,7 +58,8 @@ class DecisionTree(Model):
         return torch.from_numpy(data.to_numpy(dtype=dtype))
 
     def fit(self, df: pd.DataFrame, target: Optional[pd.Series]=None, max_depth: Optional[int]=None, min_leaf_size: int=1,
-            max_leaf_count: Optional[int]=None, device: torch.device="cpu", dtype=np.float64) -> str:
+            max_leaf_count: Optional[int]=None,
+            device: torch.device="cpu", dtype=np.float64) -> str:
         """
         Fit the decision tree to observations
 
@@ -96,7 +99,7 @@ class DecisionTree(Model):
         for leaf in self.leafs:
             if leaf.is_splitable:
                 leaf._clean()
-    
+
     def predict(self, df: DATAFRAME_LIKE) -> np.ndarray:
         """
         make a prediction
@@ -111,7 +114,7 @@ class DecisionTree(Model):
             result[sub] = leaf.value
             leaf._df = None
         return result
-    
+
     @property
     def branches(self) -> Iterable[Branch]:
         """
@@ -154,13 +157,24 @@ class DecisionTree(Model):
 
 class DecisionTreeRegressor(DecisionTree):
 
+    def __init__(self, inputs: List[str], target: str, monotonicity_constraints: Dict[str, MONOTONICITY]={}):
+        """
+        Parameters
+        ----------
+        monotonicity_constraints : dict
+            dict of {str: bool} with name of variables to constraint as keys,
+            and True or False as values depending on increasing or decreasing constraint.
+        """
+        super().__init__(inputs, target)
+        self.monotonicity_constraints = monotonicity_constraints
+
     def evaluator(self, target: torch.Tensor):
         """
         From a torch.Tensor of target values returns the model prediction for the given leaf
         """
         return target.mean().cpu().item()
 
-    def gain(self, target: torch.Tensor, splits: torch.Tensor):
+    def gain(self, target: torch.Tensor, splits: torch.Tensor, variable_indexes: torch.Tensor):
         """
         Returns the MSE (Mean Squared Error) gain associated to each split
 
@@ -170,6 +184,8 @@ class DecisionTreeRegressor(DecisionTree):
             tensor of shape (n_observations)
         split : torch.Tensor
             tensor of shape (n_splits, n_observations)
+        variable_index : torch.Tensor
+            tensor of shape (n_splits) of variable index along which the split is performed
         
         Returns
         -------
@@ -180,7 +196,31 @@ class DecisionTreeRegressor(DecisionTree):
         SSE = ((target - pred)**2).sum()
         pred_left, pred_right = (target.unsqueeze(0) * splits).sum(dim=1) / splits.sum(dim=1), (target.unsqueeze(0) * ~splits).sum(dim=1) / (~splits).sum(dim=1)
         SSE_left, SSE_right = ((target.unsqueeze(0) - pred_left.unsqueeze(1))**2 * splits).sum(dim=1), ((target.unsqueeze(0) - pred_right.unsqueeze(1))**2 * ~splits).sum(dim=1)
-        return (SSE - SSE_left - SSE_right) / self.n_observations
+        gain = (SSE - SSE_left - SSE_right) / self.n_observations
+        gain = torch.masked_fill(gain, (pred_right - pred_left) * torch.gather(self._variable_constraints.to(target.device), 0, variable_indexes) < 0, -float("inf"))
+        return gain
+    
+    @property
+    def monotonicity_constraints(self) -> Dict[str, MONOTONICITY]:
+        return self._monotonicity_constraint
+
+    @monotonicity_constraints.setter
+    def monotonicity_constraints(self, other: Dict[str, MONOTONICITY]):
+        self._monotonicity_constraint = other
+        constraints = (other.get(c, None) for c in self.inputs)
+        self._variable_constraints = torch.tensor([0 if c is None else int(c) for c in constraints], dtype=torch.int8, device="cpu")
+
+    @property
+    def dump(self) -> dict:
+        dump = super().dump
+        dump.update({"monotonicity_constraints": self.monotonicity_constraints})
+        return dump
+
+    @classmethod
+    def from_dump(cls, dump: dict) -> "DecisionTree":
+        obj = super().from_dump(dump)
+        obj.monotonicity_constraints = {k: MONOTONICITY(v) for k, v in dump["monotonicity_constraints"].items()}
+        return obj
 
 
 class DecisionTreeClassifier(DecisionTree):
@@ -197,7 +237,7 @@ class DecisionTreeClassifier(DecisionTree):
         """
         return series.mode().values.cpu().item()
 
-    def gain(self, target: torch.Tensor, splits: torch.Tensor):
+    def gain(self, target: torch.Tensor, splits: torch.Tensor, variable_indexes: torch.Tensor):
         """
         Returns the Gini gain associated to each split
 
@@ -207,6 +247,8 @@ class DecisionTreeClassifier(DecisionTree):
             tensor of shape (n_observations)
         split : torch.Tensor
             tensor of shape (n_splits, n_observations)
+        variable_index : torch.Tensor
+            tensor of shape (n_splits) of variable index along which the split is performed
         
         Returns
         -------

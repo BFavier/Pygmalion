@@ -3,6 +3,7 @@ import IPython
 import pygmalion as ml
 import pandas as pd
 import matplotlib.pyplot as plt
+from pygmalion.decision_trees import MONOTONICITY
 plt.style.use("bmh")
 data_path = pathlib.Path(__file__).parents[1] / "data"
 
@@ -14,7 +15,7 @@ df_train, df_test = ml.split(df, weights=(0.8, 0.2))
 # Create and train the model
 target = "medv"
 inputs = [c for c in df.columns if c != target]
-model = ml.decision_trees.GradientBoostingRegressor(inputs, target)
+model = ml.decision_trees.GradientBoostingRegressor(inputs, target, {"nox": MONOTONICITY.DECREASING, "tax": MONOTONICITY.INCREASING})
 model.fit(df_train, n_trees=100, learning_rate=0.3, max_leaf_count=5)
 
 # Plot validation loss progress
