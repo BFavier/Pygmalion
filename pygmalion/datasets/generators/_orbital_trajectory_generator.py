@@ -73,7 +73,9 @@ class OrbitalTrajectoryGenerator:
         k5 = dydt(data + dt*19372/6561 * k1 + dt*-25360/2187 * k2 + dt*64448/6561 * k3 + dt*-212/729 * k4)
         k6 = dydt(data + dt*9017/3168 * k1 + dt*-355/33 * k2 + dt*46732/5247 * k3 + dt*49/176 * k4 + dt*-5103/18656 * k5)
         k7 = dydt(data + dt*35/384 * k1 + dt*500/1113 * k3 + dt*125/192 * k4 + dt*-2187/6784 * k5 + dt*11/84 * k6)
-        return data + dt*5179/57600*k1 + dt*7571/16695*k3 + dt*393/640*k4 + dt*-92097/339200*k5 + dt*187/2100*k6 + dt*1/40*k7
+        RK4 = (35/384*k1 + 500/1113*k3 + 125/192*k4 - 2187/6784*k5 +  	11/84*k6)
+        RK5 = (5179/57600*k1 + 7571/16695*k3 + 393/640*k4 - 92097/339200*k5 + 187/2100*k6 + 1/40*k7)
+        return data + dt * RK5
 
     @staticmethod
     def runge_kutta_4(data: np.ndarray, dydt: Callable, dt: float) -> np.ndarray:
