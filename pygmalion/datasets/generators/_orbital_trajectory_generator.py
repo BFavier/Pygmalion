@@ -65,6 +65,8 @@ class OrbitalTrajectoryGenerator:
         """
         Dormand-Prince method
         https://en.wikipedia.org/wiki/List_of_Runge%E2%80%93Kutta_methods
+        https://en.wikipedia.org/wiki/Dormand%E2%80%93Prince_method
+        https://en.wikipedia.org/wiki/Runge%E2%80%93Kutta%E2%80%93Fehlberg_method
         """
         k1 = dydt(data)
         k2 = dydt(data + dt/5 * k1)
