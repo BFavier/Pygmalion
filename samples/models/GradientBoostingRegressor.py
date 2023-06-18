@@ -4,6 +4,7 @@ import pygmalion as ml
 import pandas as pd
 import matplotlib.pyplot as plt
 from pygmalion.decision_trees import MONOTONICITY
+
 plt.style.use("bmh")
 data_path = pathlib.Path(__file__).parents[1] / "data"
 
