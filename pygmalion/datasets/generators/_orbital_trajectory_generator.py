@@ -21,7 +21,7 @@ class OrbitalTrajectoryGenerator:
         dt_min : float
             minimum time step during integration
         tol : float
-            tolerance per second of integration over each parameter
+            tolerance per second of integration of velocity along x and y
         verbose : bool
             if True display integration progress
         """
@@ -52,7 +52,8 @@ class OrbitalTrajectoryGenerator:
         V = np.random.uniform(0.5, 1.2, size=(batch_size, 1)) * escape_velocity * rot
         y0 = np.concatenate([X, V], axis=-1)
         df = OrbitalTrajectoryGenerator.runge_kutta_fehlberg(y0, T, dt, dt_min, tol, verbose)
-        df[(df["x"] < -3) | (df["x"] > 3) | (df["y"] < -3) | (df["y"] > 3)] = float("nan")
+        df.loc[(df["x"] < -3) | (df["x"] > 3) | (df["y"] < -3) | (df["y"] > 3),
+               ["x", "y", "u", "v"]] = float("nan")
         return df
 
     @staticmethod

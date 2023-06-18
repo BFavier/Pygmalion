@@ -13,7 +13,7 @@ lines = [ax.plot([], [])[0] for _ in range(N_OBJECTS)]
 def update(frame: int):
     for line, (_, sub) in zip(lines, df.groupby("obj")):
         sub = sub.iloc[:frame]
-        line.set_data(sub["x"], sub["y"])
+        line.set_data(sub["x"].tolist()[-20:], sub["y"].tolist()[-20:])
     return lines
 
 ani = FuncAnimation(f, update, frames=range(1, len(df)+1), blit=False, interval=1/len(df)*1.0E3)
