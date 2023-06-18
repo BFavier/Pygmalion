@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
 
 N_OBJECTS = 10
-df = OrbitalTrajectoryGenerator.generate_batch(batch_size=N_OBJECTS, dt_min=1.0E-10, tol=1.0E-4)
+df = OrbitalTrajectoryGenerator.generate_batch(batch_size=N_OBJECTS, dt_min=1.0E-10, tol=1.0E-6)
 f, ax = plt.subplots()
 ax.set_xlim([-3, 3])
 ax.set_ylim([-3, 3])
