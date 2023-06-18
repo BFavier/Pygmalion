@@ -6,8 +6,7 @@ from typing import Callable
 class OrbitalTrajectoryGenerator:
 
     def __init__(self, n_batches: int, batch_size: int, T: float=5.0,
-                 dt: float=1.0E-2, dt_min: float=1.0E-6, tol: float=1.0E-8,
-                 verbose: bool=False):
+                 dt: float=1.0E-2, dt_min: float=1.0E-6, tol: float=1.0E-6, verbose: bool=False):
         """
         Parameters
         ----------
@@ -39,7 +38,8 @@ class OrbitalTrajectoryGenerator:
             yield self.generate_batch(self.batch_size, self.T, self.dt, self.dt_min, self.tol, self.verbose)
 
     @staticmethod
-    def generate_batch(batch_size: int, T: float=5.0, dt: float=1.0E-2, dt_min: float=1.0E-6, tol=1.0E-3, verbose: bool=False):
+    def generate_batch(batch_size: int, T: float=5.0, dt: float=1.0E-2,
+                       dt_min: float=1.0E-6, tol=1.0E-6, verbose: bool=False):
         """
         Generates a single batch of trajectories
         """
@@ -124,7 +124,7 @@ class OrbitalTrajectoryGenerator:
             if error > tol or h == dt_min:
                 continue
             elif verbose:
-                print(f"t={t:.3g}, dt={h:.3g}")
+                print(f"t={t:.3g}, dt={h:.3g}, error={error:.3g}")
             h = max(dt_min, min(h, dt))
             t += h
             y = y + h*RK5
