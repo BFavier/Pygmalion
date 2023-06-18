@@ -2,9 +2,8 @@ from pygmalion.datasets.generators import OrbitalTrajectoryGenerator
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
 
-N_OBJECTS = 100
-N_FRAMES = 1000
-df = OrbitalTrajectoryGenerator.generate_batch(batch_size=N_OBJECTS, dt=1.0E-3, n_steps=N_FRAMES, runge_kutta_4=True)
+N_OBJECTS = 10
+df = OrbitalTrajectoryGenerator.generate_batch(batch_size=N_OBJECTS, T=1.0, dt=1.0E-3, tol=1.0E-4)
 f, ax = plt.subplots()
 ax.set_xlim([-3, 3])
 ax.set_ylim([-3, 3])
@@ -17,7 +16,7 @@ def update(frame: int):
         line.set_data(sub["x"], sub["y"])
     return lines
 
-ani = FuncAnimation(f, update, frames=range(1, len(df)+1), blit=True, interval=1/N_FRAMES*1.0E3)
+ani = FuncAnimation(f, update, frames=range(1, len(df)+1), blit=False, interval=1/len(df)*1.0E3)
 plt.show()
 
 if __name__ == "__main__":

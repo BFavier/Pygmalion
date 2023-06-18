@@ -5,15 +5,33 @@ from typing import Callable
 
 class OrbitalTrajectoryGenerator:
 
-    def __init__(self, n_batches: int, batch_size: int):
-        self.n_bacthes = n_batches
+    def __init__(self, n_batches: int, batch_size: int, T: float=1.0, dt: float=1.0E-3, tol: float=1.0E-4):
+        """
+        Parameters
+        ----------
+        n_batches : int
+            number of batches to yield in an interation
+        batch_size : int
+            number of objects orbital trajectory to generate each batch
+        T : float
+            time duration of the generated orbits
+        dt : float
+            time steps of the trajectory snapshots
+        tol : float
+            tolerance per second of integration over each parameter
+        """
+        self.n_batches = n_batches
         self.batch_size = batch_size
+        self.T = T
+        self.dt = dt
+        self.tol = tol
 
     def __iter__(self):
-        pass
+        for _ in self.n_batches:
+            yield self.generate_batch(self.batch_size, self.T, self.dt, self.tol)
 
     @staticmethod
-    def generate_batch(batch_size: int, dt: float, n_steps: int, runge_kutta_4: bool=True):
+    def generate_batch(batch_size: int, T: float, dt: float, tol=1.0E-3):
         """
         Generates a single batch of trajectories
         """
@@ -21,23 +39,9 @@ class OrbitalTrajectoryGenerator:
         theta = np.random.uniform(0, 2*np.pi, size=batch_size)
         rot = np.stack([np.cos(theta), -np.sin(theta)], axis=1)
         V = rot # np.random.uniform(-2**0.5, 2**0.5, size=(batch_size, 1)) * rot
-        data = np.concatenate([X, V], axis=-1)
-        t = 0
-        df = pd.DataFrame(data=data, columns=["x", "y", "u", "v"], dtype=np.float64)
-        df["t"] = t
-        # f = OrbitalTrajectoryGenerator.runge_kutta_4 if runge_kutta_4 else OrbitalTrajectoryGenerator.euler_method
-        f = OrbitalTrajectoryGenerator.runge_kutta_5
-        dydt = OrbitalTrajectoryGenerator.derivatives
-        for _ in range(n_steps-1):
-            t += dt
-            data = f(data, dydt, dt)
-            sub = pd.DataFrame(data, columns=["x", "y", "u", "v"])
-            sub["t"] = t
-            df = pd.concat([df, sub])
-        df.index.rename("obj", inplace=True)
-        df.reset_index(inplace=True)
-        return df
-    
+        y0 = np.concatenate([X, V], axis=-1)
+        return OrbitalTrajectoryGenerator.runge_kutta_fehlberg(y0, T, dt, tol)
+
     @staticmethod
     def derivatives(data: np.ndarray) -> np.ndarray:
         """
@@ -55,42 +59,65 @@ class OrbitalTrajectoryGenerator:
         """
         X, V = data[:, :2], data[:, 2:]
         r = np.linalg.norm(X, ord=2, axis=1)[:, None]
-        GMm = 1.0
+        GM = 1.0
         eps = 1.0E-20
         ur = X/r
-        return np.concatenate([V, GMm/(r**2 + eps) * -ur], axis=-1)
+        return np.concatenate([V, GM/(r**2 + eps) * -ur], axis=-1)
     
     @staticmethod
-    def runge_kutta_5(data: np.ndarray, dydt: Callable, dt: float) -> np.ndarray:
+    def runge_kutta_fehlberg(y0: np.ndarray, T: float, dt: float, tol: float) -> pd.DataFrame:
         """
-        Dormand-Prince method
-        https://en.wikipedia.org/wiki/List_of_Runge%E2%80%93Kutta_methods
-        https://en.wikipedia.org/wiki/Dormand%E2%80%93Prince_method
-        https://en.wikipedia.org/wiki/Runge%E2%80%93Kutta%E2%80%93Fehlberg_method
-        """
-        k1 = dydt(data)
-        k2 = dydt(data + dt/5 * k1)
-        k3 = dydt(data + dt*3/40 * k1 + dt*9/40 * k2)
-        k4 = dydt(data + dt*44/45 * k1 + dt*-56/15 * k2 + dt*32/9 * k3)
-        k5 = dydt(data + dt*19372/6561 * k1 + dt*-25360/2187 * k2 + dt*64448/6561 * k3 + dt*-212/729 * k4)
-        k6 = dydt(data + dt*9017/3168 * k1 + dt*-355/33 * k2 + dt*46732/5247 * k3 + dt*49/176 * k4 + dt*-5103/18656 * k5)
-        k7 = dydt(data + dt*35/384 * k1 + dt*500/1113 * k3 + dt*125/192 * k4 + dt*-2187/6784 * k5 + dt*11/84 * k6)
-        RK4 = (35/384*k1 + 500/1113*k3 + 125/192*k4 - 2187/6784*k5 +  	11/84*k6)
-        RK5 = (5179/57600*k1 + 7571/16695*k3 + 393/640*k4 - 92097/339200*k5 + 187/2100*k6 + 1/40*k7)
-        return data + dt * RK5
+        Perform dynamic time step integration of the problem using runge kutta fehlberg method.
+        This is to avoid adding scipy.integrate.ode as a dependency.
 
-    @staticmethod
-    def runge_kutta_4(data: np.ndarray, dydt: Callable, dt: float) -> np.ndarray:
+        https://en.wikipedia.org/wiki/Runge%E2%80%93Kutta_methods
+        https://en.wikipedia.org/wiki/Runge%E2%80%93Kutta%E2%80%93Fehlberg_method
+        https://maths.cnam.fr/IMG/pdf/RungeKuttaFehlbergProof.pdf
+
+        Parameters
+        ----------
+        y0 : np.ndarray
+            initial conditions of (x, y, u, v)
+            array of floats of shape (n_objects, 4)
+        T : float
+            integration time
+        dt : float
+            maximum time step, and final interpolated time steps
+        tol : float
+            maximum tolerated error accumulation per second of integration, on each parameter
+        
+        Returns
+        -------
+        pd.DataFrame :
+            dataframe containing the (x, y, u, v) at each time 't', for each object 'obj'
         """
-        """
-        k1 = dydt(data)
-        k2 = dydt(data + dt/2 * k1)
-        k3 = dydt(data + dt/2 * k2)
-        k4 = dydt(data + dt * k3)
-        return data + dt/6 * (k1 + 2*k2 + 2*k3 + k4)
-    
-    @staticmethod
-    def euler_method(data: np.ndarray, dydt: Callable, dt: float) -> np.ndarray:
-        """
-        """
-        return data + dt * dydt(data)
+        dydt = OrbitalTrajectoryGenerator.derivatives
+        y, t, h = y0, 0., dt
+        parameters = [y]
+        times = [t]
+        while t < T:
+            k1 = dydt(y)
+            k2 = dydt(y + h/4 * k1)
+            k3 = dydt(y + h*3/32 * k1 + h*9/32 * k2)
+            k4 = dydt(y + h*1932/2197 * k1 + h*-7200/2197 * k2 + h*7296/2197 * k3)
+            k5 = dydt(y + h*439/216 * k1 + h*-8 * k2 + h*3680/513 * k3 + h*-845/4104 * k4)
+            k6 = dydt(y + h*-8/27 * k1 + h*2 * k2 + h*-3544/2565 * k3 + h*1859/4104 * k4 + h*-11/40 * k5)
+            RK5 = (16/135*k1 + 6656/12825*k3 + 28561/56430*k4 - 9/50*k5 + 2/55*k6)
+            RK4 = (25/216*k1 + 1408/2565*k3 + 2197/4104*k4 - 1/5*k5)
+            error = np.max(np.abs(RK4 - RK5))
+            h = min(h * (tol / (2*error))**(1/5), dt)
+            if error > tol:
+                continue
+            t += h
+            y = y + h*RK5
+            parameters.append(y)
+            times.append(t)
+        times = np.array(times)
+        interp_times = np.arange(0, T+dt, dt)
+        interp = [np.stack([np.interp(interp_times, times, p) for p in obj.T], axis=1)
+                  for obj in np.stack(parameters, axis=1)]
+        objects = np.concatenate([np.full((len(_),), i) for i, _ in enumerate(interp)])
+        interp_times = np.concatenate([interp_times]*len(interp))
+        interp = np.concatenate(interp, axis=0)
+        data = np.concatenate([interp, interp_times[:, None], objects[:, None]], axis=1)
+        return pd.DataFrame(data=data, columns=["x", "y", "u", "v", "t", "obj"])
