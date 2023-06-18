@@ -5,7 +5,9 @@ from typing import Callable
 
 class OrbitalTrajectoryGenerator:
 
-    def __init__(self, n_batches: int, batch_size: int, T: float=1.0, dt: float=1.0E-3, tol: float=1.0E-4):
+    def __init__(self, n_batches: int, batch_size: int, T: float=5.0,
+                 dt: float=1.0E-2, dt_min: float=1.0E-6, tol: float=1.0E-8,
+                 verbose: bool=False):
         """
         Parameters
         ----------
@@ -17,30 +19,41 @@ class OrbitalTrajectoryGenerator:
             time duration of the generated orbits
         dt : float
             time steps of the trajectory snapshots
+        dt_min : float
+            minimum time step during integration
         tol : float
             tolerance per second of integration over each parameter
+        verbose : bool
+            if True display integration progress
         """
         self.n_batches = n_batches
         self.batch_size = batch_size
         self.T = T
         self.dt = dt
+        self.dt_min = dt_min
         self.tol = tol
+        self.verbose = verbose
 
     def __iter__(self):
         for _ in self.n_batches:
-            yield self.generate_batch(self.batch_size, self.T, self.dt, self.tol)
+            yield self.generate_batch(self.batch_size, self.T, self.dt, self.dt_min, self.tol, self.verbose)
 
     @staticmethod
-    def generate_batch(batch_size: int, T: float, dt: float, tol=1.0E-3):
+    def generate_batch(batch_size: int, T: float=5.0, dt: float=1.0E-2, dt_min: float=1.0E-6, tol=1.0E-3, verbose: bool=False):
         """
         Generates a single batch of trajectories
         """
         X = np.random.uniform(-1, 1, size=(batch_size, 2))
         theta = np.random.uniform(0, 2*np.pi, size=batch_size)
         rot = np.stack([np.cos(theta), -np.sin(theta)], axis=1)
-        V = rot # np.random.uniform(-2**0.5, 2**0.5, size=(batch_size, 1)) * rot
+        r = np.linalg.norm(X, axis=-1)[:, None]
+        GM = 1.0
+        escape_velocity = (GM/r)**0.5
+        V = np.random.uniform(0.5, 1.2, size=(batch_size, 1)) * escape_velocity * rot
         y0 = np.concatenate([X, V], axis=-1)
-        return OrbitalTrajectoryGenerator.runge_kutta_fehlberg(y0, T, dt, tol)
+        df = OrbitalTrajectoryGenerator.runge_kutta_fehlberg(y0, T, dt, dt_min, tol, verbose)
+        df[(df["x"] < -3) | (df["x"] > 3) | (df["y"] < -3) | (df["y"] > 3)] = float("nan")
+        return df
 
     @staticmethod
     def derivatives(data: np.ndarray) -> np.ndarray:
@@ -65,7 +78,7 @@ class OrbitalTrajectoryGenerator:
         return np.concatenate([V, GM/(r**2 + eps) * -ur], axis=-1)
     
     @staticmethod
-    def runge_kutta_fehlberg(y0: np.ndarray, T: float, dt: float, tol: float) -> pd.DataFrame:
+    def runge_kutta_fehlberg(y0: np.ndarray, T: float, dt: float, dt_min: float, tol: float, verbose: bool) -> pd.DataFrame:
         """
         Perform dynamic time step integration of the problem using runge kutta fehlberg method.
         This is to avoid adding scipy.integrate.ode as a dependency.
@@ -83,8 +96,10 @@ class OrbitalTrajectoryGenerator:
             integration time
         dt : float
             maximum time step, and final interpolated time steps
+        dt_min : float
+            minimum time step
         tol : float
-            maximum tolerated error accumulation per second of integration, on each parameter
+            maximum tolerated error accumulation per second of integration, on u and v
         
         Returns
         -------
@@ -104,10 +119,13 @@ class OrbitalTrajectoryGenerator:
             k6 = dydt(y + h*-8/27 * k1 + h*2 * k2 + h*-3544/2565 * k3 + h*1859/4104 * k4 + h*-11/40 * k5)
             RK5 = (16/135*k1 + 6656/12825*k3 + 28561/56430*k4 - 9/50*k5 + 2/55*k6)
             RK4 = (25/216*k1 + 1408/2565*k3 + 2197/4104*k4 - 1/5*k5)
-            error = np.max(np.abs(RK4 - RK5))
-            h = min(h * (tol / (2*error))**(1/5), dt)
-            if error > tol:
+            error = np.max(np.abs(RK4[:, 2:] - RK5[:, 2:]))
+            h = h * (tol / (2*error))**(1/5)
+            if error > tol or h == dt_min:
                 continue
+            elif verbose:
+                print(f"t={t:.3g}, dt={h:.3g}")
+            h = max(dt_min, min(h, dt))
             t += h
             y = y + h*RK5
             parameters.append(y)
