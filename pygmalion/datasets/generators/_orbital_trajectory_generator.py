@@ -1,6 +1,5 @@
 import numpy as np
 import pandas as pd
-from typing import Callable
 
 
 class OrbitalTrajectoryGenerator:
@@ -21,7 +20,7 @@ class OrbitalTrajectoryGenerator:
         dt_min : float
             minimum time step during integration
         tol : float
-            tolerance per second of integration of velocity along x and y
+            error tolerance per second of integration
         verbose : bool
             if True display integration progress
         """
@@ -100,7 +99,7 @@ class OrbitalTrajectoryGenerator:
         dt_min : float
             minimum time step
         tol : float
-            maximum tolerated error accumulation per second of integration, on u and v
+            maximum tolerated error per second of integration
         
         Returns
         -------
@@ -120,7 +119,7 @@ class OrbitalTrajectoryGenerator:
             k6 = dydt(y + h*-8/27 * k1 + h*2 * k2 + h*-3544/2565 * k3 + h*1859/4104 * k4 + h*-11/40 * k5)
             RK5 = (16/135*k1 + 6656/12825*k3 + 28561/56430*k4 - 9/50*k5 + 2/55*k6)
             RK4 = (25/216*k1 + 1408/2565*k3 + 2197/4104*k4 - 1/5*k5)
-            error = np.max(np.abs(RK4[:, 2:] - RK5[:, 2:]))
+            error = np.max(np.abs(RK4 - RK5))
             h = h * (tol / (2*error))**(1/5)
             if error > tol or h == dt_min:
                 continue
