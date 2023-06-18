@@ -5,7 +5,7 @@ import pandas as pd
 class OrbitalTrajectoryGenerator:
 
     def __init__(self, n_batches: int, batch_size: int, T: float=5.0,
-                 dt: float=1.0E-2, dt_min: float=1.0E-6, tol: float=1.0E-6, verbose: bool=False):
+                 dt: float=1.0E-2, dt_min: float=1.0E-10, tol: float=1.0E-6, verbose: bool=False):
         """
         Parameters
         ----------
@@ -47,12 +47,14 @@ class OrbitalTrajectoryGenerator:
         rot = np.stack([np.cos(theta), -np.sin(theta)], axis=1)
         r = np.linalg.norm(X, axis=-1)[:, None]
         GM = 1.0
-        escape_velocity = (GM/r)**0.5
-        V = np.random.uniform(0.5, 1.2, size=(batch_size, 1)) * escape_velocity * rot
+        escape_velocity = (2*GM/r)**0.5
+        # V = np.random.normal(0.5, 1.2, size=(batch_size, 1)) * escape_velocity * rot
+        V = (1 + np.tanh(np.random.normal(0., 1., size=(batch_size, 1))))/2 * 1.2 * escape_velocity * rot
         y0 = np.concatenate([X, V], axis=-1)
         df = OrbitalTrajectoryGenerator.runge_kutta_fehlberg(y0, T, dt, dt_min, tol, verbose)
         df.loc[(df["x"] < -3) | (df["x"] > 3) | (df["y"] < -3) | (df["y"] > 3),
                ["x", "y", "u", "v"]] = float("nan")
+        df["obj"] = df["obj"].astype(np.int64)
         return df
 
     @staticmethod
