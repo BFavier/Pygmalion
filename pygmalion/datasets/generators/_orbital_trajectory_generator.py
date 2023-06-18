@@ -5,7 +5,7 @@ import pandas as pd
 class OrbitalTrajectoryGenerator:
 
     def __init__(self, n_batches: int, batch_size: int, T: float=5.0,
-                 dt: float=1.0E-2, dt_min: float=1.0E-10, tol: float=1.0E-6, verbose: bool=False):
+                 dt: float=1.0E-2, dt_min: float=0., tol: float=1.0E-6, verbose: bool=False):
         """
         Parameters
         ----------
@@ -38,7 +38,7 @@ class OrbitalTrajectoryGenerator:
 
     @staticmethod
     def generate_batch(batch_size: int, T: float=5.0, dt: float=1.0E-2,
-                       dt_min: float=1.0E-6, tol=1.0E-6, verbose: bool=False):
+                       dt_min: float=0., tol=1.0E-6, verbose: bool=False):
         """
         Generates a single batch of trajectories
         """
@@ -48,13 +48,9 @@ class OrbitalTrajectoryGenerator:
         r = np.linalg.norm(X, axis=-1)[:, None]
         GM = 1.0
         escape_velocity = (2*GM/r)**0.5
-        # V = np.random.normal(0.5, 1.2, size=(batch_size, 1)) * escape_velocity * rot
-        V = (1 + np.tanh(np.random.normal(0., 1., size=(batch_size, 1))))/2 * 1.2 * escape_velocity * rot
+        V = np.maximum(1.0, np.random.normal(0.4, 1.2, size=(batch_size, 1)) * escape_velocity) * rot
         y0 = np.concatenate([X, V], axis=-1)
         df = OrbitalTrajectoryGenerator.runge_kutta_fehlberg(y0, T, dt, dt_min, tol, verbose)
-        df.loc[(df["x"] < -3) | (df["x"] > 3) | (df["y"] < -3) | (df["y"] > 3),
-               ["x", "y", "u", "v"]] = float("nan")
-        df["obj"] = df["obj"].astype(np.int64)
         return df
 
     @staticmethod
@@ -75,9 +71,8 @@ class OrbitalTrajectoryGenerator:
         X, V = data[:, :2], data[:, 2:]
         r = np.linalg.norm(X, ord=2, axis=1)[:, None]
         GM = 1.0
-        eps = 1.0E-20
         ur = X/r
-        return np.concatenate([V, GM/(r**2 + eps) * -ur], axis=-1)
+        return np.concatenate([V, GM/(r**2) * -ur], axis=-1)
     
     @staticmethod
     def runge_kutta_fehlberg(y0: np.ndarray, T: float, dt: float, dt_min: float, tol: float, verbose: bool) -> pd.DataFrame:
@@ -136,8 +131,9 @@ class OrbitalTrajectoryGenerator:
         interp_times = np.arange(0, T+dt, dt)
         interp = [np.stack([np.interp(interp_times, times, p) for p in obj.T], axis=1)
                   for obj in np.stack(parameters, axis=1)]
-        objects = np.concatenate([np.full((len(_),), i) for i, _ in enumerate(interp)])
         interp_times = np.concatenate([interp_times]*len(interp))
-        interp = np.concatenate(interp, axis=0)
-        data = np.concatenate([interp, interp_times[:, None], objects[:, None]], axis=1)
-        return pd.DataFrame(data=data, columns=["x", "y", "u", "v", "t", "obj"])
+        data = np.concatenate([np.concatenate(interp, axis=0), interp_times[:, None]], axis=1)
+        objects = np.concatenate([np.full((len(_),), i, dtype=np.int64) for i, _ in enumerate(interp)])
+        df = pd.DataFrame(data=data, columns=["x", "y", "u", "v", "t"])
+        df["obj"] = objects
+        return df
