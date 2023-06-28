@@ -11,11 +11,12 @@ class TransformerEncoderStage(torch.nn.Module):
                  dropout: Optional[float] = None,
                  activation: str = "relu", RPE_radius: Optional[int] = None,
                  attention_type: ATTENTION_TYPE = "scaled dot product",
+                 masked: bool = False,
                  **kwargs):
         super().__init__()
         dim = projection_dim * n_heads
         self.activation = getattr(torch, activation)
-        self.self_attention = MultiHeadAttention(projection_dim, n_heads, False,
+        self.self_attention = MultiHeadAttention(projection_dim, n_heads, masked,
                                                  RPE_radius=RPE_radius,
                                                  attention_type=attention_type,
                                                  **kwargs)
