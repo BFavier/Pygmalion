@@ -42,12 +42,13 @@ class OrbitalTrajectoryGenerator:
         """
         Generates a single batch of trajectories
         """
-        X = np.random.uniform(-1, 1, size=(batch_size, 2))
-        theta = np.random.uniform(0, 2*np.pi, size=batch_size)
-        rot = np.stack([np.cos(theta), -np.sin(theta)], axis=1)
-        r = np.linalg.norm(X, axis=-1)[:, None]
+        r = np.random.uniform(0.5, 1.5, size=(batch_size, 1))  # Do not generate points too close to the center
+        phi = np.random.uniform(0, 2*np.pi, size=batch_size)
+        X = r * np.stack([np.cos(phi), -np.sin(phi)], axis=-1)
         GM = 1.0
         escape_velocity = (2*GM/r)**0.5
+        theta = np.random.uniform(0, 2*np.pi, size=batch_size)
+        rot = np.stack([np.cos(theta), -np.sin(theta)], axis=1)
         V = np.maximum(1.0, np.random.normal(0.4, 1.2, size=(batch_size, 1)) * escape_velocity) * rot
         y0 = np.concatenate([X, V], axis=-1)
         df = OrbitalTrajectoryGenerator.runge_kutta_fehlberg(y0, T, dt, dt_min, tol, verbose)
@@ -121,7 +122,7 @@ class OrbitalTrajectoryGenerator:
             if error > tol or h == dt_min:
                 continue
             elif verbose:
-                print(f"t={t:.3g}, dt={h:.3g}, error={error:.3g}")
+                print(f"t={t:.3g}, Δt={h:.3g}, error={error:.3g}")
             h = max(dt_min, min(h, dt))
             t += h
             y = y + h*RK5
