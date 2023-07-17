@@ -14,19 +14,19 @@ With
 
 $$
 \Delta P_{ijk} = c_k \times 
-sin \left(b_k + \sum_n a_{kn} \times (p_{in} - p_{jn}) \right)
+cos \left(b_k + \sum_n a_{kn} \times (p_{in} - p_{jn}) \right)
 $$
 
 Which for a scalar $p$ resolves to one Harmonic of a Fourier series $c_k \times 
-sin \left(a_k \times \Delta t + b_k \right)$.
+cos \left(a_k \times \Delta t + b_k \right)$.
 
 
-It can also be reformulated as the sinus of a difference of two scalars:
+It can also be reformulated as the cosinus of a difference of two scalars:
 
 $$
 \left\{
 \begin{array}{ll}
-\Delta P_{ijk} = c_k \times sin(\hat{p}_i - \hat{p}_j) \\
+\Delta P_{ijk} = c_k \times cos(\hat{p}_i - \hat{p}_j) \\
 \hat{p}_i = b_k + \sum_n a_{kn} \times p_{in} \\
 \hat{p}_j = \sum_n a_{kn} \times p_{jn}
 \end{array}
@@ -47,5 +47,5 @@ $$
 Which can be formulated
 
 $$
-\Delta P_{ijk} = c_k \times cos(\hat{p}_j) \times sin(\hat{p}_i) - c_k \times cos(\hat{p}_i) \times sin(\hat{p}_j)
+\Delta P_{ijk} = c_k \times cos(\hat{p}_i) \times cos(\hat{p}_j) + c_k \times sin(\hat{p}_i) \times sin(\hat{p}_j)
 $$
