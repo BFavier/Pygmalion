@@ -16,9 +16,11 @@ $$
 \Delta P_{ijk} = c_k \times cos \left(b_k + \sum_n a_{kn} \times (p_{in} - p_{jn}) \right)
 $$
 
-Which for a scalar $\vec{p} = t$, gives to $\Delta P_{ijk}$ the form of one harmonic of a Fourier series: $c_k \times cos \left(a_k \times \Delta t_{ij} + b_k \right)$. Hence the expressive power of this relative-positional attention mechanisme: The attention score calculated as $\sum_k \left( \overline{Q}_{ik} \times \overline{K}_{jk} \times \Delta P_{ijk} \right)$, as a set of functions containing the Fourier Series, can approximate any function of $\delta t_{ij}$ on a fixed time interval, for a given sequence of queries and keys, given a big enough embedding dimension.
+Where $a_{kn}$, $b_k$ and $c_k$ are tensors of learnable parameters, proper to each attention head.
 
-To simplify the expression of $\Delta P_{ijk}$, we introduce $\hat{p}_{ik}$ and $\hat{p}_{jk}$ the linear projections from position dimension to embedding dimension.
+Which for a scalar $\vec{p} = t$, gives to $\Delta P_{ijk}$ the form of one harmonic of a Fourier series: $c_k \times cos \left(a_k \times \Delta t_{ij} + b_k \right)$. Hence the expressive power of this relative-positional attention mechanisme: The attention score calculated as $\sum_k \left( \overline{Q}_{ik} \times \overline{K}_{jk} \times \Delta P_{ijk} \right)$, as a set of functions containing the Fourier Series, can approximate any function of $\Delta t_{ij}$ on a fixed time interval, for a given sequence of queries and keys, and given a big enough embedding dimension.
+
+To simplify the expression of $\Delta P_{ijk}$, we introduce $\hat{p}_{ik}$ and $\hat{p}_{jk}$ the linear projections from position dimension to embedding dimension of $p_{in}$ and $p_{jn}$ respectively.
 
 $$
 \left\{
@@ -47,7 +49,7 @@ $$
 \Delta P_{ijk} = c_k \times cos(\hat{p}_i) \times cos(\hat{p}_j) + c_k \times sin(\hat{p}_i) \times sin(\hat{p}_j)
 $$
 
-This allows us to compute the result of the attention operation without calculating the costly $\Delta P_{ijk}$ tensor:
+This allows us to compute the result of the attention operation without calculating the costly in memory $\Delta P_{ijk}$ tensor:
 
 
 
