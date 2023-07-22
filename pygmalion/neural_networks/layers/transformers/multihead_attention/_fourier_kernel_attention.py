@@ -1,3 +1,7 @@
+import torch
+from typing import Optional, Callable
+from ._utilities import _mask_chronological, _log_exp_kernel
+
 
 class FourrierKernelAttention(torch.nn.Module):
 

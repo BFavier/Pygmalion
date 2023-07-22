@@ -13,27 +13,24 @@ $$
 With 
 
 $$
-\Delta P_{ijk} = sin \left(b_k + \sum_n a_{kn} \times (p_{in} - p_{jn}) \right)
+\Delta P_{ijk} = c_k \times cos \left(b_k + \sum_n a_{kn} \times (p_{in} - p_{jn}) \right)
 $$
 
-Which for a scalar $p$ resolves to one Harmonic of a Fourier series $sin \left(a_k \times \Delta t + b_k \right)$.
+Which for a scalar $\vec{p} = t$, gives to $\Delta P_{ijk}$ the form of one harmonic of a Fourier series: $c_k \times cos \left(a_k \times \Delta t_{ij} + b_k \right)$. Hence the expressive power of this relative-positional attention mechanisme: The attention score calculated as $\sum_k \left( \overline{Q}_{ik} \times \overline{K}_{jk} \times \Delta P_{ijk} \right)$, as a set of functions containing the Fourier Series, can approximate any function of $\delta t_{ij}$ on a fixed time interval, for a given sequence of queries and keys, given a big enough embedding dimension.
 
-
-It can also be reformulated as the cosinus of a difference of two scalars:
+To simplify the expression of $\Delta P_{ijk}$, we introduce $\hat{p}_{ik}$ and $\hat{p}_{jk}$ the linear projections from position dimension to embedding dimension.
 
 $$
 \left\{
 \begin{array}{ll}
-\Delta P_{ijk} = sin(\hat{p}_i - \hat{p}_j) \\
-\hat{p}_i = b_k + \sum_n a_{kn} \times p_{in} \\
-\hat{p}_j = \sum_n a_{kn} \times p_{jn}
+\Delta P_{ijk} = c_k \times cos(\hat{p}_{ik} - \hat{p}_{jk}) \\
+\hat{p}_{ik} = b_k + \sum_n a_{kn} \times p_{in} \\
+\hat{p}_{jk} = \sum_n a_{kn} \times p_{jn}
 \end{array}
 \right.
 $$
 
-## Linear complexity implementation
-
-The trigonometric identity allows us to split
+The trigonometric identity allows us to split the cosinus of a difference into a sum of cos and sin products:
 
 $$
 \left\{
@@ -47,5 +44,11 @@ $$
 Which can be formulated
 
 $$
-\Delta P_{ijk} = cos(\hat{p}_j) \times sin(\hat{p}_i) - cos(\hat{p}_i) \times sin(\hat{p}_j)
+\Delta P_{ijk} = c_k \times cos(\hat{p}_i) \times cos(\hat{p}_j) + c_k \times sin(\hat{p}_i) \times sin(\hat{p}_j)
 $$
+
+This allows us to compute the result of the attention operation without calculating the costly $\Delta P_{ijk}$ tensor:
+
+
+
+## Linear complexity implementation
