@@ -18,9 +18,9 @@ class ConvolutionalEncoder(torch.nn.Module):
                  normalize: bool = True,
                  residuals: bool = True,
                  dropout: Optional[float] = None,
-                 low_memory: bool = False):
+                 gradient_checkpointing: bool = False):
         super().__init__()
-        self.low_memory = low_memory
+        self.gradient_checkpointing = gradient_checkpointing
         self.stages = torch.nn.ModuleList()
         for out_features in features:
             self.stages.append(ConvolutionalEncoderStage(
@@ -44,7 +44,7 @@ class ConvolutionalEncoder(torch.nn.Module):
             tensor of shape (N, Cout, Hout, Wout)
         """
         for stage in self.stages:
-            if self.low_memory and self.training:
+            if self.gradient_checkpointing and self.training:
                 X.requires_grad_(True)  # To ensure that the gradient is backpropagated in the convolution parameters
                 X, map = checkpoint(stage, X)
             else:
@@ -67,9 +67,9 @@ class ConvolutionalDecoder(torch.nn.Module):
                  normalize: bool = True,
                  residuals: bool = True,
                  dropout: Optional[float] = None,
-                 low_memory: bool = False):
+                 gradient_checkpointing: bool = False):
         super().__init__()
-        self.low_memory = low_memory
+        self.gradient_checkpointing = gradient_checkpointing
         self.stages = torch.nn.ModuleList()
         for out_features, add in zip(features, add_features or repeat(None)):
             self.stages.append(ConvolutionalDecoderStage(
@@ -94,7 +94,7 @@ class ConvolutionalDecoder(torch.nn.Module):
             tensor of shape (N, Cout, Hout, Wout)
         """
         for stage, add in zip(self.stages, add_maps or repeat(None)):
-            if self.low_memory and self.training:
+            if self.gradient_checkpointing and self.training:
                 X.requires_grad_(True)  # To ensure that the gradient is backpropagated in the convolution parameters
                 X = checkpoint(stage, X, add)
             else:

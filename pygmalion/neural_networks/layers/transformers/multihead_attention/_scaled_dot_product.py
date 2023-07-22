@@ -6,7 +6,7 @@ from ._utilities import _align, _mask_chronological, _log_exp_kernel
 class ScaledDotProductAttention(torch.nn.Module):
 
     def __init__(self, projection_dim: int, n_heads: int,
-                 masked: bool, RPE_radius: Optional[int]):
+                 mask_future: bool, RPE_radius: Optional[int]=None):
         """
         Parameters
         ----------
@@ -25,15 +25,15 @@ class ScaledDotProductAttention(torch.nn.Module):
         self.n_heads = n_heads
         self.projection_dim = projection_dim
         dim = projection_dim * n_heads
-        self.masked = masked
+        self.mask_future = mask_future
         self.relative_positional_encoding = torch.nn.Embedding(2*RPE_radius+1, dim) if RPE_radius else None
         self.query = torch.nn.Linear(dim, dim, bias=False)
         self.key = torch.nn.Linear(dim, dim, bias=False)
         self.value = torch.nn.Linear(dim, dim, bias=False)
 
     def forward(self, query: torch.Tensor, key: torch.Tensor,
-                query_padding_mask: Optional[torch.Tensor] = None,
-                key_padding_mask: Optional[torch.Tensor] = None,
+                query_mask: Optional[torch.Tensor] = None,
+                key_mask: Optional[torch.Tensor] = None,
                 mask_index_offset: int=0):
         """
         Apply scaled dot product attention to a batch of 'N' sentences pairs,
@@ -53,11 +53,10 @@ class ScaledDotProductAttention(torch.nn.Module):
             tensor of shape (N, Lq, D)
         key : torch.Tensor
             tensor of shape (N, Lk, D)
-        key_padding_mask : torch.Tensor or None
-            Tensor of booleans of shape (N, Lk)
-            or None if padding tokens should not be masked.
+        key_mask : torch.Tensor or None
+            Tensor of booleans of shape (N, Lk) or None
             Attention scores to masked keys is set to 0
-        query_padding_mask : torch.Tensor or None
+        query_mask : torch.Tensor or None
             Tensor of booleans of shape (N, Lq)
             or None if padding tokens should not be masked.
             Masked queries are set to null vector after transformation.
@@ -81,14 +80,14 @@ class ScaledDotProductAttention(torch.nn.Module):
         # compute attention
         q, k, v = q.transpose(1, 2), k.transpose(1, 2), v.transpose(1, 2)
         attention = self._scaled_dot_product_attention(
-            q, k, v, self.masked, key_padding_mask,
+            q, k, v, self.mask_future, key_mask,
             self.relative_positional_encoding,
             mask_index_offset=mask_index_offset)
         attention = attention.transpose(2, 1).reshape(N, Lq, -1)
         # mask queries if needed
-        if query_padding_mask is not None:
-            query_padding_mask = query_padding_mask.to(attention.device).unsqueeze(-1)
-            attention = torch.masked_fill(attention, query_padding_mask, 0.)
+        if query_mask is not None:
+            query_mask = query_mask.to(attention.device).unsqueeze(-1)
+            attention = torch.masked_fill(attention, query_mask, 0.)
         return attention
 
     @property
@@ -123,9 +122,11 @@ class ScaledDotProductAttention(torch.nn.Module):
             whether or not a query at index i can't attend to keys at index j > i
             in the sequence 
         padding_mask : torch.Tensor or None
-            tensor of booleans of shape (N, Lk)
+            Tensor of booleans of shape (N, Lk).
+            Masked tensors (mask set to True) have their attrention set to 0.
         RPE : torch.nn.Embedding or None
-            if provided, the the relative positional embedding
+            if provided, the relative positional embedding
+            tensor of shape (2*R+1, D) or None
         mask_index_offset : int
             Add the given offset to the query positions for future masking.
             This is intended for evaluation mode, where representation of

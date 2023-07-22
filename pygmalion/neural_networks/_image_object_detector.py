@@ -26,7 +26,7 @@ class ImageObjectDetector(NeuralNetworkClassifier):
                  normalize: bool = True,
                  residuals: bool = True,
                  dropout: Optional[float] = None,
-                 low_memory: bool = True):
+                 gradient_checkpointing: bool = True):
         """
         Parameters
         ----------
@@ -39,7 +39,7 @@ class ImageObjectDetector(NeuralNetworkClassifier):
         self.bboxes_per_cell = bboxes_per_cell
         self.encoder = ConvolutionalEncoder(
             in_channels, features, kernel_size, pooling_size, stride, activation,
-            n_convs_per_block, normalize, residuals, dropout, low_memory)
+            n_convs_per_block, normalize, residuals, dropout, gradient_checkpointing)
         self.confidence = PaddedConv2d(features[-1], self.bboxes_per_cell, kernel_size)
         self.positions = PaddedConv2d(features[-1], self.bboxes_per_cell*2, kernel_size)
         self.dimensions = PaddedConv2d(features[-1], self.bboxes_per_cell*2, kernel_size)

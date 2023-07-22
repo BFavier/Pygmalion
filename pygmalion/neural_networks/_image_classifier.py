@@ -23,7 +23,7 @@ class ImageClassifier(NeuralNetworkClassifier):
                  normalize: bool = True,
                  residuals: bool = True,
                  dropout: Optional[float] = None,
-                 low_memory: bool = True):
+                 gradient_checkpointing: bool = True):
         """
         Parameters
         ----------
@@ -32,7 +32,7 @@ class ImageClassifier(NeuralNetworkClassifier):
         super().__init__(classes)
         self.encoder = ConvolutionalEncoder(
             in_channels, features, kernel_size, pooling_size, stride, activation,
-            n_convs_per_block, normalize, residuals, dropout, low_memory)
+            n_convs_per_block, normalize, residuals, dropout, gradient_checkpointing)
         self.output = torch.nn.Linear(features[-1], len(self.classes))
 
     def forward(self, X: torch.Tensor):

@@ -26,7 +26,7 @@ class ImageSegmenter(NeuralNetworkClassifier):
                  upsampling_method: UPSAMPLING_METHOD = "nearest",
                  dropout: Optional[float] = None,
                  entropy_dice_mixture: float = 0.9,
-                 low_memory: bool = True):
+                 gradient_checkpointing: bool = True):
         """
         Parameters
         ----------
@@ -38,14 +38,14 @@ class ImageSegmenter(NeuralNetworkClassifier):
         self.encoder = ConvolutionalEncoder(in_channels, features, kernel_size,
                                             pooling_size, stride, activation,
                                             n_convs_per_block, normalize,
-                                            residuals, dropout, low_memory)
+                                            residuals, dropout, gradient_checkpointing)
         self.intermediate = ConvBlock(
             features[-1], features[-1], kernel_size, stride, activation,
             normalize, residuals, n_convs_per_block, dropout)
         self.decoder = ConvolutionalDecoder(features[-1], features[::-1], features[::-1],
                                             kernel_size, scale_factor, upsampling_method,
                                             activation, n_convs_per_block, normalize,
-                                            residuals, dropout, low_memory)
+                                            residuals, dropout, gradient_checkpointing)
         self.output = torch.nn.Conv2d(features[0], len(self.classes), (1, 1))
 
     def forward(self, X: torch.Tensor):

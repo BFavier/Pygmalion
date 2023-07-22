@@ -25,7 +25,7 @@ class TextTranslator(NeuralNetwork):
                  RPE_radius: Optional[int] = None,
                  input_sequence_length: Optional[int] = None,
                  output_sequence_length: Optional[int] = None,
-                 low_memory: bool = True,
+                 gradient_checkpointing: bool = True,
                  label_smoothing: float = 0.):
         """
         Parameters
@@ -59,7 +59,7 @@ class TextTranslator(NeuralNetwork):
             or if 'positional_encoding_type' is not None.
         output_sequence_length : int or None
             Same as input_sequence_length but for output sequences.
-        low_memory : bool
+        gradient_checkpointing : bool
             If True, uses gradient checkpointing to reduce memory usage during
             training at the expense of computation time.
         label_smoothing : float
@@ -94,11 +94,11 @@ class TextTranslator(NeuralNetwork):
         self.transformer_encoder = TransformerEncoder(n_stages, projection_dim, n_heads,
                                                       dropout=dropout, activation=activation,
                                                       RPE_radius=RPE_radius, attention_type=attention_type,
-                                                      low_memory=low_memory)
+                                                      gradient_checkpointing=gradient_checkpointing)
         self.transformer_decoder = TransformerDecoder(n_stages, projection_dim, n_heads,
                                                       dropout=dropout, activation=activation,
                                                       RPE_radius=RPE_radius, attention_type=attention_type,
-                                                      low_memory=low_memory)
+                                                      gradient_checkpointing=gradient_checkpointing)
         self.head = torch.nn.Linear(embedding_dim, self.tokenizer_output.n_tokens)
 
     def forward(self, X: torch.Tensor, padding_mask: Optional[torch.Tensor]):

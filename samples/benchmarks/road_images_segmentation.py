@@ -27,7 +27,7 @@ y_test = data["test_segmented"]
 # Create and train the model
 device = "cuda:0"
 model = nn.ImageSegmenter(3, classes, [16, 32, 64, 128, 256, 512], pooling_size=(2, 2), kernel_size=(3, 3),
-                          n_convs_per_block=2, dropout=0.5, low_memory=True, upsampling_method="nearest", entropy_dice_mixture=1.0)
+                          n_convs_per_block=2, dropout=0.5, gradient_checkpointing=True, upsampling_method="nearest", entropy_dice_mixture=1.0)
 model.to(device)
 
 class Batchifyer:

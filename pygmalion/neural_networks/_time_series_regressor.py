@@ -21,7 +21,7 @@ class TimeSeriesRegressor(NeuralNetwork):
                  attention_type: ATTENTION_TYPE = "kernelized",
                  RPE_radius: Optional[int] = 8,
                  max_sequence_length: Optional[int] = None,
-                 low_memory: bool = True):
+                 gradient_checkpointing: bool = True):
         """
         Parameters
         ----------
@@ -48,7 +48,7 @@ class TimeSeriesRegressor(NeuralNetwork):
         max_sequence_length : int or None
             Maximum size of the input sequence after padding.
             Must be defined if 'positional_encoding_type' is 'learned'.
-        low_memory : bool
+        gradient_checkpointing : bool
             If True, uses gradient checkpointing to reduce memory usage during
             training at the expense of computation time.
         """
@@ -71,7 +71,7 @@ class TimeSeriesRegressor(NeuralNetwork):
         self.transformer_encoder = TransformerEncoder(n_stages, projection_dim, n_heads,
                                                       dropout=dropout, activation=activation,
                                                       RPE_radius=RPE_radius, attention_type=attention_type,
-                                                      low_memory=low_memory, masked=True)
+                                                      gradient_checkpointing=gradient_checkpointing, masked=True)
         self.head = torch.nn.Linear(embedding_dim, len(self.targets))
 
     def forward(self, X: torch.Tensor, padding_mask: Optional[torch.Tensor]):

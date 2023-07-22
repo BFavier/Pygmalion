@@ -13,10 +13,10 @@ class TransformerEncoder(torch.nn.Module):
     def __init__(self, n_stages: int, projection_dim: int, n_heads: int,
                  dropout: Optional[float] = None, activation: str = "relu",
                  RPE_radius: Optional[int] = None, attention_type: ATTENTION_TYPE = "scaled dot product",
-                 low_memory: bool = True):
+                 gradient_checkpointing: bool = True):
         super().__init__()
         self.stages: Sequence[TransformerEncoderStage] = torch.nn.ModuleList()
-        self.low_memory = low_memory
+        self.gradient_checkpointing = gradient_checkpointing
         for stage in range(n_stages):
             self.stages.append(TransformerEncoderStage(projection_dim, n_heads,
                                                        dropout=dropout, activation=activation,
@@ -41,7 +41,7 @@ class TransformerEncoder(torch.nn.Module):
             tensor of shape (N, L, D)
         """
         for stage in self.stages:
-            if self.low_memory and self.training:
+            if self.gradient_checkpointing and self.training:
                 X = checkpoint(stage, X, padding_mask)
             else:
                 X = stage(X, padding_mask)
@@ -56,10 +56,10 @@ class TransformerDecoder(torch.nn.Module):
     def __init__(self, n_stages: int, projection_dim: int, n_heads: int,
                  dropout: Optional[float] = None, activation: str = "relu",
                  RPE_radius: Optional[int] = None, attention_type: ATTENTION_TYPE = "scaled dot product",
-                 low_memory: bool = True):
+                 gradient_checkpointing: bool = True):
         super().__init__()
         self.stages: Sequence[TransformerDecoderStage] = torch.nn.ModuleList()
-        self.low_memory = low_memory
+        self.gradient_checkpointing = gradient_checkpointing
         for stage in range(n_stages):
             self.stages.append(TransformerDecoderStage(projection_dim, n_heads,
                                                        dropout=dropout, activation=activation,

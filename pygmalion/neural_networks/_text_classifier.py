@@ -22,7 +22,7 @@ class TextClassifier(NeuralNetworkClassifier):
                  attention_type: ATTENTION_TYPE = "scaled dot product",
                  RPE_radius: Optional[int] = None,
                  sequence_length: Optional[int] = None,
-                 low_memory: bool = True):
+                 gradient_checkpointing: bool = True):
         """
         Parameters
         ----------
@@ -52,7 +52,7 @@ class TextClassifier(NeuralNetworkClassifier):
             Fixed size of the input sequence after padding.
             Usefull if 'mask_padding' is False,
             or if 'positional_encoding_type' is not None.
-        low_memory : bool
+        gradient_checkpointing : bool
             If True, uses gradient checkpointing to reduce memory usage during
             training at the expense of computation time.
         """
@@ -76,7 +76,7 @@ class TextClassifier(NeuralNetworkClassifier):
         self.transformer_encoder = TransformerEncoder(n_stages, projection_dim, n_heads,
                                                       dropout=dropout, activation=activation,
                                                       RPE_radius=RPE_radius, attention_type=attention_type,
-                                                      low_memory=low_memory)
+                                                      gradient_checkpointing=gradient_checkpointing)
         self.head = torch.nn.Linear(embedding_dim, len(self.classes))
 
     def forward(self, X: torch.Tensor):
