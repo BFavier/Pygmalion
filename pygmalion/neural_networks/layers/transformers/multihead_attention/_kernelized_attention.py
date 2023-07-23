@@ -5,7 +5,7 @@ from ._utilities import _align, _mask_chronological, _log_exp_kernel
 class KernelizedAttention(torch.nn.Module):
 
     def __init__(self, projection_dim: int, n_heads: int,
-                 masked: bool, position_dimension: int = 1,
+                 mask_future: bool, position_dimension: int = 1,
                  kernel_function: Callable = _log_exp_kernel,
                  linear_complexity: bool = True,
                  scaled: bool = True):
@@ -16,7 +16,7 @@ class KernelizedAttention(torch.nn.Module):
             the dimension of the projection space for the feature vectors
         n_heads : int
             the number of different projection at each stage of the transformer
-        masked: bool
+        mask_future: bool
             whether or not a query at index i can't attend to keys
             at index j > i in the sequence
         RPE_radius : int or None
@@ -34,13 +34,10 @@ class KernelizedAttention(torch.nn.Module):
         self.projection_dim = projection_dim
         self.position_dimension = position_dimension
         dim = projection_dim * n_heads
-        self.masked = masked
+        self.mask_future = mask_future
         self.query = torch.nn.Linear(dim, dim, bias=False)
         self.key = torch.nn.Linear(dim, dim, bias=False)
         self.value = torch.nn.Linear(dim, dim, bias=False)
-        self.position_coeffs = torch.nn.parameter.Parameter(torch.ones(self.n_heads, self.projection_dim))
-        self.position_weight = torch.nn.parameter.Parameter(torch.zeros(self.n_heads, self.projection_dim, self.position_dimension))
-        self.position_bias = torch.nn.parameter.Parameter(torch.zeros(self.n_heads, self.projection_dim))
         self.kernel_function = kernel_function
         self.linear_complexity = linear_complexity
         self.scaled = scaled
@@ -48,8 +45,6 @@ class KernelizedAttention(torch.nn.Module):
     def forward(self, query: torch.Tensor, key: torch.Tensor,
                 query_mask: Optional[torch.Tensor] = None,
                 key_mask: Optional[torch.Tensor] = None,
-                query_positions: Optional[torch.Tensor] = None,
-                key_positions: Optional[torch.Tensor] = None,
                 future_offset: int=0):
         """
         Apply scaled dot product attention to a batch of 'N' sentences pairs,
@@ -77,12 +72,6 @@ class KernelizedAttention(torch.nn.Module):
             Tensor of booleans of shape (N, Lk)
             or None if padding tokens should not be masked.
             Attention scores to masked keys is set to 0
-        query_positions: torch.Tensor or None
-            Tensor of floats of shape (N, Lq, P).
-            If None, set it to torch.arange(Lq).
-        key_positions: torch.Tensor or None
-            Tensor of floats of shape (N, Lk, P).
-            If None, set it to torch.arange(Lk).
         future_offset : int
             Add the given offset to the query positions for future masking.
             This is intended for evaluation mode, where representation of
@@ -130,67 +119,103 @@ class KernelizedAttention(torch.nn.Module):
         return self.query.weight.device
 
     @staticmethod
-    def _kernelized_attention_linear(q: torch.Tensor, k: torch.Tensor, v: torch.Tensor,
-                                     pq: torch.Tensor, pk: torch.Tensor, mask_future: bool,
-                                     key_mask: Optional[torch.Tensor], scaled: bool,
-                                     future_offset: int) -> torch.Tensor:
+    def _kernelized_attention_linear(kernel: Callable, q: torch.Tensor, k: torch.Tensor,
+                                     v: torch.Tensor, mask_future: bool,
+                                     padding_mask: Optional[torch.Tensor],
+                                     RPE: Optional[torch.nn.Embedding],
+                                     scaled: bool) -> torch.Tensor:
         """
-        see self._kernelized_attention_naive doc's
+        see forward doc
         """
-        ...
+        q, k = kernel(q), kernel(k)
+        N, H, Lq, _ = q.shape
+        N, H, Lk, _ = k.shape
+        D = v.shape[-1]
+        if padding_mask is not None:
+            v = torch.masked_fill(v, padding_mask.reshape(N, 1, Lk, 1), 0.)
+        if mask_future:
+            expanded = torch.einsum("nhkd, nhkD -> nhkdD", k, v)
+            summed = _align(torch.cumsum(expanded, dim=2), Lq, 2)
+            attention = torch.einsum("nhqd, nhqdD -> nhqD", q, summed)
+        else:
+            right = torch.einsum("nhkd, nhkD -> nhdD", k, v)
+            attention = torch.einsum("nhqd, nhdD -> nhqD", q, right)
+        if RPE is not None:
+            rpe = kernel(RPE.weight)
+            r = rpe.shape[0] // 2
+            if mask_future:
+                rpe = torch.masked_fill(rpe, torch.arange(2*r+1).unsqueeze(-1) > r, 0.)
+            W = torch.einsum("nhqd, Rd -> nhqR", q, rpe)
+            # before horizon
+            p_before, n_before = min(r, Lq), min(max(0, Lq-r), Lk)
+            W_before = W[..., 0]  # (N, H, Lq)
+            padding_before = tuple(p_before if i == 2 else s for i, s in enumerate(v.shape))
+            V_before = _align(torch.cat([torch.zeros(padding_before), v[..., :n_before, :].cumsum(dim=2)], dim=2), Lq, 2)
+            attention = attention + torch.einsum("nhq, nhqd -> nhqd", W_before, V_before)
+            # horizon
+            W_horizon = W[..., 1:-1]  # (N, H, Lq, 2r-1)
+            V_horizon = torch.cat([torch.zeros((N, H, max(0, r-1), D),
+                                            device=q.device),
+                                v,
+                                torch.zeros((N, H, max(0, Lq-(Lk-r)), D),
+                                            device=q.device)],
+                                dim=-2)
+            L = V_horizon.shape[-2]
+            V_horizon = V_horizon.as_strided(size=(N, H, Lq, 2*r-1, D),
+                                            stride=(H*L*D, L*D, D, D, 1))
+            attention = attention + torch.einsum("nhqr, nhqrd -> nhqd", W_horizon, V_horizon)
+            # after horizon
+            if not mask_future:
+                n_after = min(Lq+r, Lk)
+                p_after = max(0, Lq-max(0, Lk-r))
+                W_after = W[..., -1]  # (N, H, Lq)
+                padding_after = torch.zeros((N, H, p_after, D), device=q.device)
+                Rcum = (v[..., r-1:n_after, :].sum(dim=-2).unsqueeze(-2)
+                        - v[..., r-1:n_after-1, :].cumsum(dim=-2))
+                V_after = torch.cat([Rcum, padding_after], dim=-2)
+                attention = attention + torch.einsum("nhq, nhqd -> nhqd", W_after, V_after)
+        if scaled:
+            v_scaling = torch.ones(N, H, Lk, 1)
+            if padding_mask is not None:
+                v_scaling = torch.masked_fill(v_scaling, padding_mask.reshape(N, 1, Lk, 1), 0.)
+            scale = KernelizedAttention._kernelized_attention_linear(
+                kernel, q, k, v_scaling, mask_future, padding_mask, RPE, scaled=False)
+            attention = attention / scale
+        return attention
 
     @staticmethod
-    def _kernelized_attention_naive(q: torch.Tensor, k: torch.Tensor, v: torch.Tensor,
-                                    position_coeff: torch.Tensor, pq: torch.Tensor, pk: torch.Tensor,
-                                    mask_future: bool, key_mask: Optional[torch.Tensor], scaled: bool,
-                                    future_offset: int) -> torch.Tensor:
+    def _kernelized_attention_naive(kernel: Callable, q: torch.Tensor, k: torch.Tensor,
+                                    v: torch.Tensor, mask_future: bool,
+                                    padding_mask: Optional[torch.Tensor],
+                                    RPE: Optional[torch.nn.Embedding],
+                                    scaled: bool,
+                                    future_offset: int = 0,
+                                    ) -> torch.Tensor:
         """
+        see forward doc
         Parameters
         ----------
-        q : torch.Tensor
-            query tensor of shape (N, H, Lq, d)
-        k : torch.Tensor
-            key tensor of shape (N, H, Lk, d)
-        v : torch.Tensor
-            value tensor of shape (N, H, Lk, d)
-        position_coeff : torch.Tensor
-            coeff of shape (H, d)
-        pq : torch.Tensor
-            tensor of query projected positions of shape (N, H, Lq, d)
-        pk : torch.Tensor
-            tensor of key projected positions of shape (N, H, Lk, d)
-        mask_future : bool
-            whether or not a query at index i can't attend to keys at index j > i
-            in the sequence 
-        key_mask : torch.Tensor or None
-            tensor of booleans of shape (N, Lk)
-        future_offset : int
-            Add the given offset to the query positions for future masking.
-            This is intended for evaluation mode, where representation of
-            previously generated tokens must not be generated several times.
-            If different from 0, the squared complexity algorithm is used
-            (because this is intended for use with a sequence of queries of length 1).
 
-        Returns
-        -------
-        torch.Tensor:
-            attention, a tensor of shape (N, H, Lq, D)
         """
+        q, k = kernel(q), kernel(k)
         N, H, Lq, d = q.shape
         N, H, Lk, d = k.shape
-        cos_pq, cos_pk = torch.cos(pq), torch.cos(pk)
-        sin_pq, sin_pk = torch.sin(pq), torch.sin(pk)
-        score = (torch.einsum("nhqd, nhkd, ... -> nhqk", q, k, position_coeff, cos_pq, cos_pk)
-                 + torch.einsum("nhqd, nhkd, ... -> nhqk", q, k, position_coeff, sin_pq, sin_pk))
-        ...
+        score = torch.einsum("nhqd, nhkd -> nhqk", q, k)
+        if RPE is not None:
+            r = RPE.weight.shape[0] // 2
+            P = torch.clip(r + torch.arange(Lk, device=score.device).reshape(1, Lk)
+                           - torch.arange(Lq, device=score.device).reshape(Lq, 1)
+                           - future_offset,
+                           0, 2*r)
+            score = score + torch.einsum("qkd, nhqd -> nhqk", kernel(RPE(P)), q)
         if mask_future:
             mask = _mask_chronological(Lq, Lk, score.device, future_offset).reshape(1, 1, Lq, Lk)
             score = torch.masked_fill(score, mask, 0)
-        if key_mask is not None:
-            score = torch.masked_fill(score, key_mask.reshape(N, 1, 1, Lk), 0)
+        if padding_mask is not None:
+            score = torch.masked_fill(score, padding_mask.reshape(N, 1, 1, Lk), 0)
         if scaled:
             score = score / score.sum(dim=-1).unsqueeze(-1)
-        if key_mask is not None:
-            score = torch.masked_fill(score, key_mask.reshape(N, 1, 1, Lk), 0.)
+        if padding_mask is not None:
+            score = torch.masked_fill(score, padding_mask.reshape(N, 1, 1, Lk), 0.)
         attention = torch.matmul(score, v)
         return attention

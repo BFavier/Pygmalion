@@ -1,6 +1,6 @@
 import torch
-from typing import Optional, Callable
-from ._utilities import _align, _mask_chronological, _log_exp_kernel
+from typing import Optional
+from ._utilities import _mask_chronological
 
 
 class ScaledDotProductAttention(torch.nn.Module):
@@ -95,12 +95,10 @@ class ScaledDotProductAttention(torch.nn.Module):
         return self.query.weight.device
 
     @staticmethod
-    def _scaled_dot_product_attention(q: torch.Tensor, k: torch.Tensor,
-                                      v: torch.Tensor, mask_future: bool,
-                                      padding_mask: Optional[torch.Tensor],
-                                      RPE: Optional[torch.nn.Embedding],
-                                      future_offset: int = 0
-                                      ) -> torch.Tensor:
+    def _attention(q: torch.Tensor, k: torch.Tensor, v: torch.Tensor,
+                   mask_future: bool, padding_mask: Optional[torch.Tensor],
+                   RPE: Optional[torch.nn.Embedding], future_offset: int = 0
+                   ) -> torch.Tensor:
         """
         Apply scaled dot product attention to a batch of 'N' sentences pairs,
         with 'H' the number of heads, and 'D' the projection dimension.
