@@ -50,7 +50,7 @@ class KernelizedAttention(torch.nn.Module):
                 key_mask: Optional[torch.Tensor] = None,
                 query_positions: Optional[torch.Tensor] = None,
                 key_positions: Optional[torch.Tensor] = None,
-                mask_index_offset: int=0):
+                future_offset: int=0):
         """
         Apply scaled dot product attention to a batch of 'N' sentences pairs,
         with 'H' the number of heads, and 'D' the projection dimension.
@@ -83,7 +83,7 @@ class KernelizedAttention(torch.nn.Module):
         key_positions: torch.Tensor or None
             Tensor of floats of shape (N, Lk, P).
             If None, set it to torch.arange(Lk).
-        mask_index_offset : int
+        future_offset : int
             Add the given offset to the query positions for future masking.
             This is intended for evaluation mode, where representation of
             previously generated tokens must not be generated several times.
@@ -110,14 +110,14 @@ class KernelizedAttention(torch.nn.Module):
         pk = torch.einsum("nlp, hkp -> nhlk", query_positions, self.position_weight)
         # compute attention
         q, k, v = q.transpose(1, 2), k.transpose(1, 2), v.transpose(1, 2)
-        if self.linear_complexity and (mask_index_offset == 0):
+        if self.linear_complexity and (future_offset == 0):
             attention = self._kernelized_attention_linear(
                 q, k, v, pq, pk, self.mask_future,
-                self.key_mask, self.scaled, mask_index_offset)
+                self.key_mask, self.scaled, future_offset)
         else:
             attention = self._kernelized_attention_naive(
                 q, k, v, pq, pk, self.mask_future,
-                self.key_mask, self.scaled, mask_index_offset)
+                self.key_mask, self.scaled, future_offset)
         attention = attention.transpose(2, 1).reshape(N, Lq, -1)
         # mask queries if needed
         if query_mask is not None:
@@ -132,7 +132,8 @@ class KernelizedAttention(torch.nn.Module):
     @staticmethod
     def _kernelized_attention_linear(q: torch.Tensor, k: torch.Tensor, v: torch.Tensor,
                                      pq: torch.Tensor, pk: torch.Tensor, mask_future: bool,
-                                     key_mask: Optional[torch.Tensor], scaled: bool) -> torch.Tensor:
+                                     key_mask: Optional[torch.Tensor], scaled: bool,
+                                     future_offset: int) -> torch.Tensor:
         """
         see self._kernelized_attention_naive doc's
         """
@@ -141,7 +142,8 @@ class KernelizedAttention(torch.nn.Module):
     @staticmethod
     def _kernelized_attention_naive(q: torch.Tensor, k: torch.Tensor, v: torch.Tensor,
                                     position_coeff: torch.Tensor, pq: torch.Tensor, pk: torch.Tensor,
-                                    mask_future: bool, key_mask: Optional[torch.Tensor], scaled: bool) -> torch.Tensor:
+                                    mask_future: bool, key_mask: Optional[torch.Tensor], scaled: bool,
+                                    future_offset: int) -> torch.Tensor:
         """
         Parameters
         ----------
@@ -162,7 +164,7 @@ class KernelizedAttention(torch.nn.Module):
             in the sequence 
         key_mask : torch.Tensor or None
             tensor of booleans of shape (N, Lk)
-        mask_index_offset : int
+        future_offset : int
             Add the given offset to the query positions for future masking.
             This is intended for evaluation mode, where representation of
             previously generated tokens must not be generated several times.
@@ -182,7 +184,7 @@ class KernelizedAttention(torch.nn.Module):
                  + torch.einsum("nhqd, nhkd, ... -> nhqk", q, k, position_coeff, sin_pq, sin_pk))
         ...
         if mask_future:
-            mask = _mask_chronological(Lq, Lk, score.device, mask_index_offset).reshape(1, 1, Lq, Lk)
+            mask = _mask_chronological(Lq, Lk, score.device, future_offset).reshape(1, 1, Lq, Lk)
             score = torch.masked_fill(score, mask, 0)
         if key_mask is not None:
             score = torch.masked_fill(score, key_mask.reshape(N, 1, 1, Lk), 0)

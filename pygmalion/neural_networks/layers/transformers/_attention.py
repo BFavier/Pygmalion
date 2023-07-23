@@ -10,15 +10,15 @@ class ScaledDotProductAttention(torch.nn.Module):
     
     def forward(self, q: torch.Tensor, k: torch.Tensor, v: torch.Tensor, mask_future: bool,
                 padding_mask: Optional[torch.Tensor], RPE: Optional[torch.nn.Embedding],
-                mask_index_offset: int = 0):
-        return self._scaled_dot_product_attention(q, k, v, mask_future, padding_mask, RPE, mask_index_offset)
+                future_offset: int = 0):
+        return self._scaled_dot_product_attention(q, k, v, mask_future, padding_mask, RPE, future_offset)
 
     @staticmethod
     def _scaled_dot_product_attention(q: torch.Tensor, k: torch.Tensor,
                                       v: torch.Tensor, mask_future: bool,
                                       padding_mask: Optional[torch.Tensor],
                                       RPE: Optional[torch.nn.Embedding],
-                                      mask_index_offset: int = 0
+                                      future_offset: int = 0
                                       ) -> torch.Tensor:
         """
         Apply scaled dot product attention to a batch of 'N' sentences pairs,
@@ -44,7 +44,7 @@ class ScaledDotProductAttention(torch.nn.Module):
             tensor of booleans of shape (N, Lk)
         RPE : torch.nn.Embedding or None
             if provided, the the relative positional embedding
-        mask_index_offset : int
+        future_offset : int
             Add the given offset to the query positions for future masking.
             This is intended for evaluation mode, where representation of
             previously generated tokens must not be generated several times.
@@ -62,11 +62,11 @@ class ScaledDotProductAttention(torch.nn.Module):
             r = RPE.weight.shape[0] // 2
             P = torch.clip(r + torch.arange(Lk, device=score.device).reshape(1, Lk)
                            - torch.arange(Lq, device=score.device).reshape(Lq, 1)
-                           - mask_index_offset, 0, 2*r)
+                           - future_offset, 0, 2*r)
             P = RPE(P).reshape(Lq, Lk, H, d)
             score = score + torch.einsum("qkhd, nhkd -> nhqk", P, k) / scaling
         if mask_future:
-            score = score.masked_fill(_mask_chronological(Lq, Lk, score.device, mask_index_offset).reshape(1, 1, Lq, Lk), -float("inf"))
+            score = score.masked_fill(_mask_chronological(Lq, Lk, score.device, future_offset).reshape(1, 1, Lq, Lk), -float("inf"))
         if padding_mask is not None:
             score = score.masked_fill(padding_mask.reshape(N, 1, 1, Lk), -float("inf"))
         score = torch.softmax(score, dim=-1)
@@ -98,7 +98,7 @@ class KernelizedAttention(torch.nn.Module):
                 v: torch.Tensor, mask_future: bool,
                 padding_mask: Optional[torch.Tensor],
                 RPE: Optional[torch.nn.Embedding],
-                mask_index_offset: int = 0):
+                future_offset: int = 0):
         """
         Parameters
         ----------
@@ -115,7 +115,7 @@ class KernelizedAttention(torch.nn.Module):
             tensor of booleans of shape (N, Lk)
         RPE : torch.nn.Embedding or None
             if provided, the relative positional embedding
-        mask_index_offset : int
+        future_offset : int
             Add the given offset to the query positions for future masking.
             This is intended for evaluation mode, where representation of
             previously generated tokens must not be generated several times.
@@ -127,13 +127,13 @@ class KernelizedAttention(torch.nn.Module):
         torch.Tensor:
             attention, a tensor of shape (N, H, Lq, D)
         """
-        if self.linear_complexity and (mask_index_offset == 0):
+        if self.linear_complexity and (future_offset == 0):
             return self._kernelized_attention_linear(
                 self.kernel_function, q, k, v, mask_future, padding_mask, RPE, self.scaled)
         else:
             return self._kernelized_attention_naive(
                 self.kernel_function, q, k, v, mask_future, padding_mask, RPE, self.scaled,
-                mask_index_offset)
+                future_offset)
 
     @staticmethod
     def _kernelized_attention_linear(kernel: Callable, q: torch.Tensor, k: torch.Tensor,
@@ -206,7 +206,7 @@ class KernelizedAttention(torch.nn.Module):
                                     padding_mask: Optional[torch.Tensor],
                                     RPE: Optional[torch.nn.Embedding],
                                     scaled: bool,
-                                    mask_index_offset: int = 0,
+                                    future_offset: int = 0,
                                     ) -> torch.Tensor:
         """
         see forward doc
@@ -222,11 +222,11 @@ class KernelizedAttention(torch.nn.Module):
             r = RPE.weight.shape[0] // 2
             P = torch.clip(r + torch.arange(Lk, device=score.device).reshape(1, Lk)
                            - torch.arange(Lq, device=score.device).reshape(Lq, 1)
-                           - mask_index_offset,
+                           - future_offset,
                            0, 2*r)
             score = score + torch.einsum("qkd, nhqd -> nhqk", kernel(RPE(P)), pq)
         if mask_future:
-            mask = _mask_chronological(Lq, Lk, score.device, mask_index_offset).reshape(1, 1, Lq, Lk)
+            mask = _mask_chronological(Lq, Lk, score.device, future_offset).reshape(1, 1, Lq, Lk)
             score = torch.masked_fill(score, mask, 0)
         if padding_mask is not None:
             score = torch.masked_fill(score, padding_mask.reshape(N, 1, 1, Lk), 0)
@@ -262,7 +262,7 @@ class FourrierKernelAttention(torch.nn.Module):
                 v: torch.Tensor, mask_future: bool,
                 padding_mask: Optional[torch.Tensor],
                 pq: torch.Tensor, pk: torch.Tensor,
-                mask_index_offset: int = 0):
+                future_offset: int = 0):
         """
         Parameters
         ----------
@@ -281,7 +281,7 @@ class FourrierKernelAttention(torch.nn.Module):
             query positions, tensor of shape (N, Lq, P)
         pk : torch.Tensor
             key positions, tensor of shape (N, Lq, P)
-        mask_index_offset : int
+        future_offset : int
             Add the given offset to the query positions for future masking.
             This is intended for evaluation mode, where representation of
             previously generated tokens must not be generated several times.
@@ -295,14 +295,14 @@ class FourrierKernelAttention(torch.nn.Module):
         """
         return self._fourrier_kernel_attention_naive(
                 self.kernel_function, q, k, v, mask_future,
-                padding_mask, pq, pk, self.scaled, mask_index_offset)
+                padding_mask, pq, pk, self.scaled, future_offset)
 
     @staticmethod
     def _fourrier_kernel_attention_naive(kernel: Callable, q: torch.Tensor, k: torch.Tensor,
                                          v: torch.Tensor, mask_future: bool,
                                          padding_mask: Optional[torch.Tensor],
                                          pq: torch.Tensor, pk: torch.Tensor, scaled: bool,
-                                         mask_index_offset: int=0) -> torch.Tensor:
+                                         future_offset: int=0) -> torch.Tensor:
         """
         see forward doc
         Parameters
@@ -315,7 +315,7 @@ class FourrierKernelAttention(torch.nn.Module):
         sin_delta_p = torch.sin(pq.reshape(N, H, Lq, 1) - pk.reshape(N, H, 1, Lk))
         score = torch.einsum("nhqd, nhkd, nqkd -> nhqk", q, k, sin_delta_p)
         if mask_future:
-            mask = _mask_chronological(Lq, Lk, score.device, mask_index_offset).reshape(1, 1, Lq, Lk)
+            mask = _mask_chronological(Lq, Lk, score.device, future_offset).reshape(1, 1, Lq, Lk)
             score = torch.masked_fill(score, mask, 0)
         if padding_mask is not None:
             score = torch.masked_fill(score, padding_mask.reshape(N, 1, 1, Lk), 0)

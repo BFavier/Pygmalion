@@ -150,12 +150,12 @@ class TransformerDecoderStage(torch.nn.Module):
         N, L, _ = Y.shape
         Q = Y[:, -1:, :]
         input = Q.reshape(N, -1)
-        Q = self.masked_self_attention(Q, Y, mask_index_offset=L-1).reshape(N, -1)
+        Q = self.masked_self_attention(Q, Y, future_offset=L-1).reshape(N, -1)
         Q = self.first_norm(Q + input).reshape(N, 1, -1)
         input = Q.reshape(N, -1)
         Q = self.attention(Q, encoded, query_padding_mask=None,
                            key_padding_mask=encoded_padding_mask,
-                           mask_index_offset=L-1).reshape(N, -1)
+                           future_offset=L-1).reshape(N, -1)
         Q = self.second_norm(Q + input)
         input = Q
         Q = self.contract(self.activation(self.expand(Q)))

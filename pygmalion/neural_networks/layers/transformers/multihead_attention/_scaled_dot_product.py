@@ -34,7 +34,7 @@ class ScaledDotProductAttention(torch.nn.Module):
     def forward(self, query: torch.Tensor, key: torch.Tensor,
                 query_mask: Optional[torch.Tensor] = None,
                 key_mask: Optional[torch.Tensor] = None,
-                mask_index_offset: int=0):
+                future_offset: int=0):
         """
         Apply scaled dot product attention to a batch of 'N' sentences pairs,
         with 'H' the number of heads, and 'D' the projection dimension.
@@ -60,7 +60,7 @@ class ScaledDotProductAttention(torch.nn.Module):
             Tensor of booleans of shape (N, Lq)
             or None if padding tokens should not be masked.
             Masked queries are set to null vector after transformation.
-        mask_index_offset : int
+        future_offset : int
             Add the given offset to the query positions for future masking.
             This is intended for evaluation mode, where representation of
             previously generated tokens must not be generated several times.
@@ -82,7 +82,7 @@ class ScaledDotProductAttention(torch.nn.Module):
         attention = self._scaled_dot_product_attention(
             q, k, v, self.mask_future, key_mask,
             self.relative_positional_encoding,
-            mask_index_offset=mask_index_offset)
+            future_offset=future_offset)
         attention = attention.transpose(2, 1).reshape(N, Lq, -1)
         # mask queries if needed
         if query_mask is not None:
@@ -99,7 +99,7 @@ class ScaledDotProductAttention(torch.nn.Module):
                                       v: torch.Tensor, mask_future: bool,
                                       padding_mask: Optional[torch.Tensor],
                                       RPE: Optional[torch.nn.Embedding],
-                                      mask_index_offset: int = 0
+                                      future_offset: int = 0
                                       ) -> torch.Tensor:
         """
         Apply scaled dot product attention to a batch of 'N' sentences pairs,
@@ -127,7 +127,7 @@ class ScaledDotProductAttention(torch.nn.Module):
         RPE : torch.nn.Embedding or None
             if provided, the relative positional embedding
             tensor of shape (2*R+1, D) or None
-        mask_index_offset : int
+        future_offset : int
             Add the given offset to the query positions for future masking.
             This is intended for evaluation mode, where representation of
             previously generated tokens must not be generated several times.
@@ -145,11 +145,11 @@ class ScaledDotProductAttention(torch.nn.Module):
             r = RPE.weight.shape[0] // 2
             P = torch.clip(r + torch.arange(Lk, device=score.device).reshape(1, Lk)
                            - torch.arange(Lq, device=score.device).reshape(Lq, 1)
-                           - mask_index_offset, 0, 2*r)
+                           - future_offset, 0, 2*r)
             P = RPE(P).reshape(Lq, Lk, H, d)
             score = score + torch.einsum("qkhd, nhkd -> nhqk", P, k) / scaling
         if mask_future:
-            score = score.masked_fill(_mask_chronological(Lq, Lk, score.device, mask_index_offset).reshape(1, 1, Lq, Lk), -float("inf"))
+            score = score.masked_fill(_mask_chronological(Lq, Lk, score.device, future_offset).reshape(1, 1, Lq, Lk), -float("inf"))
         if padding_mask is not None:
             score = score.masked_fill(padding_mask.reshape(N, 1, 1, Lk), -float("inf"))
         score = torch.softmax(score, dim=-1)

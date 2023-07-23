@@ -27,7 +27,7 @@ class FourrierKernelAttention(torch.nn.Module):
                 v: torch.Tensor, mask_future: bool,
                 padding_mask: Optional[torch.Tensor],
                 pq: torch.Tensor, pk: torch.Tensor,
-                mask_index_offset: int = 0):
+                future_offset: int = 0):
         """
         Parameters
         ----------
@@ -46,7 +46,7 @@ class FourrierKernelAttention(torch.nn.Module):
             query positions, tensor of shape (N, Lq, P)
         pk : torch.Tensor
             key positions, tensor of shape (N, Lq, P)
-        mask_index_offset : int
+        future_offset : int
             Add the given offset to the query positions for future masking.
             This is intended for evaluation mode, where representation of
             previously generated tokens must not be generated several times.
@@ -60,14 +60,14 @@ class FourrierKernelAttention(torch.nn.Module):
         """
         return self._fourrier_kernel_attention_naive(
                 self.kernel_function, q, k, v, mask_future,
-                padding_mask, pq, pk, self.scaled, mask_index_offset)
+                padding_mask, pq, pk, self.scaled, future_offset)
 
     @staticmethod
     def _fourrier_kernel_attention_naive(kernel: Callable, q: torch.Tensor, k: torch.Tensor,
                                          v: torch.Tensor, mask_future: bool,
                                          padding_mask: Optional[torch.Tensor],
                                          pq: torch.Tensor, pk: torch.Tensor, scaled: bool,
-                                         mask_index_offset: int=0) -> torch.Tensor:
+                                         future_offset: int=0) -> torch.Tensor:
         """
         see forward doc
         Parameters
@@ -80,7 +80,7 @@ class FourrierKernelAttention(torch.nn.Module):
         sin_delta_p = torch.sin(pq.reshape(N, H, Lq, 1) - pk.reshape(N, H, 1, Lk))
         score = torch.einsum("nhqd, nhkd, nqkd -> nhqk", q, k, sin_delta_p)
         if mask_future:
-            mask = _mask_chronological(Lq, Lk, score.device, mask_index_offset).reshape(1, 1, Lq, Lk)
+            mask = _mask_chronological(Lq, Lk, score.device, future_offset).reshape(1, 1, Lq, Lk)
             score = torch.masked_fill(score, mask, 0)
         if padding_mask is not None:
             score = torch.masked_fill(score, padding_mask.reshape(N, 1, 1, Lk), 0)
