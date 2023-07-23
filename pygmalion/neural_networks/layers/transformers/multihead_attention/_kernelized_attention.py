@@ -85,28 +85,18 @@ class KernelizedAttention(torch.nn.Module):
         query, key = query.to(self.device), key.to(self.device)
         N, Lq, _ = query.shape
         N, Lk, _ = key.shape
-        # set default positions
-        if query_positions is None:
-            query_positions = torch.arange(Lq, dtype=query.dtype, device=query.device).reshape(1, Lq, 1).expand(N, -1, self.position_dimension)
-        if key_positions is None:
-            key_positions = torch.arange(Lk, dtype=key.dtype, device=key.device).reshape(1, Lk, 1).expand(N, -1, self.position_dimension)
         # project into 'n_heads' different subspaces
         q = self.kernel_function(self.query(query).reshape(N, Lq, self.n_heads, self.projection_dim))
         k = self.kernel_function(self.key(key).reshape(N, Lk, self.n_heads, self.projection_dim))
         v = self.value(key).reshape(N, Lk, self.n_heads, self.projection_dim)
-        pq = (torch.einsum("nlp, hkp -> nhlk", query_positions, self.position_weight)
-              + self.position_bias.reshape(1, self.n_heads, 1, self.projection_dim))
-        pk = torch.einsum("nlp, hkp -> nhlk", query_positions, self.position_weight)
         # compute attention
         q, k, v = q.transpose(1, 2), k.transpose(1, 2), v.transpose(1, 2)
         if self.linear_complexity and (future_offset == 0):
-            attention = self._kernelized_attention_linear(
-                q, k, v, pq, pk, self.mask_future,
-                self.key_mask, self.scaled, future_offset)
+            attention = self._attention_linear(
+                q, k, v, self.mask_future, key_mask, self.scaled, future_offset)
         else:
-            attention = self._kernelized_attention_naive(
-                q, k, v, pq, pk, self.mask_future,
-                self.key_mask, self.scaled, future_offset)
+            attention = self._attention_naive(
+                q, k, v, self.mask_future, key_mask, self.scaled, future_offset)
         attention = attention.transpose(2, 1).reshape(N, Lq, -1)
         # mask queries if needed
         if query_mask is not None:
