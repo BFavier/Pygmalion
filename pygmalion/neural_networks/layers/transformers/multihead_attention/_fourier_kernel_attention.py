@@ -185,7 +185,7 @@ class FourrierKernelAttention(torch.nn.Module):
         if key_mask is not None:
             score = torch.masked_fill(score, key_mask.reshape(N, 1, 1, Lk), 0)
         if scaled:
-            score = score / score.sum(dim=-1).unsqueeze(-1)
+            score = score / score.abs().sum(dim=-1).unsqueeze(-1)
         if key_mask is not None:
             score = torch.masked_fill(score, key_mask.reshape(N, 1, 1, Lk), 0.)
         attention = torch.matmul(score, v)

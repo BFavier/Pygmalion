@@ -1,6 +1,6 @@
 import torch
 from typing import Optional
-from ._multihead_attention import MultiHeadAttention, ATTENTION_TYPE
+from .multihead_attention import ATTENTION_TYPE, ScaledDotProductAttention
 from pygmalion.neural_networks.layers._dropout import Dropout
 from torch.utils.checkpoint import checkpoint
 
@@ -9,17 +9,14 @@ class TransformerEncoderStage(torch.nn.Module):
 
     def __init__(self, projection_dim: int, n_heads: int,
                  dropout: Optional[float] = None,
-                 activation: str = "relu", RPE_radius: Optional[int] = None,
-                 attention_type: ATTENTION_TYPE = "scaled dot product",
-                 masked: bool = False,
+                 activation: str = "relu",
+                 AttentionType: ATTENTION_TYPE = ScaledDotProductAttention,
+                 mask_future: bool = False,
                  **kwargs):
         super().__init__()
         dim = projection_dim * n_heads
         self.activation = getattr(torch, activation)
-        self.self_attention = MultiHeadAttention(projection_dim, n_heads, masked,
-                                                 RPE_radius=RPE_radius,
-                                                 attention_type=attention_type,
-                                                 **kwargs)
+        self.self_attention = AttentionType(projection_dim, n_heads, mask_future=mask_future, **kwargs)
         self.intermediate_norm = torch.nn.LayerNorm(dim)
         self.intermediate_dropout = Dropout(dropout)
         self.expand = torch.nn.Linear(dim, dim * 4)
@@ -67,21 +64,15 @@ class TransformerDecoderStage(torch.nn.Module):
 
     def __init__(self, projection_dim: int, n_heads: int,
                  dropout: Optional[float] = None, activation: str = "relu",
-                 RPE_radius: Optional[int] = None,
-                 attention_type: ATTENTION_TYPE = "scaled dot product",
+                 AttentionType: ATTENTION_TYPE = ScaledDotProductAttention,
                  **kwargs):
         super().__init__()
         dim = projection_dim * n_heads
         self.activation = getattr(torch, activation)
-        self.masked_self_attention = MultiHeadAttention(projection_dim, n_heads, True,
-                                                        RPE_radius=RPE_radius,
-                                                        attention_type=attention_type,
-                                                        **kwargs)
+        self.masked_self_attention = AttentionType(projection_dim, n_heads, mask_future=True, **kwargs)
         self.first_dropout = Dropout(dropout)
         self.first_norm = torch.nn.LayerNorm(dim)
-        self.attention = MultiHeadAttention(projection_dim, n_heads, False,
-                                            RPE_radius=RPE_radius,
-                                            attention_type=attention_type)
+        self.attention = AttentionType(projection_dim, n_heads, mask_future=False, **kwargs)
         self.second_dropout = Dropout(dropout)
         self.second_norm = torch.nn.LayerNorm(dim)
         self.expand = torch.nn.Linear(dim, 4 * dim)

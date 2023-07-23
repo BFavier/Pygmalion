@@ -14,7 +14,7 @@ class ScaledDotProductAttention(torch.nn.Module):
             the dimension of the projection space for the feature vectors
         n_heads : int
             the number of different projection at each stage of the transformer
-        masked: bool
+        mask_future: bool
             whether or not a query at index i can't attend to keys
             at index j > i in the sequence
         RPE_radius : int or None

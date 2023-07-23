@@ -1,7 +1,7 @@
 import torch
 import pandas as pd
 from typing import Union, List, Optional, Literal, Iterable
-from .layers.transformers import TransformerEncoder, ATTENTION_TYPE
+from .layers.transformers import TransformerEncoder, ATTENTION_TYPE, FourrierKernelAttention
 from .layers import LearnedPositionalEncoding, SinusoidalPositionalEncoding, Dropout
 from ._conversions import floats_to_tensor, tensor_to_floats, tensor_to_probabilities
 from ._conversions import classes_to_tensor
@@ -19,7 +19,6 @@ class TimeSeriesRegressor(NeuralNetwork):
                  dropout: Union[float, None] = None,
                  positional_encoding_type: Literal["sinusoidal", "learned", None] = None,
                  attention_type: ATTENTION_TYPE = "kernelized",
-                 RPE_radius: Optional[int] = 8,
                  max_sequence_length: Optional[int] = None,
                  gradient_checkpointing: bool = True):
         """

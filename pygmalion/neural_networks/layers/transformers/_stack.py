@@ -1,6 +1,6 @@
 import torch
 from typing import Optional, List, Tuple, Sequence
-from ._multihead_attention import ATTENTION_TYPE
+from .multihead_attention import ATTENTION_TYPE, ScaledDotProductAttention
 from ._stages import TransformerEncoderStage, TransformerDecoderStage
 from torch.utils.checkpoint import checkpoint
 
@@ -12,16 +12,16 @@ class TransformerEncoder(torch.nn.Module):
 
     def __init__(self, n_stages: int, projection_dim: int, n_heads: int,
                  dropout: Optional[float] = None, activation: str = "relu",
-                 RPE_radius: Optional[int] = None, attention_type: ATTENTION_TYPE = "scaled dot product",
-                 gradient_checkpointing: bool = True):
+                 gradient_checkpointing: bool = True,
+                 AttentionType: ATTENTION_TYPE = ScaledDotProductAttention,
+                 **kwargs):
         super().__init__()
         self.stages: Sequence[TransformerEncoderStage] = torch.nn.ModuleList()
         self.gradient_checkpointing = gradient_checkpointing
         for stage in range(n_stages):
             self.stages.append(TransformerEncoderStage(projection_dim, n_heads,
                                                        dropout=dropout, activation=activation,
-                                                       RPE_radius=RPE_radius,
-                                                       attention_type=attention_type))
+                                                       AttentionType=AttentionType, **kwargs))
 
     def forward(self, X: torch.Tensor, padding_mask: Optional[torch.Tensor] = None):
         """
@@ -55,16 +55,16 @@ class TransformerDecoder(torch.nn.Module):
 
     def __init__(self, n_stages: int, projection_dim: int, n_heads: int,
                  dropout: Optional[float] = None, activation: str = "relu",
-                 RPE_radius: Optional[int] = None, attention_type: ATTENTION_TYPE = "scaled dot product",
-                 gradient_checkpointing: bool = True):
+                 gradient_checkpointing: bool = True, 
+                 attention_type: ATTENTION_TYPE = ScaledDotProductAttention,
+                 **kwargs):
         super().__init__()
         self.stages: Sequence[TransformerDecoderStage] = torch.nn.ModuleList()
         self.gradient_checkpointing = gradient_checkpointing
         for stage in range(n_stages):
             self.stages.append(TransformerDecoderStage(projection_dim, n_heads,
                                                        dropout=dropout, activation=activation,
-                                                       RPE_radius=RPE_radius,
-                                                       attention_type=attention_type))
+                                                       attention_type=attention_type, **kwargs))
 
     def forward(self, Y: torch.Tensor, encoded: torch.Tensor,
                 encoded_padding_mask: Optional[torch.Tensor] = None):

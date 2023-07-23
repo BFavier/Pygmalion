@@ -3,13 +3,13 @@ import numpy as np
 from typing import Union, List, Sequence, Optional, Literal
 from itertools import count
 from warnings import warn
-from .layers.transformers import TransformerEncoder, TransformerDecoder, ATTENTION_TYPE
+from .layers.transformers import TransformerEncoder, TransformerDecoder, ATTENTION_TYPE, ScaledDotProductAttention
 from .layers import LearnedPositionalEncoding, SinusoidalPositionalEncoding, Dropout
 from ._conversions import strings_to_tensor, tensor_to_strings
 from ._conversions import floats_to_tensor
 from ._neural_network import NeuralNetwork
 from ._loss_functions import cross_entropy
-from pygmalion.tokenizers._utilities import Tokenizer, SpecialToken
+from pygmalion.tokenizers._utilities import Tokenizer
 
 
 class TextTranslator(NeuralNetwork):
@@ -21,12 +21,12 @@ class TextTranslator(NeuralNetwork):
                  dropout: Union[float, None] = None,
                  positional_encoding_type: Literal["sinusoidal", "learned", None] = "sinusoidal",
                  mask_padding: bool = True,
-                 attention_type: ATTENTION_TYPE = "scaled dot product",
-                 RPE_radius: Optional[int] = None,
                  input_sequence_length: Optional[int] = None,
                  output_sequence_length: Optional[int] = None,
                  gradient_checkpointing: bool = True,
-                 label_smoothing: float = 0.):
+                 label_smoothing: float = 0.,
+                 attention_type: ATTENTION_TYPE = ScaledDotProductAttention,
+                 attention_kwargs: dict = {}):
         """
         Parameters
         ----------
@@ -49,10 +49,6 @@ class TextTranslator(NeuralNetwork):
             type of absolute positional encoding
         mask_padding : bool
             If True, PAD tokens are masked in attention
-        attention_type : ATTENTION_TYPE
-            type of attention for multi head attention
-        RPE_radius : int or None
-            radius of the relative positional encoding, or None if not used
         input_sequence_length : int or None
             Fixed size of the input sequence after padding.
             Usefull if 'mask_padding' is False,
@@ -64,6 +60,10 @@ class TextTranslator(NeuralNetwork):
             training at the expense of computation time.
         label_smoothing : float
             label smoothing level used in cross entropy loss
+        attention_type : ATTENTION_TYPE
+            type of attention for multi head attention
+        attention_kwargs : dict
+            additional kwargs passed to AttentionType initializer
         """
         super().__init__()
         self.mask_padding = mask_padding
@@ -93,12 +93,14 @@ class TextTranslator(NeuralNetwork):
             raise ValueError(f"Unexpected positional encoding type '{positional_encoding_type}'")
         self.transformer_encoder = TransformerEncoder(n_stages, projection_dim, n_heads,
                                                       dropout=dropout, activation=activation,
-                                                      RPE_radius=RPE_radius, attention_type=attention_type,
-                                                      gradient_checkpointing=gradient_checkpointing)
+                                                      attention_type=attention_type,
+                                                      gradient_checkpointing=gradient_checkpointing,
+                                                      **attention_kwargs)
         self.transformer_decoder = TransformerDecoder(n_stages, projection_dim, n_heads,
                                                       dropout=dropout, activation=activation,
-                                                      RPE_radius=RPE_radius, attention_type=attention_type,
-                                                      gradient_checkpointing=gradient_checkpointing)
+                                                      attention_type=attention_type,
+                                                      gradient_checkpointing=gradient_checkpointing,
+                                                      **attention_kwargs)
         self.head = torch.nn.Linear(embedding_dim, self.tokenizer_output.n_tokens)
 
     def forward(self, X: torch.Tensor, padding_mask: Optional[torch.Tensor]):
