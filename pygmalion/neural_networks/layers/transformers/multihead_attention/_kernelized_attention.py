@@ -26,8 +26,8 @@ class KernelizedAttention(torch.nn.Module):
             the kernel function applied to query and keys
         linear_complexity : bool
             whether to use linear or quadratic complexity algorithm
-        scaled: bool
-            if True, the scores sum up to 1
+        scaled : bool
+            if True, the attention scores of any query to all keys sums up to 1
         """
         super().__init__()
         self.n_heads = n_heads
@@ -119,20 +119,20 @@ class KernelizedAttention(torch.nn.Module):
         return self.query.weight.device
 
     @staticmethod
-    def _kernelized_attention_linear(kernel: Callable, q: torch.Tensor, k: torch.Tensor,
-                                     v: torch.Tensor, mask_future: bool,
-                                     padding_mask: Optional[torch.Tensor],
-                                     RPE: Optional[torch.nn.Embedding],
-                                     scaled: bool) -> torch.Tensor:
+    def _attention_linear(kernel: Callable, q: torch.Tensor, k: torch.Tensor,
+                          v: torch.Tensor, mask_future: bool,
+                          key_mask: Optional[torch.Tensor],
+                          RPE: Optional[torch.nn.Embedding],
+                          scaled: bool) -> torch.Tensor:
         """
-        see forward doc
+        see self._attention_naive doc
         """
         q, k = kernel(q), kernel(k)
         N, H, Lq, _ = q.shape
         N, H, Lk, _ = k.shape
         D = v.shape[-1]
-        if padding_mask is not None:
-            v = torch.masked_fill(v, padding_mask.reshape(N, 1, Lk, 1), 0.)
+        if key_mask is not None:
+            v = torch.masked_fill(v, key_mask.reshape(N, 1, Lk, 1), 0.)
         if mask_future:
             expanded = torch.einsum("nhkd, nhkD -> nhkdD", k, v)
             summed = _align(torch.cumsum(expanded, dim=2), Lq, 2)
@@ -176,26 +176,53 @@ class KernelizedAttention(torch.nn.Module):
                 attention = attention + torch.einsum("nhq, nhqd -> nhqd", W_after, V_after)
         if scaled:
             v_scaling = torch.ones(N, H, Lk, 1)
-            if padding_mask is not None:
-                v_scaling = torch.masked_fill(v_scaling, padding_mask.reshape(N, 1, Lk, 1), 0.)
+            if key_mask is not None:
+                v_scaling = torch.masked_fill(v_scaling, key_mask.reshape(N, 1, Lk, 1), 0.)
             scale = KernelizedAttention._kernelized_attention_linear(
-                kernel, q, k, v_scaling, mask_future, padding_mask, RPE, scaled=False)
+                kernel, q, k, v_scaling, mask_future, key_mask, RPE, scaled=False)
             attention = attention / scale
         return attention
 
     @staticmethod
-    def _kernelized_attention_naive(kernel: Callable, q: torch.Tensor, k: torch.Tensor,
-                                    v: torch.Tensor, mask_future: bool,
-                                    padding_mask: Optional[torch.Tensor],
-                                    RPE: Optional[torch.nn.Embedding],
-                                    scaled: bool,
-                                    future_offset: int = 0,
-                                    ) -> torch.Tensor:
+    def _attention_naive(kernel: Callable, q: torch.Tensor, k: torch.Tensor,
+                         v: torch.Tensor, mask_future: bool,
+                         key_mask: Optional[torch.Tensor],
+                         RPE: Optional[torch.nn.Embedding],
+                         scaled: bool,
+                         future_offset: int = 0,
+                         ) -> torch.Tensor:
         """
-        see forward doc
         Parameters
         ----------
+        kernel : callable
+            kernel function
+        q : torch.Tensor
+            query tensor of shape (N, H, Lq, d)
+        k : torch.Tensor
+            key tensor of shape (N, H, Lk, d)
+        v : torch.Tensor
+            value tensor of shape (N, H, Lk, d)
+        mask_future : bool
+            whether or not a query at index i can't attend to keys at index j > i
+            in the sequence 
+        key_mask : torch.Tensor or None
+            tensor of booleans of shape (N, Lk)
+        RPE : torch.nn.Embedding or None
+            if provided, the relative positional embedding
+            tensor of shape (2*R+1, D) or None
+        scaled : bool
+            if True, the attention scores of any query to all keys sums up to 1
+        future_offset : int
+            Add the given offset to the query positions for future masking.
+            This is intended for evaluation mode, where representation of
+            previously generated tokens must not be generated several times.
+            If different from 0, the squared complexity algorithm is used
+            (because this is intended for use with a sequence of queries of length 1).
 
+        Returns
+        -------
+        torch.Tensor:
+            attention, a tensor of shape (N, H, Lq, D)
         """
         q, k = kernel(q), kernel(k)
         N, H, Lq, d = q.shape
@@ -211,11 +238,11 @@ class KernelizedAttention(torch.nn.Module):
         if mask_future:
             mask = _mask_chronological(Lq, Lk, score.device, future_offset).reshape(1, 1, Lq, Lk)
             score = torch.masked_fill(score, mask, 0)
-        if padding_mask is not None:
-            score = torch.masked_fill(score, padding_mask.reshape(N, 1, 1, Lk), 0)
+        if key_mask is not None:
+            score = torch.masked_fill(score, key_mask.reshape(N, 1, 1, Lk), 0)
         if scaled:
             score = score / score.sum(dim=-1).unsqueeze(-1)
-        if padding_mask is not None:
-            score = torch.masked_fill(score, padding_mask.reshape(N, 1, 1, Lk), 0.)
+        if key_mask is not None:
+            score = torch.masked_fill(score, key_mask.reshape(N, 1, 1, Lk), 0.)
         attention = torch.matmul(score, v)
         return attention
