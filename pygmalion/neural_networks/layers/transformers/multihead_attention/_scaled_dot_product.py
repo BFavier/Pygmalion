@@ -79,7 +79,7 @@ class ScaledDotProductAttention(torch.nn.Module):
         v = self.value(key).reshape(N, Lk, self.n_heads, self.projection_dim)
         # compute attention
         q, k, v = q.transpose(1, 2), k.transpose(1, 2), v.transpose(1, 2)
-        attention = self._scaled_dot_product_attention(
+        attention = self._attention(
             q, k, v, self.mask_future, key_mask,
             self.relative_positional_encoding,
             future_offset=future_offset)

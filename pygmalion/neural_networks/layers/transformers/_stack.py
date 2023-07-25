@@ -84,7 +84,7 @@ class TransformerDecoder(torch.nn.Module):
             tensor of shape (N, L, D)
         """
         for stage in self.stages:
-            if self.low_memory and self.training:
+            if self.gradient_checkpointing and self.training:
                 Y = checkpoint(stage, Y, encoded, encoded_padding_mask)
             else:
                 Y = stage(Y, encoded, encoded_padding_mask)

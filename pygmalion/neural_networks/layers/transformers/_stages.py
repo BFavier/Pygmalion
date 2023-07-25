@@ -2,7 +2,6 @@ import torch
 from typing import Optional
 from .multihead_attention import ATTENTION_TYPE, ScaledDotProductAttention
 from pygmalion.neural_networks.layers._dropout import Dropout
-from torch.utils.checkpoint import checkpoint
 
 
 class TransformerEncoderStage(torch.nn.Module):
@@ -105,8 +104,8 @@ class TransformerDecoderStage(torch.nn.Module):
         Y = self.first_dropout(Y)
         Y = self.first_norm(Y + input).reshape(N, L, -1)
         input = Y.reshape(N * L, -1)
-        Y = self.attention(Y, encoded, query_padding_mask=None,
-                           key_padding_mask=encoded_padding_mask).reshape(N * L, -1)
+        Y = self.attention(Y, encoded, query_mask=None,
+                           key_mask=encoded_padding_mask).reshape(N * L, -1)
         Y = self.second_dropout(Y)
         Y = self.second_norm(Y + input)
         input = Y
@@ -144,8 +143,8 @@ class TransformerDecoderStage(torch.nn.Module):
         Q = self.masked_self_attention(Q, Y, future_offset=L-1).reshape(N, -1)
         Q = self.first_norm(Q + input).reshape(N, 1, -1)
         input = Q.reshape(N, -1)
-        Q = self.attention(Q, encoded, query_padding_mask=None,
-                           key_padding_mask=encoded_padding_mask,
+        Q = self.attention(Q, encoded, query_mask=None,
+                           key_mask=encoded_padding_mask,
                            future_offset=L-1).reshape(N, -1)
         Q = self.second_norm(Q + input)
         input = Q

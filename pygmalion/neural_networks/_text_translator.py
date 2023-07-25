@@ -4,7 +4,8 @@ from typing import Union, List, Sequence, Optional
 from itertools import count
 from warnings import warn
 from .layers.transformers import TransformerEncoder, TransformerDecoder, ATTENTION_TYPE, ScaledDotProductAttention
-from .layers import SinusoidalPositionalEncoding, POSITIONAL_ENCODING_TYPE, Dropout
+from .layers.positional_encoding import SinusoidalPositionalEncoding, POSITIONAL_ENCODING_TYPE
+from .layers import Dropout
 from ._conversions import strings_to_tensor, tensor_to_strings
 from ._conversions import floats_to_tensor
 from ._neural_network import NeuralNetwork
@@ -22,7 +23,8 @@ class TextTranslator(NeuralNetwork):
                  gradient_checkpointing: bool = True,
                  label_smoothing: float = 0.,
                  positional_encoding_type: Optional[POSITIONAL_ENCODING_TYPE] = SinusoidalPositionalEncoding,
-                 positional_encoding_kwargs: dict={},
+                 input_positional_encoding_kwargs: dict={},
+                 output_positional_encoding_kwargs: dict={},
                  attention_type: ATTENTION_TYPE = ScaledDotProductAttention,
                  attention_kwargs: dict = {}):
         """
@@ -52,7 +54,9 @@ class TextTranslator(NeuralNetwork):
             label smoothing level used in cross entropy loss
         positional_encoding_type : POSITIONAL_ENCODING_TYPE or None
             type of absolute positional encoding
-        positional_encoding_kwargs : dict
+        input_positional_encoding_kwargs : dict
+            additional kwargs passed to positional_encoding_type initializer
+        output_positional_encoding_kwargs : dict
             additional kwargs passed to positional_encoding_type initializer
         attention_type : ATTENTION_TYPE
             type of attention for multi head attention
@@ -75,8 +79,8 @@ class TextTranslator(NeuralNetwork):
             self.positional_encoding_input = None
             self.positional_encoding_output = None
         else:
-            self.positional_encoding_input = positional_encoding_type(embedding_dim, **positional_encoding_kwargs)
-            self.positional_encoding_output = positional_encoding_type(embedding_dim, **positional_encoding_kwargs)
+            self.positional_encoding_input = positional_encoding_type(embedding_dim, **input_positional_encoding_kwargs)
+            self.positional_encoding_output = positional_encoding_type(embedding_dim, **output_positional_encoding_kwargs)
         self.transformer_encoder = TransformerEncoder(n_stages, projection_dim, n_heads,
                                                       dropout=dropout, activation=activation,
                                                       attention_type=attention_type,

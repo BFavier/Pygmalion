@@ -1,6 +1,7 @@
 import pygmalion as ml
 from pygmalion.tokenizers import AsciiCharTokenizer
 from pygmalion.neural_networks import TextTranslator
+from pygmalion.neural_networks.layers.positional_encoding import LearnedPositionalEncoding
 from pygmalion.datasets.generators import RomanNumeralsGenerator
 import IPython
 import matplotlib.pyplot as plt
@@ -8,9 +9,9 @@ import matplotlib.pyplot as plt
 DEVICE = "cuda:0"
 tokenizer = AsciiCharTokenizer()
 model = TextTranslator(tokenizer, tokenizer, n_stages=4, projection_dim=16, n_heads=4,
-                       positional_encoding_type="learned",
-                       input_sequence_length=10,
-                       output_sequence_length=15)
+                       positional_encoding_type=LearnedPositionalEncoding,
+                       input_positional_encoding_kwargs={"sequence_length": 10},
+                       output_positional_encoding_kwargs={"sequence_length": 15})
 model.to(DEVICE)
 
 
