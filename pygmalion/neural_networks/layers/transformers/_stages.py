@@ -10,13 +10,13 @@ class TransformerEncoderStage(torch.nn.Module):
     def __init__(self, projection_dim: int, n_heads: int,
                  dropout: Optional[float] = None,
                  activation: str = "relu",
-                 AttentionType: ATTENTION_TYPE = ScaledDotProductAttention,
+                 attention_type: ATTENTION_TYPE = ScaledDotProductAttention,
                  mask_future: bool = False,
                  **kwargs):
         super().__init__()
         dim = projection_dim * n_heads
         self.activation = getattr(torch, activation)
-        self.self_attention = AttentionType(projection_dim, n_heads, mask_future=mask_future, **kwargs)
+        self.self_attention = attention_type(projection_dim, n_heads, mask_future=mask_future, **kwargs)
         self.intermediate_norm = torch.nn.LayerNorm(dim)
         self.intermediate_dropout = Dropout(dropout)
         self.expand = torch.nn.Linear(dim, dim * 4)
@@ -64,15 +64,15 @@ class TransformerDecoderStage(torch.nn.Module):
 
     def __init__(self, projection_dim: int, n_heads: int,
                  dropout: Optional[float] = None, activation: str = "relu",
-                 AttentionType: ATTENTION_TYPE = ScaledDotProductAttention,
+                 attention_type: ATTENTION_TYPE = ScaledDotProductAttention,
                  **kwargs):
         super().__init__()
         dim = projection_dim * n_heads
         self.activation = getattr(torch, activation)
-        self.masked_self_attention = AttentionType(projection_dim, n_heads, mask_future=True, **kwargs)
+        self.masked_self_attention = attention_type(projection_dim, n_heads, mask_future=True, **kwargs)
         self.first_dropout = Dropout(dropout)
         self.first_norm = torch.nn.LayerNorm(dim)
-        self.attention = AttentionType(projection_dim, n_heads, mask_future=False, **kwargs)
+        self.attention = attention_type(projection_dim, n_heads, mask_future=False, **kwargs)
         self.second_dropout = Dropout(dropout)
         self.second_norm = torch.nn.LayerNorm(dim)
         self.expand = torch.nn.Linear(dim, 4 * dim)

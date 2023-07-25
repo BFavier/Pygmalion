@@ -1,5 +1,6 @@
 import torch
 
+
 class SinusoidalPositionalEncoding(torch.nn.Module):
     """
     Parameterless positional encoding for sequences

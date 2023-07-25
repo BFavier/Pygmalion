@@ -1,8 +1,8 @@
 import torch
 import pandas as pd
-from typing import Union, List, Optional, Literal, Iterable
+from typing import Union, List, Optional, Iterable
 from .layers.transformers import TransformerEncoder, ATTENTION_TYPE, FourrierKernelAttention
-from .layers import LearnedPositionalEncoding, SinusoidalPositionalEncoding, Dropout
+from .layers import POSITIONAL_ENCODING_TYPE, Dropout
 from ._conversions import floats_to_tensor, tensor_to_floats, tensor_to_probabilities
 from ._conversions import classes_to_tensor
 from ._neural_network import NeuralNetwork
@@ -12,15 +12,15 @@ from pygmalion.tokenizers._utilities import Tokenizer
 
 class TimeSeriesRegressor(NeuralNetwork):
 
-    def __init__(self, inputs: Iterable[str],
-                 targets: Iterable[str],
+    def __init__(self, inputs: Iterable[str], targets: Iterable[str],
                  n_stages: int, projection_dim: int, n_heads: int,
                  activation: str = "relu",
                  dropout: Union[float, None] = None,
-                 positional_encoding_type: Literal["sinusoidal", "learned", None] = None,
-                 attention_type: ATTENTION_TYPE = "kernelized",
-                 max_sequence_length: Optional[int] = None,
-                 gradient_checkpointing: bool = True):
+                 gradient_checkpointing: bool = True,
+                 positional_encoding_type: Optional[POSITIONAL_ENCODING_TYPE] = None,
+                 positional_encoding_kwargs: dict={},
+                 attention_type: ATTENTION_TYPE = FourrierKernelAttention,
+                 attention_kwargs: dict = {}):
         """
         Parameters
         ----------
@@ -38,38 +38,31 @@ class TimeSeriesRegressor(NeuralNetwork):
             activation function
         dropout : float or None
             dropout probability if any
-        positional_encoding_type : str or None
-            type of absolute positional encoding
-        attention_type : ATTENTION_TYPE
-            type of attention for multi head attention
-        RPE_radius : int or None
-            radius of the relative positional encoding, or None if not used
-        max_sequence_length : int or None
-            Maximum size of the input sequence after padding.
-            Must be defined if 'positional_encoding_type' is 'learned'.
         gradient_checkpointing : bool
             If True, uses gradient checkpointing to reduce memory usage during
             training at the expense of computation time.
+        positional_encoding_type : POSITIONAL_ENCODING_TYPE or None
+            type of absolute positional encoding
+        positional_encoding_kwargs : dict
+            additional kwargs passed to positional_encoding_type initializer
+        attention_type : ATTENTION_TYPE
+            type of attention for multi head attention
+        attention_kwargs : dict
+            additional kwargs passed to attention_type initializer
         """
         super().__init__()
         self.inputs = list(inputs)
         self.targets = list(targets)
-        self.max_sequence_length = max_sequence_length
         embedding_dim = projection_dim*n_heads
         self.embedding = torch.nn.Linear(len(inputs), embedding_dim)
         self.dropout_input = Dropout(dropout)
-        if positional_encoding_type == "sinusoidal":
-            self.positional_encoding = SinusoidalPositionalEncoding()
-        elif positional_encoding_type == "learned":
-            assert max_sequence_length is not None
-            self.positional_encoding = LearnedPositionalEncoding(max_sequence_length, embedding_dim)
-        elif positional_encoding_type is None:
+        if positional_encoding_type is None:
             self.positional_encoding = None
         else:
-            raise ValueError(f"Unexpected positional encoding type '{positional_encoding_type}'")
+            self.positional_encoding = positional_encoding_type(embedding_dim, **positional_encoding_kwargs)
         self.transformer_encoder = TransformerEncoder(n_stages, projection_dim, n_heads,
                                                       dropout=dropout, activation=activation,
-                                                      RPE_radius=RPE_radius, attention_type=attention_type,
+                                                      attention_type=attention_type,
                                                       gradient_checkpointing=gradient_checkpointing, masked=True)
         self.head = torch.nn.Linear(embedding_dim, len(self.targets))
 
