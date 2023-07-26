@@ -5,7 +5,7 @@ from ._utilities import _align, _mask_chronological, _log_exp_kernel
 class KernelizedAttention(torch.nn.Module):
 
     def __init__(self, projection_dim: int, n_heads: int,
-                 mask_future: bool, position_dimension: int = 1,
+                 mask_future: bool, RPE_radius: Optional[int] = None,
                  kernel_function: Callable = _log_exp_kernel,
                  linear_complexity: bool = True,
                  scaled: bool = True):
@@ -32,9 +32,9 @@ class KernelizedAttention(torch.nn.Module):
         super().__init__()
         self.n_heads = n_heads
         self.projection_dim = projection_dim
-        self.position_dimension = position_dimension
         dim = projection_dim * n_heads
         self.mask_future = mask_future
+        self.relative_positional_encoding = torch.nn.Embedding(2*RPE_radius+1, dim) if RPE_radius else None
         self.query = torch.nn.Linear(dim, dim, bias=False)
         self.key = torch.nn.Linear(dim, dim, bias=False)
         self.value = torch.nn.Linear(dim, dim, bias=False)
@@ -91,12 +91,12 @@ class KernelizedAttention(torch.nn.Module):
         v = self.value(key).reshape(N, Lk, self.n_heads, self.projection_dim)
         # compute attention
         q, k, v = q.transpose(1, 2), k.transpose(1, 2), v.transpose(1, 2)
-        if self.linear_complexity and (future_offset == 0):
+        if self.linear_complexity:
             attention = self._attention_linear(
-                q, k, v, self.mask_future, key_mask, self.scaled, future_offset)
+                self.kernel_function, q, k, v, self.mask_future, key_mask, self.relative_positional_encoding, self.scaled, future_offset)
         else:
             attention = self._attention_naive(
-                q, k, v, self.mask_future, key_mask, self.scaled, future_offset)
+                self.kernel_function, q, k, v, self.mask_future, key_mask, self.relative_positional_encoding, self.scaled, future_offset)
         attention = attention.transpose(2, 1).reshape(N, Lq, -1)
         # mask queries if needed
         if query_mask is not None:
@@ -113,10 +113,12 @@ class KernelizedAttention(torch.nn.Module):
                           v: torch.Tensor, mask_future: bool,
                           key_mask: Optional[torch.Tensor],
                           RPE: Optional[torch.nn.Embedding],
-                          scaled: bool) -> torch.Tensor:
+                          scaled: bool, future_offset: int = 0) -> torch.Tensor:
         """
         see self._attention_naive doc
         """
+        if future_offset != 0:
+            raise ValueError("Linear complexity not implemented for 'future_offset' != 0")
         q, k = kernel(q), kernel(k)
         N, H, Lq, _ = q.shape
         N, H, Lk, _ = k.shape
@@ -178,9 +180,7 @@ class KernelizedAttention(torch.nn.Module):
                          v: torch.Tensor, mask_future: bool,
                          key_mask: Optional[torch.Tensor],
                          RPE: Optional[torch.nn.Embedding],
-                         scaled: bool,
-                         future_offset: int = 0,
-                         ) -> torch.Tensor:
+                         scaled: bool, future_offset: int = 0) -> torch.Tensor:
         """
         Parameters
         ----------

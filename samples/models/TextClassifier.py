@@ -4,6 +4,8 @@ import pandas as pd
 import torch
 import pathlib
 import IPython
+from pygmalion.neural_networks.layers.positional_encoding import LearnedPositionalEncoding
+from pygmalion.neural_networks.layers.transformers.multihead_attention import KernelizedAttention
 
 path = pathlib.Path(__file__).parent
 data_path = path.parent / "data"
@@ -20,7 +22,11 @@ tokenizer.fit(df["text"], max_tokens=10000)
 
 model = ml.neural_networks.TextClassifier(classes, tokenizer,
                                           n_stages=3, projection_dim=16,
-                                          n_heads=4, dropout=0.2)
+                                          n_heads=4, dropout=0.2,
+                                          positional_encoding_type=LearnedPositionalEncoding,
+                                          
+                                          attention_type=KernelizedAttention,
+                                          attention_kwargs={"linear_complexity": False})
 model.to("cpu")
 
 
