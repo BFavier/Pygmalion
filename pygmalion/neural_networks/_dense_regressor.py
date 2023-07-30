@@ -2,7 +2,7 @@ import torch
 import pandas as pd
 import numpy as np
 from typing import Union, Iterable, Optional
-from ._conversions import floats_to_tensor, tensor_to_floats
+from ._conversions import tensor_to_floats
 from ._conversions import named_to_tensor, tensor_to_dataframe
 from ._neural_network import NeuralNetwork
 from ._loss_functions import MSE
