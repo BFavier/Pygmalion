@@ -42,8 +42,8 @@ class Normalizer(torch.nn.Module):
             self.bias = torch.nn.parameter.Parameter(torch.zeros(num_features, device=device, dtype=dtype))
         else:
             self.weight, self.bias = (None, None)
-    
-    def forward(self, X: torch.Tensor) -> torch.Tensor:
+
+    def forward(self, X: torch.Tensor, track_running_stats: bool=True) -> torch.Tensor:
         """
         Parameters
         ----------
@@ -57,7 +57,7 @@ class Normalizer(torch.nn.Module):
         """
         if X.shape[self.dim] != self.num_features:
             raise ValueError(f"Expected tensor of shape (N, *, {self.num_features}, *) but got {tuple(X.shape)}")
-        if self.training:
+        if self.training and track_running_stats:
             with torch.no_grad():
                 self.running_mean, self.running_var = self.running_mean.to(X.device), self.running_var.to(X.device)
                 n = X.numel() // self.num_features
