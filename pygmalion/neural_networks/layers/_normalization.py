@@ -21,8 +21,6 @@ class Normalizer(torch.nn.Module):
             size of the given dimension along which data are normalized
         eps : float
             epsilon factor to avoid division by zero
-        momentum : float
-            update factor used for the running stats
         device : torch.device or None
             device to store the parameters and tensors on
         dtype : torch.dtype
@@ -59,7 +57,7 @@ class Normalizer(torch.nn.Module):
                 self.running_var = (self.n_observations/(self.n_observations+n)) * self.running_var + (n/(self.n_observations+n)) * var + self.n_observations*n/(self.n_observations+n)**2 * (mean - self.running_mean)**2
                 self.running_mean = mean * (self.n_observations / (self.n_observations + n)) + self.running_mean * (n / (self.n_observations + n))
                 self.n_observations += n
-        shape = [self.num_features if i == self.dim else 1 for i, _ in enumerate(X.shape)]
+        shape = [self.num_features if i == self.dim % len(X.shape) else 1 for i, _ in enumerate(X.shape)]
         X = (X - self.running_mean.reshape(shape)) / (self.running_var.reshape(shape) + self.eps)**0.5
         return X
 

@@ -33,7 +33,7 @@ class OrbitalTrajectoryGenerator:
         self.verbose = verbose
 
     def __iter__(self):
-        for _ in self.n_batches:
+        for _ in range(self.n_batches):
             yield self.generate_batch(self.batch_size, self.T, self.dt, self.dt_min, self.tol, self.verbose)
 
     @staticmethod

@@ -111,10 +111,10 @@ class FourrierKernelAttention(torch.nn.Module):
         q, k, v = q.transpose(1, 2), k.transpose(1, 2), v.transpose(1, 2)
         if self.linear_complexity and (future_offset == 0):
             attention = self._attention_linear(
-                q, k, v, pq, pk, self.mask_future, key_mask, self.scaled, future_offset)
+                q, k, v, self.position_coeffs, pq, pk, self.mask_future, key_mask, self.scaled, future_offset)
         else:
             attention = self._attention_naive(
-                q, k, v, pq, pk, self.mask_future, key_mask, self.scaled, future_offset)
+                q, k, v, self.position_coeffs, pq, pk, self.mask_future, key_mask, self.scaled, future_offset)
         attention = attention.transpose(2, 1).reshape(N, Lq, -1)
         # mask queries if needed
         if query_mask is not None:
@@ -135,6 +135,7 @@ class FourrierKernelAttention(torch.nn.Module):
         see self._attention_naive doc's
         """
         ...
+        raise NotImplementedError()
 
     @staticmethod
     def _attention_naive(q: torch.Tensor, k: torch.Tensor, v: torch.Tensor,
@@ -177,16 +178,14 @@ class FourrierKernelAttention(torch.nn.Module):
         N, H, Lk, d = k.shape
         cos_pq, cos_pk = torch.cos(pq), torch.cos(pk)
         sin_pq, sin_pk = torch.sin(pq), torch.sin(pk)
-        score = (torch.einsum("nhqd, nhkd, hd, nkqd, nhkd -> nhqk", q, k, position_coeff, cos_pq, cos_pk)
-                 + torch.einsum("nhqd, nhkd, hd, nkqd, nhkd -> nhqk", q, k, position_coeff, sin_pq, sin_pk))
+        score = (torch.einsum("nhqd, nhkd, hd, nhqd, nhkd -> nhqk", q, k, position_coeff, cos_pq, cos_pk)
+                 + torch.einsum("nhqd, nhkd, hd, nhqd, nhkd -> nhqk", q, k, position_coeff, sin_pq, sin_pk))
         if mask_future:
             mask = _mask_chronological(Lq, Lk, score.device, future_offset).reshape(1, 1, Lq, Lk)
             score = torch.masked_fill(score, mask, 0)
-        if key_mask is not None:
-            score = torch.masked_fill(score, key_mask.reshape(N, 1, 1, Lk), 0)
         if scaled:
             score = score / score.abs().sum(dim=-1).unsqueeze(-1)
         if key_mask is not None:
-            score = torch.masked_fill(score, key_mask.reshape(N, 1, 1, Lk), 0.)
+            score = torch.masked_fill(score, key_mask.reshape(N, 1, 1, Lk).to(score.device), 0.)
         attention = torch.matmul(score, v)
         return attention
