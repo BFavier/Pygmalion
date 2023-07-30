@@ -23,7 +23,7 @@ class TransformerEncoder(torch.nn.Module):
                                                        dropout=dropout, activation=activation,
                                                        attention_type=attention_type, **kwargs))
 
-    def forward(self, X: torch.Tensor, padding_mask: Optional[torch.Tensor] = None):
+    def forward(self, X: torch.Tensor, padding_mask: Optional[torch.Tensor] = None, attention_kwargs: dict = {}):
         """
         Parameter
         ---------
@@ -34,6 +34,8 @@ class TransformerEncoder(torch.nn.Module):
             * D number of features
         padding_mask : torch.tensor or None
             tensor of booleans of shape (N, L) of tokens to ignore
+        attention_kwargs : dict
+            additional kwargs passed to self attention
 
         Returns
         -------
@@ -42,9 +44,9 @@ class TransformerEncoder(torch.nn.Module):
         """
         for stage in self.stages:
             if self.gradient_checkpointing and self.training:
-                X = checkpoint(stage, X, padding_mask)
+                X = checkpoint(stage, X, padding_mask, attention_kwargs)
             else:
-                X = stage(X, padding_mask)
+                X = stage(X, padding_mask, attention_kwargs)
         return X
 
 

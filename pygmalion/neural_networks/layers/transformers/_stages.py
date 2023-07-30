@@ -24,7 +24,8 @@ class TransformerEncoderStage(torch.nn.Module):
         self.out_norm = torch.nn.LayerNorm(dim)
 
     def forward(self, X: torch.Tensor,
-                padding_mask: Optional[torch.Tensor] = None):
+                padding_mask: Optional[torch.Tensor] = None,
+                attention_kwargs: dict = {}):
         """
         Parameter
         ---------
@@ -33,9 +34,10 @@ class TransformerEncoderStage(torch.nn.Module):
             * N sentences count
             * L sequence length
             * D number of features
-
         padding_mask : torch.tensor or None
             tensor of booleans of shape (N, L) of tokens to ignore
+        attention_kwargs : dict
+            kwargs passed to self_attention
 
         Returns
         -------
@@ -45,7 +47,7 @@ class TransformerEncoderStage(torch.nn.Module):
         X = X.to(self.device)
         N, L, _ = X.shape
         input = X.reshape(N * L, -1)
-        X = self.self_attention(X, X, padding_mask, padding_mask).reshape(N * L, -1)
+        X = self.self_attention(X, X, padding_mask, padding_mask, **attention_kwargs).reshape(N * L, -1)
         X = self.intermediate_dropout(X) + input
         X = self.intermediate_norm(X)
         input = X
