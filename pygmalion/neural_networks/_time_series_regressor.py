@@ -3,8 +3,8 @@ import pandas as pd
 from typing import Union, List, Optional, Iterable
 from .layers.transformers import TransformerEncoder, ATTENTION_TYPE, FourrierKernelAttention
 from .layers.positional_encoding import POSITIONAL_ENCODING_TYPE
-from .layers import Dropout
-from ._conversions import floats_to_tensor, tensor_to_floats, tensor_to_probabilities
+from .layers import Dropout, Normalizer
+from ._conversions import named_to_tensor, tensor_to_dataframe
 from ._conversions import classes_to_tensor
 from ._neural_network import NeuralNetwork
 from ._loss_functions import MSE
@@ -17,6 +17,7 @@ class TimeSeriesRegressor(NeuralNetwork):
                  n_stages: int, projection_dim: int, n_heads: int,
                  activation: str = "relu",
                  dropout: Union[float, None] = None,
+                 normalize: bool = True,
                  gradient_checkpointing: bool = True,
                  positional_encoding_type: Optional[POSITIONAL_ENCODING_TYPE] = None,
                  positional_encoding_kwargs: dict={},
@@ -55,6 +56,11 @@ class TimeSeriesRegressor(NeuralNetwork):
         self.inputs = list(inputs)
         self.targets = list(targets)
         embedding_dim = projection_dim*n_heads
+        self.inputs = inputs
+        self.targets = targets
+        self.input_normalizer = Normalizer(-1, len(inputs), affine=False) if normalize else None
+        self.target_normalizer = Normalizer(-1, len(targets), affine=False) if normalize else None
+        self.initial_embedding = torch.nn.parameter.Parameter(torch.zeros(1, 1, embedding_dim))
         self.embedding = torch.nn.Linear(len(inputs), embedding_dim)
         self.dropout_input = Dropout(dropout)
         if positional_encoding_type is None:
@@ -64,68 +70,71 @@ class TimeSeriesRegressor(NeuralNetwork):
         self.transformer_encoder = TransformerEncoder(n_stages, projection_dim, n_heads,
                                                       dropout=dropout, activation=activation,
                                                       attention_type=attention_type,
-                                                      gradient_checkpointing=gradient_checkpointing, masked=True)
+                                                      gradient_checkpointing=gradient_checkpointing,
+                                                      **attention_kwargs)
         self.head = torch.nn.Linear(embedding_dim, len(self.targets))
 
-    def forward(self, X: torch.Tensor, padding_mask: Optional[torch.Tensor]):
+    def forward(self, X: torch.Tensor, T: torch.Tensor, padding_mask: Optional[torch.Tensor], initial_embedding: bool=False):
         """
         performs the encoding part of the network
 
         Parameters
         ----------
         X : torch.Tensor
-            tensor of longs of shape (N, L) with:
-            * N : number of sentences
-            * L : words per sentence
+            tensor of floats of shape (N, L, D)
+        T : torch.Tensor
+            tensor of floats of shape (N, L)
         padding_mask : torch.Tensor or None
             tensor of booleans of shape (N, L)
 
         Returns
         -------
         torch.Tensor :
-            tensor of floats of shape (N, L, C) with C the number of classes
+            tensor of floats of shape (N, L, D)
         """
         X = X.to(self.device)
-        N, L = X.shape
+        T = T.to(self.device)
+        N, L, _ = X.shape
+        if self.input_normalizer is not None:
+            X = self.input_normalizer(X)
         X = self.embedding(X)
+        if initial_embedding:
+            X = torch.concatenate([self.initial_embedding, X], dim=1)
         if self.positional_encoding is not None:
             X = self.positional_encoding(X)
         X = self.dropout_input(X.reshape(N*L, -1)).reshape(N, L, -1)
-        X = self.transformer_encoder(X, padding_mask)
+        X = self.transformer_encoder(X, padding_mask, attention_kwargs={"query_positions": T, "key_postions": T})
         return self.head(X)
 
-    def loss(self, x, padding, y_target, weights=None, class_weights=None):
+    def loss(self, x, t, padding_mask, y_target, weights=None):
         """
         Parameters
         ----------
         x : torch.Tensor
-            tensor of long of shape (N, L)
+            tensor of floats of shape (N, L, D)
+        t : torch.Tensor
+        padding_mask : torch.Tensor
+            tensor of booleans of shape (N, L)
         y_target : torch.Tensor
-            tensor of long of shape (N, L)
+            tensor of floats of shape (N, L, D )
         """
-        x, y_target = x.to(self.device), y_target.to(self.device)
-        y_pred = self(x)
-        return MSE(y_pred, y_target, weights, class_weights)
+        x, t, y_target = x.to(self.device), t.to(self.device), y_target.to(self.device)
+        y_pred = self(x[:, :-1, :], t, padding_mask, initial_embedding=True)
+        if self.target_normalizer is not None:
+            y_target = self.target_normalizer(y_target)
+        return MSE(y_pred, y_target, weights)
 
     @property
     def device(self) -> torch.device:
         return self.head.weight.device
 
-    def _x_to_tensor(self, x: List[str],
-                     device: Optional[torch.device] = None,
-                     max_input_sequence_length: Optional[int] = None,
-                     raise_on_longer_sequences: bool = False):
-        return strings_to_tensor(x, self.tokenizer, device,
-                                 max_sequence_length=self.input_sequence_length or max_input_sequence_length,
-                                 raise_on_longer_sequences=raise_on_longer_sequences,
-                                 add_start_end_tokens=False)
+    def _x_to_tensor(self, x: Union[pd.DataFrame, dict, Iterable],
+                     device: Optional[torch.device] = None):
+        return named_to_tensor(x, list(self.inputs), device=device)
 
-    def _y_to_tensor(self, y: List[str],
+    def _y_to_tensor(self, y: Union[pd.DataFrame, dict, Iterable],
                      device: Optional[torch.device] = None) -> torch.Tensor:
-        return classes_to_tensor(y, self.classes, device=device)
+        return named_to_tensor(y, self.targets, device=device)
 
-    def _tensor_to_y(self, tensor: torch.Tensor) -> List[str]:
-        return tensor_to_classes(tensor, self.classes)
-
-    def _tensor_to_proba(self, tensor: torch.Tensor) -> pd.DataFrame:
-        return tensor_to_probabilities(tensor, self.classes)
+    def _tensor_to_y(self, tensor: torch.Tensor) -> pd.DataFrame:
+        return tensor_to_dataframe(tensor, self.targets)
