@@ -31,7 +31,7 @@ class DenseClassifier(NeuralNetworkClassifier):
         self.target = str(target)
         self.layers = torch.nn.ModuleList()
         in_features = len(inputs)
-        self.input_normalizer = Normalizer(1, in_features, affine=False)
+        self.input_normalizer = Normalizer(1, in_features)
         for out_features in hidden_layers:
             self.layers.append(torch.nn.Linear(in_features, out_features))
             if normalize:

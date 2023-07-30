@@ -10,7 +10,7 @@ class Normalizer(torch.nn.Module):
     """
 
     def __init__(self, dim: int, num_features: int, eps: float=1e-05,
-                 affine: bool=True, device: Optional[torch.device]=None,
+                 device: Optional[torch.device]=None,
                  dtype: Optional[torch.dtype]=None):
         """
         Parameters
@@ -23,8 +23,6 @@ class Normalizer(torch.nn.Module):
             epsilon factor to avoid division by zero
         momentum : float
             update factor used for the running stats
-        affine: bool
-            if True, apply a linear transformation with bias after normalization
         device : torch.device or None
             device to store the parameters and tensors on
         dtype : torch.dtype
@@ -37,11 +35,6 @@ class Normalizer(torch.nn.Module):
         self.n_observations = 0
         self.running_mean = torch.zeros(num_features, device=device, dtype=dtype)
         self.running_var = torch.ones(num_features, device=device, dtype=dtype)
-        if affine:
-            self.weight = torch.nn.parameter.Parameter(torch.ones(num_features, device=device, dtype=dtype))
-            self.bias = torch.nn.parameter.Parameter(torch.zeros(num_features, device=device, dtype=dtype))
-        else:
-            self.weight, self.bias = (None, None)
 
     def forward(self, X: torch.Tensor, track_running_stats: bool=True) -> torch.Tensor:
         """
@@ -68,10 +61,6 @@ class Normalizer(torch.nn.Module):
                 self.n_observations += n
         shape = [self.num_features if i == self.dim else 1 for i, _ in enumerate(X.shape)]
         X = (X - self.running_mean.reshape(shape)) / (self.running_var.reshape(shape) + self.eps)**0.5
-        if self.weight is not None:
-            X = X * self.weight.reshape(shape)
-        if self.bias is not None:
-            X = X + self.bias.reshape(shape)
         return X
 
     def unscale(self, Y: torch.Tensor) -> torch.Tensor:

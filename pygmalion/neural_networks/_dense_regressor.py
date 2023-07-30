@@ -46,7 +46,7 @@ class DenseRegressor(NeuralNetwork):
         self.target = target if isinstance(target, str) else tuple(target)
         self.layers = torch.nn.ModuleList()
         in_features = len(inputs)
-        self.input_normalizer = Normalizer(1, in_features, affine=False)
+        self.input_normalizer = Normalizer(1, in_features)
         for out_features in hidden_layers:
             self.layers.append(torch.nn.Linear(in_features, out_features))
             if normalize:
@@ -56,7 +56,7 @@ class DenseRegressor(NeuralNetwork):
             in_features = out_features
         out_features = 1 if isinstance(target, str) else len(self.target)
         self.output = torch.nn.Linear(in_features, out_features)
-        self.target_normalizer = Normalizer(1, out_features, affine=False)
+        self.target_normalizer = Normalizer(1, out_features)
 
     def forward(self, X: torch.Tensor):
         X = X.to(self.device)
