@@ -15,7 +15,7 @@ def named_to_tensor(data: Union[pd.DataFrame, dict, Iterable],
         data = {k: v if hasattr(v, "__iter__") else [v] for k, v in zip(names, (data[n] for n in names))}
         data = pd.DataFrame.from_dict(data)
     if isinstance(data, pd.DataFrame):
-        data = data[names].to_numpy()
+        data = data[names].to_numpy(dtype=np.float32)
     data = floats_to_tensor(data, device=device)
     if len(data.shape) == 1:
         data = data.unsqueeze(-1)
@@ -25,7 +25,7 @@ def named_to_tensor(data: Union[pd.DataFrame, dict, Iterable],
 def floats_to_tensor(arr: Iterable, device: Optional[torch.device] = None) -> torch.Tensor:
     """converts an array of numerical values to a tensor of floats"""
     if isinstance(arr, pd.Series):
-        arr = arr.to_numpy()
+        arr = arr.to_numpy(dtype=np.float32)
     t = torch.tensor(arr, dtype=torch.float, device=device,
                      requires_grad=False)
     return t
@@ -40,7 +40,7 @@ def tensor_to_floats(tensor: torch.Tensor) -> np.ndarray:
 def longs_to_tensor(arr: Iterable, device: Optional[torch.device] = None) -> torch.Tensor:
     """converts an array of numerical values to a tensor of longs"""
     if isinstance(arr, pd.Series):
-        arr = arr.to_numpy()
+        arr = arr.to_numpy(dtype=np.float32)
     t = torch.tensor(arr, dtype=torch.long, device=device,
                      requires_grad=False)
     return t
