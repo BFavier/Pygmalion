@@ -18,10 +18,11 @@ class_weights = {c: f**-0.5 for c, f in class_freqs.items()}
 tokenizer = ml.tokenizers.WordsTokenizer(lowercase=True, special_tokens=["UNKNOWN", "PAD"])
 tokenizer.fit(df["text"], max_tokens=10000)
 
+DEVICE = "cuda:0" if torch.cuda.device_count() > 0 else "cpu"
 model = ml.neural_networks.TextSegmenter(classes, tokenizer,
                                          n_stages=3, projection_dim=16,
                                          n_heads=4, dropout=0.2)
-model.to("cpu")
+model.to(DEVICE)
 
 
 class Batchifyer:
@@ -35,16 +36,16 @@ class Batchifyer:
         yield (self.x[index], self.y[index], None, self.cw)
 
 
-df_train, df_val = ml.split(df)
+df_train, df_val = ml.utilities.split(df)
 train_data, val_data = Batchifyer(df_train, 1000), Batchifyer(df_val, 1000)
 train_loss, val_loss, grad, best_step = model.fit(train_data, validation_data=val_data, n_steps=1000, learning_rate=1.0E-3)
-ml.plot_losses(train_loss, val_loss, grad, best_step)
+ml.utilities.plot_losses(train_loss, val_loss, grad, best_step)
 
 y_val = df_val["sentiment"]
 y_pred = model.predict(df_val["text"])
 f, ax = plt.subplots()
-ml.plot_matrix(ml.confusion_matrix(y_val, y_pred), ax=ax, write_values=True,
-               format=".2%", cmap="Greens")
+ml.utilities.plot_matrix(ml.utilities.confusion_matrix(y_val, y_pred), ax=ax, write_values=True,
+                         format=".2%", cmap="Greens")
 ax.set_xlabel("target")
 ax.set_ylabel("predicted")
 plt.show()

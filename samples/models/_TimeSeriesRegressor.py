@@ -1,14 +1,16 @@
+import torch
 from pygmalion.datasets.generators import OrbitalTrajectoryGenerator
 from pygmalion.neural_networks import TimeSeriesRegressor
 from pygmalion.neural_networks.layers.transformers import FourrierKernelAttention
 
+DEVICE = "cuda:0" if torch.cuda.device_count() > 0 else "cpu"
 model = TimeSeriesRegressor(inputs=["x", "y", "u", "v"],
                             targets=["x", "y", "u", "v"],
                             observation_column="obj", time_column="t",
                             n_stages=4, projection_dim=16, n_heads=4,
                             attention_type=FourrierKernelAttention,
                             attention_kwargs={"linear_complexity": False})
-model.to("cuda:0")
+model.to(DEVICE)
 
 
 class Batchifyer:

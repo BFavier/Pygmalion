@@ -13,8 +13,8 @@ from pygmalion.tokenizers._utilities import Tokenizer
 
 class TextSegmenter(NeuralNetworkClassifier):
 
-    def __init__(self, tokenizer: Tokenizer,
-                 classes: Iterable[str],
+    def __init__(self, classes: Iterable[str],
+                 tokenizer: Tokenizer,
                  n_stages: int, projection_dim: int, n_heads: int,
                  activation: str = "relu",
                  dropout: Union[float, None] = None,

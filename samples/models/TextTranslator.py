@@ -1,3 +1,4 @@
+import torch
 import pygmalion as ml
 from pygmalion.tokenizers import AsciiCharTokenizer
 from pygmalion.neural_networks import TextTranslator
@@ -6,7 +7,7 @@ from pygmalion.datasets.generators import RomanNumeralsGenerator
 import IPython
 import matplotlib.pyplot as plt
 
-DEVICE = "cuda:0"
+DEVICE = "cuda:0" if torch.cuda.device_count() > 0 else "cpu"
 tokenizer = AsciiCharTokenizer()
 model = TextTranslator(tokenizer, tokenizer, n_stages=4, projection_dim=16, n_heads=4,
                        positional_encoding_type=LearnedPositionalEncoding,
@@ -27,6 +28,8 @@ class Batchifyer:
 train_data = Batchifyer(model, batch_size=1000)
 
 train_losses, val_losses, grad, best_step = model.fit(train_data, n_steps=3000, learning_rate=1.0E-3)
-ml.plot_losses(train_losses, val_losses, grad, best_step)
+ml.utilities.plot_losses(train_losses, val_losses, grad, best_step)
 plt.show()
+
+print(f"456 = {model.predict('456')}")
 IPython.embed()
