@@ -31,5 +31,6 @@ train_losses, val_losses, grad, best_step = model.fit(train_data, n_steps=3000, 
 ml.utilities.plot_losses(train_losses, val_losses, grad, best_step)
 plt.show()
 
-print(f"456 = {model.predict('456')}")
+for n in torch.randint(0, 1999, size=(10,)):
+    print(f"{n} >>> {model.predict(f'{n}')}")
 IPython.embed()

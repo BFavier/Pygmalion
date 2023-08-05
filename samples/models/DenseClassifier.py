@@ -19,8 +19,7 @@ classes = df[target].unique()
 device = "cuda:0"
 
 # Create and train the model
-hidden_layers = [8, 8, 8]
-model = nn.DenseClassifier(inputs, target, classes, hidden_layers,
+model = nn.DenseClassifier(inputs, target, classes, hidden_layers=[8, 8, 8],
                            activation="elu")
 model.to(device)
 x_train, y_train = model.data_to_tensor(df_train[inputs], df_train[target])

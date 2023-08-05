@@ -41,7 +41,7 @@ class Batchifyer:
         yield (self.x[index], self.y[index], None, self.cw)
 
 
-df_train, df_val = ml.utilities.split(df)
+df_train, df_val, df_test = ml.utilities.split(df, weights=(0.7, 0.2, 0.1))
 train_data, val_data = Batchifyer(df_train, 1000), Batchifyer(df_val, 1000)
 train_loss, val_loss, grad, best_step = model.fit(train_data, validation_data=val_data, n_steps=1000, learning_rate=1.0E-3)
 ml.utilities.plot_losses(train_loss, val_loss, grad, best_step)
@@ -54,5 +54,9 @@ ml.utilities.plot_matrix(ml.utilities.confusion_matrix(y_val, y_pred), ax=ax, wr
 ax.set_xlabel("target")
 ax.set_ylabel("predicted")
 plt.show()
+
+for text in df_test.text.sample(n=10):
+    print(text)
+    print(f">>> {model.predict([text])[0]}")
 
 IPython.embed()
