@@ -8,5 +8,4 @@ def airline_tweets(directory: str):
     dataset, in the given directory
     """
     download(pathlib.Path(directory) / "airline_tweets.csv",
-             "https://drive.google.com/file/d"
-             "/1Lu4iQucxVBncxeyCj_wFKGkq8Wz0-cuL/view?usp=sharing")
+             "https://drive.google.com/file/d/1Lu4iQucxVBncxeyCj_wFKGkq8Wz0-cuL/view?usp=sharing")
