@@ -65,7 +65,7 @@ def embed_categorical(df: pd.DataFrame, dimension: int=4,
     return df
 
 
-def mask_nullable(df: pd.DataFrame, nullable_columns: Optional[Iterable[object]],
+def mask_nullables(df: pd.DataFrame, nullable_columns: Optional[Iterable[object]],
                   inplace: bool=False) -> pd.DataFrame:
     """
     Add an '..._is_nan' boolean column for each nullable column and replace nan with 0. in the column.
