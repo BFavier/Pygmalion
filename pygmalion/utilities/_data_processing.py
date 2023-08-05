@@ -19,10 +19,25 @@ def _string_embedding(string: str, n: int=4) -> Tuple[float]:
 
 def embed_categorical(df: pd.DataFrame, dimension: int=4,
                       columns: Optional[Iterable[object]]=None,
+                      skip_columns: Optional[Iterable[object]]=[],
                       inplace: bool=False) -> pd.DataFrame:
     """
     Converts each categorical columns to 'dimension' additional floating point columns.
     If the list of categorical columns is not supplied, all column that are not floating points are converted.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        the dataframe to transform
+    dimension : int
+        the embedding dimension for categorical variables
+    columns : iterable of objects, or None
+        the list of columns to transform
+        defaults to columns that are not floating point if set to None
+    skip_columns : iterable of objects, or None
+        the column that are in 'skip_columns' are not transformed
+    inplace : bool
+        If False, the operation is done on a copy of the dataframe
 
     Example:
     --------
@@ -41,6 +56,8 @@ def embed_categorical(df: pd.DataFrame, dimension: int=4,
     if columns is None:
         columns = [c for c, d in df.dtypes.items() if not np.issubdtype(d, np.floating)]
     for col in columns:
+        if col in skip_columns:
+            continue
         embeddings = tuple(zip(*(_string_embedding(str(v), n=dimension) for v in df[col])))
         for i, e in enumerate(embeddings, start=1):
             df[f"{col}_{i}"] = e
