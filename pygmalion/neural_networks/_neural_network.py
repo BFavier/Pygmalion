@@ -3,7 +3,8 @@ import copy
 import pathlib
 import math
 import torch
-from typing import Union, Sequence, Optional, Callable, Iterable, List
+from typing import Union, Sequence, Optional, Callable, Iterable
+from itertools import repeat
 from ._conversions import floats_to_tensor
 from .layers import Dropout
 from pygmalion._model import Model
@@ -54,12 +55,12 @@ class NeuralNetwork(torch.nn.Module, Model):
         else:
             torch.save(self, file_path)
 
-    def fit(self, training_data: Iterable,
-            validation_data: Optional[Iterable] = None,
+    def fit(self, training_data: Union[Iterable, tuple],
+            validation_data: Optional[Union[Iterable, tuple]] = None,
             optimizer: Optional[torch.optim.Optimizer] = None,
             n_steps: int = 1000,
             learning_rate: Union[float, Callable[[int], float]] = 1.0E-3,
-            patience: Optional[int] = None,
+            patience: int = math.inf,
             keep_best: bool = True,
             L1: Optional[float] = None,
             L2: Optional[float] = None,
@@ -73,12 +74,11 @@ class NeuralNetwork(torch.nn.Module, Model):
 
         Parameters
         ----------
-        training_data : Iterable of (x, y) or (x, y, weights) data
-            The data used to fit the model on.
-            A tuple of (x, y[, weights]) or a callable that yields them.
-            The type of each element depends on the model kind.
-        validation_data : None or Iterable of (x, y) or (x, y, weights) data
-            The data used to test for early stoping.
+        training_data : tuple or Iterable of tuples
+            The *args passed to the model's loss.
+            If an iterable instead, the number of batches yielded makes the number of gradient accumulation steps.
+        validation_data : None, or same as training data
+            The data used for early stoping.
             Similar to training_data or None
         optimizer : torch.optim.Optimizer or None
             optimizer to use for training
@@ -109,13 +109,17 @@ class NeuralNetwork(torch.nn.Module, Model):
         backup_frequency : int
             number of steps before each on-disk backup
         verbose : bool
-            If True the loss are displayed at each epoch
+            If True the loss are displayed at each optimization step
         
         Returns
         -------
         tuple :
             (train_losses, val_losses, grad_norms, best_step)
         """
+        if isinstance(training_data, tuple):
+            training_data = repeat(training_data)
+        if isinstance(validation_data, tuple):
+            validation_data = repeat(validation_data)
         if backup_path is not None:
             backup_path = pathlib.Path(backup_path)
             if not backup_path.is_dir():
@@ -186,7 +190,9 @@ class NeuralNetwork(torch.nn.Module, Model):
                     if keep_best:
                         best_state = copy.deepcopy(self.state_dict())
                 # early stoping
-                if patience is not None and (step - best_step) > patience:
+                if (step - best_step) > patience:
+                    if verbose:
+                        print(f"Early stoping because preformed {patience:,} steps without improvement".replace(",", " "))
                     break
                 # message printing
                 if verbose:
@@ -232,7 +238,7 @@ class NeuralNetwork(torch.nn.Module, Model):
             y_pred = self(x)
         return self._tensor_to_y(y_pred)
     
-    def loss(x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
+    def loss(*args) -> torch.Tensor:
         raise NotImplementedError()
     
     @property
