@@ -1,1 +1,1 @@
-from .pca import PCA
+from ._pca import PCA

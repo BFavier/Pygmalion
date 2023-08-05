@@ -65,6 +65,33 @@ def embed_categorical(df: pd.DataFrame, dimension: int=4,
     return df
 
 
+def mask_nullable(df: pd.DataFrame, nullable_columns: Optional[Iterable[object]],
+                  inplace: bool=False) -> pd.DataFrame:
+    """
+    Add an '..._is_nan' boolean column for each nullable column and replace nan with 0. in the column.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        the dataframe to transform
+    nullable_columns : iterable of objects, or None
+        the list of columns to transform
+    inplace : bool
+        If False, the operation is done on a copy of the dataframe
+
+    Example:
+    --------
+    >>> df = pd.DataFrame([[1.0, 1.5], [2.0, float("nan")], [3.0, 3.5]], columns=("A", "B"))
+    >>> mask_nullable(df, ["B"])
+    >>> mask_nullable(df, ["A", "B"])
+    """
+    if not inplace:
+        df = df.copy()
+    for col in nullable_columns:
+        df[f"{col}_is_na"] = df[col].isna()
+        df[col] = df[col].fillna(0.)
+    return df
+
 if __name__ == "__main__":
     import IPython
     IPython.embed()
