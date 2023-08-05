@@ -195,7 +195,7 @@ class NeuralNetwork(torch.nn.Module, Model):
                     break
                 # message printing
                 if verbose:
-                    time = datetime.now().strftime("[%Y/%m/%d-%H:%M:%S]")
+                    time = datetime.now().strftime("[%Y-%m-%d %H:%M:%S]")
                     if val_loss is not None:
                         print(f"{time} Step {step}: train loss = {train_loss:.3g}, val loss = {val_loss:.3g}, grad = {grad_norms[-1]:.3e}")
                     else:
