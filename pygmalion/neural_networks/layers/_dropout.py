@@ -1,34 +1,73 @@
 import torch
 import torch.nn.functional as F
-from typing import Union
+from typing import Optional
 
 
 class Dropout(torch.nn.Module):
-    """
-    In training mode, randomly zero out each channel with probability 'p'
-    (over the whole feature map if in 1d/2d)
-    This is usefull to enforce redundancy in the channels of the neural
-    network, thus increasing it's capacity to extrapolate to unseen data
-    """
 
-    @classmethod
-    def from_dump(cls, dump: dict) -> "Dropout":
-        assert dump["type"] == cls.__name__
-        obj = cls.__new__(cls)
-        torch.nn.Module.__init__(obj)
-        obj.p = dump["p"]
-        return obj
-
-    @property
-    def dump(self):
-        return {"type": type(self).__name__,
-                "p": self.p}
-
-    def __init__(self, p: Union[None, float]):
+    def __init__(self, p: Optional[float]):
         super().__init__()
         self.p = p
-
+    
     def forward(self, X: torch.Tensor) -> torch.Tensor:
-        if self.p is None:
+        """
+        Parameters
+        ----------
+        X : torch.Tensor
+            tensor of shape (*)
+        
+        Returns
+        -------
+        torch.Tensor :
+            tensor of shape (*)
+        """
+        if self.p is not None:
+            return F.dropout(X, self.p, self.training)
+        else:
             return X
-        return F.dropout2d(X, self.p, training=self.training)
+
+
+class Dropout1d(Dropout):
+
+    def __init__(self, p: Optional[float]):
+        super().__init__(p)
+    
+    def forward(self, X: torch.Tensor) -> torch.Tensor:
+        """
+        Parameters
+        ----------
+        X : torch.Tensor
+            tensor of shape (N, C, L)
+        
+        Returns
+        -------
+        torch.Tensor :
+            tensor of shape (N, C, L)
+        """
+        if self.p is not None:
+            return F.dropout1d(X, self.p, self.training)
+        else:
+            return X
+
+
+class Dropout2d(Dropout):
+
+    def __init__(self, p: Optional[float]):
+        super().__init__(p)
+    
+    def forward(self, X: torch.Tensor) -> torch.Tensor:
+        """
+        Parameters
+        ----------
+        X : torch.Tensor
+            tensor of shape (N, C, H, W)
+        
+        Returns
+        -------
+        torch.Tensor :
+            tensor of shape (N, C, H, W)
+        """
+        if self.p is not None:
+            return F.dropout2d(X, self.p, self.training)
+        else:
+            return X

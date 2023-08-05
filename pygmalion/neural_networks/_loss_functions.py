@@ -4,8 +4,7 @@ from typing import Union, Tuple
 
 
 def MSE(y_pred: torch.Tensor, y_target: torch.Tensor,
-        weights: Union[None, torch.Tensor] = None,
-        target_norm: Union[None, torch.nn.Module] = None) -> torch.Tensor:
+        weights: Union[None, torch.Tensor] = None) -> torch.Tensor:
     """
     Returns the Root Mean Squared Error of the model.
     Each observation can optionnaly be weighted
@@ -22,21 +21,18 @@ def MSE(y_pred: torch.Tensor, y_target: torch.Tensor,
         If None all observations are equally weighted
         Otherwise the squared error of each observation
         is multiplied by the given factor
-    target_norm : torch.nn.Module
-        A BatchNormNd module applied to the y_target
-        before calculating the loss
 
     Returns
     -------
     torch.Tensor :
         the scalar value of the loss
     """
-    if target_norm is not None:
-        y_target = target_norm(y_target)
+    y_target = y_target.to(y_pred.device)
     if weights is None:
         return F.mse_loss(y_pred, y_target)
     else:
-        return torch.mean(weights * (y_pred - y_target)**2)
+        weights = weights.to(y_pred.device)
+        return torch.sum(weights * (y_pred - y_target)**2) / weights.sum()
 
 
 def RMSE(*args, **kwargs):
@@ -58,7 +54,8 @@ def RMSE(*args, **kwargs):
 
 def cross_entropy(y_pred: torch.Tensor, y_target: torch.Tensor,
                   weights: Union[None, torch.Tensor] = None,
-                  class_weights: Union[None, torch.Tensor] = None
+                  class_weights: Union[None, torch.Tensor] = None,
+                  label_smoothing: float = 0.
                   ) -> torch.Tensor:
     """
     Returns the cross entropy error of the model.
@@ -83,12 +80,15 @@ def cross_entropy(y_pred: torch.Tensor, y_target: torch.Tensor,
     torch.Tensor :
         the scalar value of the loss
     """
+    y_target = y_target.to(y_pred.device)
+    if class_weights is not None:
+        class_weights = class_weights.to(y_pred.device)
     if weights is None:
-        return F.cross_entropy(y_pred, y_target, weight=class_weights)
+        return F.cross_entropy(y_pred, y_target, weight=class_weights, label_smoothing=label_smoothing)
     else:
-        return (F.nll_loss(F.log_softmax(y_pred, dim=1), y_target,
-                           weight=class_weights, reduction="none")
-                * weights) / (weights.mean() + 1.0E-9)
+        weights = weights.to(y_pred.device)
+        return torch.sum(F.cross_entropy(y_pred, y_target, weight=class_weights, label_smoothing=label_smoothing, reduction="none")
+                         * weights) / weights.sum()
 
 
 def soft_dice_loss(y_pred: torch.Tensor, y_target: torch.Tensor,
@@ -101,97 +101,35 @@ def soft_dice_loss(y_pred: torch.Tensor, y_target: torch.Tensor,
     Parameters
     ----------
     y_pred : torch.Tensor
-        A Tensor of float of shape [N_observations, N_classes, ...]
-        The probability of each class for eahc observation
+        A Tensor of float of shape (n, c, *)
+        The probability (pre-softmax) of each class for each observation
     y_target : torch.Tensor
-        A Tensor of long of shape [N_observations, 1, ...]
+        A Tensor of long of shape (n, *)
         The index of the class to be predicted
     weights : None or torch.Tensor
         The individual observation weights (ignored if None)
+        a tensor of floats shape (n,)
     class_weights : None or torch.Tensor
-        If None, all classes are equally weighted
         The class-wise weights (ignored if None)
+        a tensor of shape (c)
 
     Returns
     -------
     torch.Tensor :
         the scalar value of the loss
     """
-    assert (weights is None) and (class_weights is None), "Not implemented yet"
-    n_classes = y_pred.shape[1]
-    pred = F.softmax(y_pred, dim=1)
+    n, c = y_pred.shape[:2]
+    y_target = y_target.to(y_pred.device)
+    y_pred = F.softmax(y_pred, dim=1)
     eps = 1.0E-5
-    target = F.one_hot(y_target, num_classes=n_classes).permute(0, 3, 1, 2)
-    intersect = torch.sum(pred * target, dim=[2, 3])
-    cardinality = torch.sum(pred + target, dim=[2, 3])
+    target = F.one_hot(y_target, num_classes=c).moveaxis(-1, 1)
+    intersect = y_pred * target
+    cardinality = (y_pred + target)
     dice_coeff = (2.*intersect + eps) / (cardinality + eps)
+    dice_coeff = dice_coeff.reshape(n, c, -1).mean(dim=-1)
+    if weights is not None:
+        dice_coeff = dice_coeff * weights.unsqueeze(1)
+    if class_weights is not None:
+        dice_coeff = dice_coeff * class_weights.unsqueeze(0)
     loss = 1. - torch.mean(dice_coeff)
     return loss
-
-
-def object_detector_loss(y_pred: torch.Tensor, y_target: Tuple[torch.Tensor],
-                         weights: Union[None, torch.Tensor] = None,
-                         class_weights: Union[None, torch.Tensor] = None,
-                         target_norm: Union[None, torch.nn.Module] = None
-                         ) -> torch.Tensor:
-    """
-    Parameters
-    ----------
-    y_pred : tuple of torch.Tensor
-        The predictions of the model
-        A tuple of (boxe_size, object_proba, class_proba) Where
-        * 'boxe_size' is a tensor of [x, y, width, height] of the bboxe
-        * 'object_proba' is the probability object presence in the bboxe
-        * 'class_proba' is the probability of the object beeing of each class
-        Each tensor has the shape (N, B, C, H, W) with
-        * N number of observations
-        * B number of bounding boxes predicted per grid cell
-        * C number of channels (specific for each tensor)
-        * H the height of the cell grid
-        * W the width of the cell grid
-    y_target : torch.Tensor
-        The target bounding boxes to predict
-        Similar to y_pred except that each tensor is of shape (N, C, H, W)
-
-    Returns
-    -------
-    torch.Tensor :
-        a scalar tensor representing the loss function
-    """
-    coords_pred, size_pred, object_pred, class_pred = y_pred
-    coords_target, size_target, object_mask, class_target = y_target
-    _, n, _, _ = class_pred.shape
-    # Calculating the loss part linked to bounding boxe position/size
-    index = object_mask.unsqueeze(0).expand(2, -1, -1, -1)
-    coords_pred = torch.transpose(coords_pred, 0, 1)[index].view(2, -1)
-    coords_target = torch.transpose(coords_target, 0, 1)[index].view(2, -1)
-    coords_loss = (coords_pred - coords_target)**2
-    size_pred = torch.transpose(size_pred, 0, 1)[index].view(2, -1)
-    size_target = torch.transpose(size_target, 0, 1)[index].view(2, -1)
-    if target_norm is not None:
-        size_target = target_norm(size_target.unsqueeze(0)).squeeze(0)
-    size_loss = (size_pred - size_target)**2
-    if weights is not None:
-        coords_loss = coords_loss * weights[object_mask]
-        size_loss = size_loss * weights[object_mask]
-    coords_loss = coords_loss.mean()
-    size_loss = size_loss.mean()
-    # Calculate the loss part linked to object presence
-    object_loss = -torch.log(object_pred[object_mask] + 1.0E-5)
-    non_object_loss = -torch.log(1 - object_pred[~object_mask] + 1.0E-5)
-    if weights is not None:
-        object_loss = object_loss * weights[object_mask]
-        non_object_loss = non_object_loss * weights[~object_mask]
-    object_loss = object_loss.mean()
-    non_object_loss = non_object_loss.mean()
-    # Calculate the loss part linked to detected class
-    index = object_mask.unsqueeze(3).expand(-1, -1, -1, n)
-    class_pred = class_pred.permute(0, 2, 3, 1)[index].view(-1, n)
-    class_target = class_target[object_mask].view(-1)
-    class_loss = F.nll_loss(F.log_softmax(class_pred, dim=1), class_target,
-                            weight=class_weights, reduction="none")
-    if weights is not None:
-        class_loss = class_loss * weights[object_mask]
-    class_loss = class_loss.mean()
-    # Returning the final loss
-    return coords_loss + size_loss + object_loss + non_object_loss + class_loss

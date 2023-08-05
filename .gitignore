@@ -1,4 +1,5 @@
 /.vscode/*
 /samples/data/*
 /dist/*
+/pygmalion.egg-info/*
 *.pyc

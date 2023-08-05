@@ -1,102 +1,93 @@
 import torch
 import pandas as pd
 import numpy as np
-from typing import List, Union, Iterable
-from .layers import Dense0d, BatchNorm0d, Linear
-from ._conversions import dataframe_to_tensor, \
-                         floats_to_tensor, tensor_to_floats
+from typing import Union, Iterable, Optional
+from ._conversions import tensor_to_floats
+from ._conversions import named_to_tensor, tensor_to_dataframe
 from ._neural_network import NeuralNetwork
-from ._loss_functions import RMSE
-from pygmalion.utilities._decorators import document
-
-
-class DenseRegressorModule(torch.nn.Module):
-
-    @classmethod
-    def from_dump(cls, dump):
-        assert cls.__name__ == dump["type"]
-        obj = cls.__new__(cls)
-        torch.nn.Module.__init__(obj)
-        obj.inputs = dump["inputs"]
-        obj.input_norm = BatchNorm0d.from_dump(dump["input norm"])
-        obj.dense = Dense0d.from_dump(dump["dense"])
-        obj.output = Linear.from_dump(dump["output"])
-        obj.target_norm = BatchNorm0d.from_dump(dump["target norm"])
-        return obj
-
-    def __init__(self, inputs: List[str],
-                 hidden_layers: List[dict],
-                 activation: str = "relu", stacked: bool = False,
-                 dropout: Union[float, None] = None):
-        """
-        Parameters
-        ----------
-        inputs : list of str
-            The name of the dataframe columns used as inputs
-        hidden_layers : list of dict
-            The kwargs of all 'Activated0d' layers
-        activation : str
-            default 'activation' parameter for 'Activated0d' layers
-        stacked : bool
-            default 'stacked' parameter for 'Activated0d' layers
-        dropout : None or float
-            default 'dropout' parameter for 'Activated0d' layers
-        """
-        super().__init__()
-        self.inputs = list(inputs)
-        in_features = len(inputs)
-        self.input_norm = BatchNorm0d(in_features)
-        self.dense = Dense0d(in_features,
-                             layers=hidden_layers,
-                             activation=activation,
-                             stacked=stacked,
-                             dropout=dropout)
-        in_features = self.dense.out_features(in_features)
-        self.output = Linear(in_features, 1)
-        self.target_norm = BatchNorm0d(1)
-
-    def forward(self, x):
-        x = self.input_norm(x)
-        x = self.dense(x)
-        return self.output(x)
-
-    def loss(self, y_pred: torch.Tensor, y_target: torch.Tensor,
-             weights: Union[None, torch.Tensor] = None):
-        return RMSE(y_pred, y_target, weights,
-                    target_norm=self.target_norm)
-
-    @property
-    def dump(self):
-        return {"type": type(self).__name__,
-                "inputs": self.inputs,
-                "input norm": self.input_norm.dump,
-                "dense": self.dense.dump,
-                "output": self.output.dump,
-                "target norm": self.target_norm.dump}
+from ._loss_functions import MSE
+from .layers import Activation, Normalizer, FeaturesNorm, Dropout
 
 
 class DenseRegressor(NeuralNetwork):
+    """
+    DenseRegressor is an implementation of a fully connected NeuralNetwork
+    for tabular regression.
 
-    ModuleType = DenseRegressorModule
+    The data type of input 'x' and target 'y' are both a pd.DataFrame, 
+    or a dictionary, or a np.ndarray of shape (n_observations, n_classes)
 
-    @document(ModuleType.__init__, NeuralNetwork.__init__)
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+    The prediction output is a np.ndarray of shape (n_observations,)
+    if there is a single target, and a pd.DataFrame if there are several
+    """
 
-    def _data_to_tensor(self, X: Union[pd.DataFrame, Iterable],
-                        Y: Union[None, np.ndarray],
-                        weights: Union[None, List[float]] = None,
-                        device: torch.device = torch.device("cpu")) -> tuple:
-        if isinstance(X, pd.DataFrame):
-            x = dataframe_to_tensor(X, self.module.inputs, device)
-        else:
-            x = floats_to_tensor(X, device)
-        y = None if Y is None else floats_to_tensor(Y, device).view(-1, 1)
-        if weights is None:
-            w = None
-        else:
-            w = floats_to_tensor(weights, device).view(-1, 1)
-        return x, y, w
+    def __init__(self, inputs: Iterable[str],
+                 target: Union[str, Iterable[str]],
+                 hidden_layers: Iterable[int],
+                 activation: str = "relu",
+                 normalize: bool = True,
+                 dropout: Optional[float] = None):
+        """
+        Parameters
+        ----------
+        inputs : Iterable of str
+            the column names of the input variables in a dataframe
+        target : str or Iterable of str
+            the column name(s) of the variable(s) to predict
+        activation : str or Callable or torch.nn.Module
+            the activation function
+        normalize : bool
+            whether or not to add normalization layers
+        dropout : float or None
+            the dropout after each hidden layer if provided
+        """
+        super().__init__()
+        self.inputs = tuple(inputs)
+        self.target = target if isinstance(target, str) else tuple(target)
+        self.layers = torch.nn.ModuleList()
+        in_features = len(inputs)
+        self.input_normalizer = Normalizer(1, in_features)
+        for out_features in hidden_layers:
+            self.layers.append(torch.nn.Linear(in_features, out_features))
+            if normalize:
+                self.layers.append(FeaturesNorm(1, out_features))
+            self.layers.append(Activation(activation))
+            self.layers.append(Dropout(dropout))
+            in_features = out_features
+        out_features = 1 if isinstance(target, str) else len(self.target)
+        self.output = torch.nn.Linear(in_features, out_features)
+        self.target_normalizer = Normalizer(1, out_features)
+
+    def forward(self, X: torch.Tensor):
+        X = X.to(self.device)
+        X = self.input_normalizer(X)
+        for layer in self.layers:
+            X = layer(X)
+        return self.output(X)
+
+    def loss(self, x: torch.Tensor, y_target: torch.Tensor,
+             weights: Optional[torch.Tensor] = None):
+        y_pred = self(x)
+        y_target = self.target_normalizer(y_target)
+        return MSE(y_pred, y_target, weights)
+
+    @property
+    def device(self) -> torch.device:
+        return self.output.weight.device
+
+    def _x_to_tensor(self, x: Union[pd.DataFrame, dict, Iterable],
+                     device: Optional[torch.device] = None):
+        return named_to_tensor(x, list(self.inputs), device=device)
+
+    def _y_to_tensor(self, y: Union[pd.DataFrame, dict, Iterable],
+                     device: Optional[torch.device] = None) -> torch.Tensor:
+        target = [self.target] if isinstance(self.target, str) else list(self.target)
+        return named_to_tensor(y, target, device=device)
 
     def _tensor_to_y(self, tensor: torch.Tensor) -> np.ndarray:
-        return tensor_to_floats(self.module.target_norm.undo(tensor).view(-1))
+        if self.target_normalizer is not None:
+            tensor = self.target_normalizer.unscale(tensor)
+        if isinstance(self.target, str):
+            return tensor_to_floats(tensor).reshape(-1)
+        else:
+            return tensor_to_dataframe(tensor, self.target)

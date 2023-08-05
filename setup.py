@@ -10,6 +10,10 @@ with open("pygmalion/_info.py", "r") as fh:
 with open("README.md", "r") as fh:
     long_description = fh.read()
 
+
+with open("requirements.txt", "r") as fh:
+    requirements = fh.read().split()
+
 setuptools.setup(
     name="pygmalion",
     version=infos["__version__"],
@@ -18,15 +22,7 @@ setuptools.setup(
     description="A machine learning package",
     long_description=long_description,
     long_description_content_type="text/markdown",
-    install_requires=[
-        "pandas>=1.0",
-        "numpy>=1.18",
-        "torch>=1.6",
-        "torchvision",
-        "requests>=2.25",
-        "matplotlib>=3.2",
-        "h5py>=3.1"
-    ],
+    install_requires=requirements,
     python_requires='>=3.8',
     url="https://github.com/BFavier/Pygmalion",
     packages=setuptools.find_packages(),

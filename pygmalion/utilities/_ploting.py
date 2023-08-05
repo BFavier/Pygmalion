@@ -3,12 +3,38 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
-from typing import Iterable, Union, Optional
+from typing import Iterable, Union, Optional, List
+
+
+def plot_losses(train_losses: List[float], val_losses: Optional[List[float]] = None,
+                grad: Optional[List[float]] = None, best_step: Optional[int] = None,
+                ax: Optional[matplotlib.axes.Axes] = None):
+    """
+    plot the losses
+    """
+    drawn = []
+    if ax is None:
+        f, ax = plt.subplots()
+    drawn.append(ax.scatter(range(len(train_losses)), train_losses, label="training loss"))
+    if val_losses is not None:
+        drawn.append(ax.scatter(range(len(val_losses)), val_losses, label="validation loss"))
+    ax.set_xlabel("steps")
+    ax.set_ylabel("loss")
+    ax.set_yscale("log")
+    if grad is not None:
+        ax2 = ax.twinx()
+        drawn.append(ax2.scatter(range(len(grad)), grad, marker=".", color="C2", label="gradient"))
+        ax2.set_yscale("log")
+        ax.set_zorder(ax2.get_zorder()+1)
+        ax.set_frame_on(False)
+    if best_step is not None:
+        drawn.append(ax.axvline(best_step, 0, 1, color="k", label="best step"))
+    ax.legend(drawn, [h.get_label() for h in drawn])
 
 
 def plot_fitting(x: Iterable[float], y: Iterable[float],
-                 ax: Union[None, matplotlib.axes.Axes] = None,
-                 label: str = "_",
+                 ax: Optional[matplotlib.axes.Axes] = None,
+                 label: Optional[str] = None,
                  **kwargs):
     """
     Plots the correlation between prediction and target of a regressor
@@ -51,37 +77,47 @@ def plot_bounding_boxes(bboxes: dict, ax: matplotlib.axes.Axes,
 
     Parameters
     ----------
+
     bounding_boxes : dict
         A dict containing the following keys:
-        * x1, y1, x2, y2 : list of int
+        * x, y, w, h : list of int or float
             The coordinates in pixel of each bboxe corner
         * class : list of str
             The name of the class predicted for eahc bboxe
-        * [confidence : list of float]
+        * [bboxe confidence : list of float]
             The optional confidence of the bounding boxe
+        * [class confidence : list of float]
+            The optional confidence of detected classes
+
     ax : matplotlib.axes.Axes
         The matplotlib axes to draw on
+
     class_colors : dict
         A dictionary of {class: color} for the color of the boxes
         Can be any color format supported by matplotlib
+
     default_color : str or list
         the default color for classes that are not present in class_colors
+        Can be either a string ("#ff0000", "r", ...)
+        or a RGB/RGBA list ([255, 0, 0], [255, 0, 0, 255], ...)
     """
-    coords = zip(bboxes["x1"], bboxes["y1"], bboxes["x2"], bboxes["y2"])
-    for i, (x1, y1, x2, y2) in enumerate(coords):
+    coords = zip(bboxes["x"], bboxes["y"], bboxes["w"], bboxes["h"])
+    for i, (x, y, w, h) in enumerate(coords):
+        x1, x2 = x-w/2, x+w/2
+        y1, y2 = y-h/2, y+h/2
         boxe_class = bboxes["class"][i]
         boxe_color = class_colors.get(boxe_class, default_color)
-        xinf, yinf = min(x1, x2), min(y1, y2)
-        w, h = abs(x2-x1), abs(y2-y1)
-        rect = patches.Rectangle((xinf, yinf), w, h,
+        rect = patches.Rectangle((x1, y1), w, h,
                                  linewidth=1, edgecolor=boxe_color,
                                  facecolor='none')
         if label_class:
             s = boxe_class
-            confidence = bboxes.get("confidence", None)
-            if confidence is not None:
-                s += f": {confidence[i]*100:.1f}%"
-            ax.text(xinf, yinf-1, s, color=boxe_color)
+            bboxe_confidence = bboxes.get("bboxe confidence", None)
+            class_confidence = bboxes.get("class confidence", None)
+            if bboxe_confidence is not None and class_confidence is not None:
+                confidence = class_confidence[i] * bboxe_confidence[i]
+                s += f": {confidence:.1%}"
+            ax.text(x1, y1, s, color=boxe_color)
         ax.add_patch(rect)
     ax.set_xticks([])
     ax.set_yticks([])

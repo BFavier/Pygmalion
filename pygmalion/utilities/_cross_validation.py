@@ -1,26 +1,20 @@
 import numpy as np
 import pandas as pd
-from typing import Any, Tuple, Iterable, Union
+import torch
+from typing import Any, Tuple, Iterable, Sequence
 
 
-def split(*data: Tuple[Iterable], frac: Union[float, Tuple[float]] = 0.2,
+def split(*data: Tuple[Sequence], weights: Tuple[float] = (0.8, 0.2),
           shuffle: bool = True) -> tuple:
     """
     Splits the input data
-
-    Example
-    -------
-    >>> # split the data into 80% training data and 20% validation data
-    >>> (x_train, y_train), (x_val, y_val) = ml.split(x, y, frac=0.2)
-    >>> # split the data into 70% train, 20% val, and 10% test data in one go
-    >>> train, val, test = ml.split(x, y, weights, frac=(0.2, 0.1))
 
     Parameters
     ----------
     data : tuple
         Tuple of iterables
-    frac : float or tuple of float
-        The fraction of testing data
+    weights : tuple of float
+        The fraction of testing data (internaly normalized to sum up to 1)
     shuffle : bool
         If True, the data is shuffled before splitting
 
@@ -31,16 +25,17 @@ def split(*data: Tuple[Iterable], frac: Union[float, Tuple[float]] = 0.2,
     """
     L = len(data[0])
     indexes = np.random.permutation(L) if shuffle else np.arange(L)
-    if not hasattr(frac, "__iter__"):
-        frac = (frac,)
-    if any(f <= 0. for f in frac):
-        raise ValueError("The fractions must be superior to 0.")
-    if 1 - sum(frac) >= 1.:
-        raise ValueError("The remaining fraction must be superior to 0.")
-    frac = (1. - sum(frac),) + tuple(frac)
+    if any(f <= 0. for f in weights):
+        raise ValueError("The weights must be superior to 0.")
+    total = sum(weights)
+    frac = tuple(w/total for w in weights)
     bounds = [int(round(sum(frac[:i])*L)) for i in range(len(frac)+1)]
-    splits = [tuple(_index(d, indexes[lower:upper]) for d in data)
-              for lower, upper in zip(bounds[:-1], bounds[1:])]
+    if len(data) > 1:
+        splits = [tuple(_index(d, indexes[lower:upper]) for d in data)
+                  for lower, upper in zip(bounds[:-1], bounds[1:])]
+    else:
+        splits = [_index(data[0], indexes[lower:upper])
+                  for lower, upper in zip(bounds[:-1], bounds[1:])]
     return splits
 
 
@@ -81,7 +76,7 @@ def _index(data: Any, at: np.ndarray):
         return None
     elif isinstance(data, pd.DataFrame) or isinstance(data, pd.Series):
         return data.iloc[at]
-    elif isinstance(data, np.ndarray):
+    elif isinstance(data, np.ndarray) or isinstance(data, torch.Tensor):
         return data[at]
     elif isinstance(data, Iterable):
         return [data[i] for i in at]

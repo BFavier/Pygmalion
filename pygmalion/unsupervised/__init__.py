@@ -1,2 +1,1 @@
-from . import tokenizers
-from .pca import PCA
+from ._pca import PCA

@@ -1,32 +1,39 @@
 import torch
 import torch.nn.functional as F
+from typing import Union, Callable
+from types import LambdaType
 
 
 class Activation(torch.nn.Module):
+    """
+    creates a wrapper torch.nn.Module around an activation function
+    provided by the user
 
-    @classmethod
-    def from_dump(cls, dump: dict) -> 'Activation':
-        assert dump["type"] == cls.__name__
-        obj = cls.__new__(cls)
-        torch.nn.Module.__init__(obj)
-        obj.activation = dump["activation"]
-        return obj
+    Example
+    -------
+    >>> Activation("relu")
 
-    def __init__(self, activation: str):
-        torch.nn.Module.__init__(self)
-        self.activation = activation
+    """
+
+    def __init__(self, activation: Union[str, Callable]):
+        super().__init__()
+        assert isinstance(activation, str) or callable(activation)
+        assert not isinstance(activation, LambdaType), "Lambda function cannot be pickled and saved on disk"
+        self.function = self._as_callable(activation)
+
+    def __repr__(self):
+        return f"Activation({self.function.__name__})"
 
     def forward(self, X):
         return self.function(X)
 
-    @property
-    def function(self):
-        if hasattr(torch, self.activation):
-            return getattr(torch, self.activation)
+    def _as_callable(self, activation: Union[str, Callable]):
+        if isinstance(activation, str):
+            if hasattr(torch, activation):
+                return getattr(torch, activation)
+            elif hasattr(F, activation):
+                return getattr(F, activation)
+            else:
+                ValueError(f"Unknown pytorch function '{activation}'")
         else:
-            return getattr(F, self.activation)
-
-    @property
-    def dump(self):
-        return {"type": type(self).__name__,
-                "activation": self.activation}
+            return activation
