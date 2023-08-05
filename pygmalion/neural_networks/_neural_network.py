@@ -4,7 +4,6 @@ import pathlib
 import math
 import torch
 from typing import Union, Sequence, Optional, Callable, Iterable
-from itertools import repeat
 from ._conversions import floats_to_tensor
 from .layers import Dropout
 from pygmalion._model import Model
@@ -117,9 +116,9 @@ class NeuralNetwork(torch.nn.Module, Model):
             (train_losses, val_losses, grad_norms, best_step)
         """
         if isinstance(training_data, tuple):
-            training_data = repeat(training_data)
+            training_data = [training_data]
         if isinstance(validation_data, tuple):
-            validation_data = repeat(validation_data)
+            validation_data = [validation_data]
         if backup_path is not None:
             backup_path = pathlib.Path(backup_path)
             if not backup_path.is_dir():
