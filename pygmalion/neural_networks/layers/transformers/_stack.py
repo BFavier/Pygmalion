@@ -14,6 +14,7 @@ class TransformerEncoder(torch.nn.Module):
                  dropout: Optional[float] = None, activation: str = "relu",
                  gradient_checkpointing: bool = True,
                  attention_type: ATTENTION_TYPE = ScaledDotProductAttention,
+                 mask_future=False,
                  **kwargs):
         super().__init__()
         self.stages: Sequence[TransformerEncoderStage] = torch.nn.ModuleList()
@@ -21,7 +22,7 @@ class TransformerEncoder(torch.nn.Module):
         for stage in range(n_stages):
             self.stages.append(TransformerEncoderStage(projection_dim, n_heads,
                                                        dropout=dropout, activation=activation,
-                                                       attention_type=attention_type, **kwargs))
+                                                       attention_type=attention_type, mask_future=mask_future, **kwargs))
 
     def forward(self, X: torch.Tensor, padding_mask: Optional[torch.Tensor] = None, attention_kwargs: dict = {}):
         """
