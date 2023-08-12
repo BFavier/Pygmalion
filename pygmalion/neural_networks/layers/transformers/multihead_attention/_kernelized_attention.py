@@ -170,7 +170,7 @@ class KernelizedAttention(torch.nn.Module):
             v_scaling = torch.ones(N, H, Lk, 1)
             if key_mask is not None:
                 v_scaling = torch.masked_fill(v_scaling, key_mask.reshape(N, 1, Lk, 1), 0.)
-            scale = KernelizedAttention._kernelized_attention_linear(
+            scale = KernelizedAttention._attention_linear(
                 kernel, q, k, v_scaling, mask_future, key_mask, RPE, scaled=False)
             attention = attention / scale
         return attention

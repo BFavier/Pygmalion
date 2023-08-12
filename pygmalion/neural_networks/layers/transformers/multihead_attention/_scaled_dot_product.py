@@ -137,15 +137,14 @@ class ScaledDotProductAttention(torch.nn.Module):
         """
         N, H, Lq, d = q.shape
         N, H, Lk, d = k.shape
-        scaling = Lk**0.5 if padding_mask is None else (~padding_mask).float().sum(dim=-1).reshape(N, 1, 1, 1)**0.5
-        score = torch.einsum("nhqd, nhkd -> nhqk", q, k) / scaling
+        score = torch.einsum("nhqd, nhkd -> nhqk", q, k) / d**0.5
         if RPE is not None:
             r = RPE.weight.shape[0] // 2
             P = torch.clip(r + torch.arange(Lk, device=score.device).reshape(1, Lk)
                            - torch.arange(Lq, device=score.device).reshape(Lq, 1)
                            - future_offset, 0, 2*r)
             P = RPE(P).reshape(Lq, Lk, H, d)
-            score = score + torch.einsum("qkhd, nhkd -> nhqk", P, k) / scaling
+            score = score + torch.einsum("qkhd, nhkd -> nhqk", P, k) / d**0.5
         if mask_future:
             score = score.masked_fill(_mask_chronological(Lq, Lk, score.device, future_offset).reshape(1, 1, Lq, Lk), -float("inf"))
         if padding_mask is not None:

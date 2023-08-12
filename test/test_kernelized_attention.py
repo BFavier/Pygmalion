@@ -1,4 +1,4 @@
-from pygmalion.neural_networks.layers.transformers._attention import KernelizedAttention
+from pygmalion.neural_networks.layers.transformers.multihead_attention import KernelizedAttention
 import torch
 import torch.nn.functional as F
 # import pandas as pd
@@ -11,23 +11,23 @@ def kernel(x):
 
 
 def naive_m(q, k, v, RPE, padding_mask=None, scaled=True):
-    return KernelizedAttention._kernelized_attention_naive(kernel, q, k, v, True, padding_mask, RPE, scaled=scaled)
+    return KernelizedAttention._attention_naive(kernel, q, k, v, True, padding_mask, RPE, scaled=scaled)
 
 
 def naive_b(q, k, v, RPE, padding_mask=None, scaled=True):
     _, _, Lq, _ = q.shape
     _, _, Lk, _ = k.shape
-    return KernelizedAttention._kernelized_attention_naive(kernel, q, k, v, False, padding_mask, RPE, scaled=scaled)
+    return KernelizedAttention._attention_naive(kernel, q, k, v, False, padding_mask, RPE, scaled=scaled)
 
 
 def linear_m(q, k, v, RPE, padding_mask=None, scaled=True):
-    return KernelizedAttention._kernelized_attention_linear(kernel, q, k, v, True, padding_mask, RPE, scaled=scaled)
+    return KernelizedAttention._attention_linear(kernel, q, k, v, True, padding_mask, RPE, scaled=scaled)
 
 
 def linear_b(q, k, v, RPE, padding_mask=None, scaled=True):
     _, _, Lq, _ = q.shape
     _, _, Lk, _ = k.shape
-    return KernelizedAttention._kernelized_attention_linear(kernel, q, k, v, False, padding_mask, RPE, scaled=scaled)
+    return KernelizedAttention._attention_linear(kernel, q, k, v, False, padding_mask, RPE, scaled=scaled)
 
 
 def test_equality_bidirectional():
