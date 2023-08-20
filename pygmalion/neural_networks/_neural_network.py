@@ -129,11 +129,12 @@ class NeuralNetwork(torch.nn.Module, Model):
         train_losses = []
         val_losses = []
         grad_norms = []
+        lr = learning_rate(0) if callable(learning_rate) else learning_rate
         if optimizer is None:
-            lr = learning_rate(0) if callable(learning_rate) else learning_rate
             optimizer = torch.optim.Adam(self.parameters(), lr)
         else:
-            pass
+            for g in optimizer.param_groups:
+                g["lr"] = lr
         try:
             # looping on epochs
             for step in range(n_steps+1):
