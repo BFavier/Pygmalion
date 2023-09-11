@@ -21,10 +21,14 @@ class Batchifyer:
     def __iter__(self):
         for batch in self.data_generator:
             yield model.data_to_tensor(batch)
+    
+    def get_batch(self):
+        return next(iter(self.data_generator))
 
 
-train_data = Batchifyer(1, 10)
-model.fit(train_data)
+batchifyer = Batchifyer(1, 10)
+train_data = next(iter(batchifyer))
+model.fit(batchifyer, keep_best=False)
 
 if __name__ == "__main__":
     import IPython

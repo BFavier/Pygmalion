@@ -151,14 +151,14 @@ class TimeSeriesRegressor(NeuralNetwork):
         Xs = [named_to_tensor(x, self.inputs) for _, x in df.groupby(self.observation_column)]
         if padded_sequence_length is None:
             padded_sequence_length = max(len(x) for x in Xs)
-        X = torch.stack([torch.cat([x, torch.full([padded_sequence_length-len(x), len(self.targets)], float("nan"))])
+        X = torch.stack([torch.cat([x, torch.zeros([padded_sequence_length-len(x), len(self.targets)])])
                          for x in Xs if len(x) <= padded_sequence_length], dim=0)
-        padding_mask = torch.stack([(torch.arange(padded_sequence_length) < len(x))
+        padding_mask = torch.stack([(torch.arange(padded_sequence_length) >= len(x))
                                     for x in Xs if len(x) <= padded_sequence_length], dim=0)
         if self.time_column is not None:
             Ts = [named_to_tensor(x, [self.time_column])
                 for _, x in df.groupby(self.observation_column)]
-            T = torch.stack([torch.cat([t, torch.full([padded_sequence_length-len(t), 1], float("nan"))])
+            T = torch.stack([torch.cat([t, torch.zeros([padded_sequence_length-len(t), 1])])
                              for t in Ts if len(t) <= padded_sequence_length], dim=0)
         else:
             T = None
@@ -173,7 +173,7 @@ class TimeSeriesRegressor(NeuralNetwork):
         Ys = [named_to_tensor(y, self.targets) for _, y in df.groupby(self.observation_column)]
         if padded_sequence_length is None:
             padded_sequence_length = max(len(y) for y in Ys)
-        Y = torch.stack([torch.cat([y, torch.full([padded_sequence_length-len(y), len(self.targets)], float("nan"))])
+        Y = torch.stack([torch.cat([y, torch.zeros([padded_sequence_length-len(y), len(self.targets)])])
                          for y in Ys if len(y) <= padded_sequence_length], dim=0)
         if device is not None:
             Y = Y.to(device)
