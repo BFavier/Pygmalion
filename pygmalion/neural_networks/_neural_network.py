@@ -1,5 +1,4 @@
 import io
-import copy
 import pathlib
 import math
 import torch
@@ -124,7 +123,7 @@ class NeuralNetwork(torch.nn.Module, Model):
             if not backup_path.is_dir():
                 raise NotADirectoryError(f"Backup path is not a valid directory: '{backup_path}'")
         best_step = 0
-        best_state = copy.deepcopy(self.state_dict())
+        best_state = {k: v.detach().cpu().clone() for k, v in self.state_dict().items()}
         best_metric = None
         train_losses = []
         val_losses = []
@@ -188,7 +187,8 @@ class NeuralNetwork(torch.nn.Module, Model):
                     best_step = step
                     best_metric = metric
                     if keep_best:
-                        best_state = copy.deepcopy(self.state_dict())
+                        # best_state = copy.deepcopy(self.state_dict())
+                        best_state = {k: v.detach().cpu().clone() for k, v in self.state_dict().items()}
                 # early stoping
                 if (step - best_step) > patience:
                     if verbose:
