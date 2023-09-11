@@ -123,7 +123,8 @@ class NeuralNetwork(torch.nn.Module, Model):
             if not backup_path.is_dir():
                 raise NotADirectoryError(f"Backup path is not a valid directory: '{backup_path}'")
         best_step = 0
-        best_state = {k: v.detach().cpu().clone() for k, v in self.state_dict().items()}
+        if keep_best:
+            best_state = {k: v.detach().cpu().clone() for k, v in self.state_dict().items()}
         best_metric = None
         train_losses = []
         val_losses = []
