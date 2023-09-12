@@ -59,7 +59,6 @@ class TimeSeriesRegressor(NeuralNetwork):
         embedding_dim = projection_dim*n_heads
         self.input_normalizer = Normalizer(-1, len(inputs)) if normalize else None
         self.target_normalizer = Normalizer(-1, len(targets)) if normalize else None
-        self.initial_embedding = torch.nn.parameter.Parameter(torch.zeros(1, 1, embedding_dim))
         self.embedding = torch.nn.Linear(len(inputs), embedding_dim)
         self.dropout_input = Dropout(dropout)
         if positional_encoding_type is None:
@@ -73,7 +72,7 @@ class TimeSeriesRegressor(NeuralNetwork):
                                                       **attention_kwargs)
         self.head = torch.nn.Linear(embedding_dim, len(self.targets))
 
-    def forward(self, X: torch.Tensor, T: Optional[torch.Tensor], padding_mask: Optional[torch.Tensor], initial_embedding: bool=False):
+    def forward(self, X: torch.Tensor, T: Optional[torch.Tensor], padding_mask: Optional[torch.Tensor]):
         """
         performs the encoding part of the network
 
@@ -95,10 +94,8 @@ class TimeSeriesRegressor(NeuralNetwork):
         if T is not None:
             T = T.to(self.device)
         if self.input_normalizer is not None:
-            X = self.input_normalizer(X, padding_mask[:, :-1])
+            X = self.input_normalizer(X, padding_mask)
         X = self.embedding(X)
-        if initial_embedding:
-            X = torch.concatenate([self.initial_embedding.expand(len(X), -1, -1), X], dim=1)
         N, L, _ = X.shape
         if self.positional_encoding is not None:
             X = self.positional_encoding(X)
@@ -124,14 +121,14 @@ class TimeSeriesRegressor(NeuralNetwork):
         x, y_target = x.to(self.device), y_target.to(self.device)
         if t is not None:
             t = t.to(self.device)
-        y_pred = self(x[:, :-1, :], t, padding_mask, initial_embedding=True)
+        y_pred = self(x[:, :-1, :], t[:, :-1], padding_mask[:, :-1])
         if self.target_normalizer is not None:
             y_target = self.target_normalizer(y_target, padding_mask)
         if weights is not None:
             if padding_mask is not None:
-                weights = weights * ~padding_mask
+                weights = weights * ~padding_mask[:, 1:]
             weights = weights.unsqueeze(-1)
-        return RMSE(y_pred, y_target, padding_mask.unsqueeze(-1) if weights is None else weights * padding_mask)
+        return RMSE(y_pred, y_target[:, 1:, :], weights)
 
     @property
     def device(self) -> torch.device:
