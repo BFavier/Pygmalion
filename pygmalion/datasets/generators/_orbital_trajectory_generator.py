@@ -52,6 +52,16 @@ class OrbitalTrajectoryGenerator:
         V = np.maximum(1.0, np.random.normal(0.4, 1.2, size=(batch_size, 1)) * escape_velocity) * rot
         y0 = np.concatenate([X, V], axis=-1)
         df = OrbitalTrajectoryGenerator.runge_kutta_fehlberg(y0, T, dt, dt_min, tol, verbose)
+        # filter points out of bounds
+        filtered = []
+        for obj, sub in df.groupby("obj"):
+            out_of_bounds = (sub[["x", "y"]].abs() > 3).any(axis=1) | (sub[["u", "v"]].abs() > 10).any(axis=1)
+            if out_of_bounds.any():
+                i = out_of_bounds.argmax()
+                filtered.append(sub.iloc[:i])
+            else:
+                filtered.append(sub)
+        df = pd.concat(filtered)
         return df
 
     @staticmethod
