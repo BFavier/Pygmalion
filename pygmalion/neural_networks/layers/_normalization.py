@@ -34,12 +34,15 @@ class Normalizer(torch.nn.Module):
         self.running_mean = torch.zeros(num_features, device=device, dtype=dtype)
         self.running_var = torch.ones(num_features, device=device, dtype=dtype)
 
-    def forward(self, X: torch.Tensor, track_running_stats: bool=True) -> torch.Tensor:
+    def forward(self, X: torch.Tensor, mask: Optional[torch.Tensor]=None, track_running_stats: bool=True) -> torch.Tensor:
         """
         Parameters
         ----------
         X : torch.Tensor
             tensor of floats of shape (N, ..., num_features, ...)
+        mask : torch.Tensor or None
+            tensor of boolean of shape (N, ...) (same shape as X except missing the 'dim' dimension).
+            Masked values are ignored in calculation of mean and variance
         
         Returns
         -------
@@ -51,11 +54,14 @@ class Normalizer(torch.nn.Module):
         if self.training and track_running_stats:
             with torch.no_grad():
                 self.running_mean, self.running_var = self.running_mean.to(X.device), self.running_var.to(X.device)
-                n = X.numel() // self.num_features
-                var = X.moveaxis(self.dim, 0).reshape(self.num_features, -1).var(dim=-1, unbiased=False)
-                mean = X.moveaxis(self.dim, 0).reshape(self.num_features, -1).mean(dim=self.dim)
+                Xr = X.moveaxis(self.dim, 0).reshape(self.num_features, -1)
+                if mask is not None:
+                    Xr = Xr * ~mask.to(Xr.device).reshape(-1).unsqueeze(0)
+                n = Xr.shape[-1] if mask is None else Xr.shape[-1] - mask.sum()
+                mean = Xr.sum(dim=-1) / max(1, n)
+                var = torch.sum((Xr - mean.unsqueeze(-1))**2, dim=-1) / max(1, n)
                 self.running_var = (self.n_observations/(self.n_observations+n)) * self.running_var + (n/(self.n_observations+n)) * var + self.n_observations*n/(self.n_observations+n)**2 * (mean - self.running_mean)**2
-                self.running_mean = mean * (self.n_observations / (self.n_observations + n)) + self.running_mean * (n / (self.n_observations + n))
+                self.running_mean = self.running_mean * (self.n_observations / (self.n_observations + n)) + mean * (n / (self.n_observations + n))
                 self.n_observations += n
         shape = [self.num_features if i == self.dim % len(X.shape) else 1 for i, _ in enumerate(X.shape)]
         X = (X - self.running_mean.reshape(shape)) / (self.running_var.reshape(shape) + self.eps)**0.5
