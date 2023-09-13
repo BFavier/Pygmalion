@@ -59,22 +59,41 @@ $$
 \Delta P_{ijk} = c_k \times cos(\hat{p}_i) \times cos(\hat{p}_j) + c_k \times sin(\hat{p}_i) \times sin(\hat{p}_j)
 $$
 
-This allows us to compute the result of the attention operation without calculating the costly in memory $\Delta P_{ijk}$ tensor:
+This allows us to compute the result of the attention operation without calculating the memory costly $\Delta P_{ijk}$ tensor:
 
 
 ## Linear complexity implementation
 
+### Unmasked attention
 
 The numerator of the attention operation can be expanded to
 
 $$
-A_{id} =  \sum_k \sum_j \left( \overline{Q}_{ik} \times \overline{K}_{jk} \times c_k \times cos(\hat{p}_i) \times cos(\hat{p}_j) \times V_{jd} \right) \\
+A_{id} \times \sum_{j} S_{ij} =  \sum_k \sum_j \left( \overline{Q}_{ik} \times \overline{K}_{jk} \times c_k \times cos(\hat{p}_i) \times cos(\hat{p}_j) \times V_{jd} \right) \\
 + \sum_k \sum_j \left( \overline{Q}_{ik} \times \overline{K}_{jk} \times c_k \times sin(\hat{p}_i) \times sin(\hat{p}_j) \times V_{jd} \right)
 $$
 
-By regrouping the terms, it becomes clear that the summation over $j$ can be performed independently from the terms depending on $i$. This means that, with this scheme of calculation, there is never a loop on $i$ and $j$ at the same time. Hence the linear complexity with sequence length.
+By regrouping the terms, it becomes clear that the summation over $j$ can be performed independently from the terms depending on $i$. This means that, with this scheme of calculation, there is never a loop on $i$ (queries sequence length) and $j$ (key sequences length) at the same time. Hence the linear complexity with sequence length.
 
 $$
-A_{id} =  \sum_k \left( \overline{Q}_{ik} \times c_k \times cos(\hat{p}_i) \times \sum_j  \left( \overline{K}_{jk} \times cos(\hat{p}_j) \times V_{jd} \right) \right) \\
+A_{id} \times \sum_{j} S_{ij} =  \sum_k \left( \overline{Q}_{ik} \times c_k \times cos(\hat{p}_i) \times \sum_j  \left( \overline{K}_{jk} \times cos(\hat{p}_j) \times V_{jd} \right) \right) \\
 + \sum_k \left( \overline{Q}_{ik} \times c_k \times sin(\hat{p}_i) \times \sum_j  \left( \overline{K}_{jk} \times sin(\hat{p}_j) \times V_{jd} \right) \right)
 $$
+
+The denominator of the attention operation can be expanded and computyed with linear complexity the same way as the numerator:
+
+$$
+\sum_{j} S_{ij} =  \sum_k \left( \overline{Q}_{ik} \times c_k \times cos(\hat{p}_i) \times \sum_j  \left( \overline{K}_{jk} \times cos(\hat{p}_j) \right) \right) \\
++ \sum_k \left( \overline{Q}_{ik} \times c_k \times sin(\hat{p}_i) \times \sum_j  \left( \overline{K}_{jk} \times sin(\hat{p}_j) \right) \right)
+$$
+
+### masked attention
+
+The masked future variant of the attention is the same calculation except that the sum over $j$ is only performed for $j \leq i$.
+
+$$
+A_{id} \times \sum_{j} S_{ij} =  \sum_k \left( \overline{Q}_{ik} \times c_k \times cos(\hat{p}_i) \times \sum_{j \leq i}  \left( \overline{K}_{jk} \times cos(\hat{p}_j) \times V_{jd} \right) \right) \\
++ \sum_k \left( \overline{Q}_{ik} \times c_k \times sin(\hat{p}_i) \times \sum_{j \leq i}  \left( \overline{K}_{jk} \times sin(\hat{p}_j) \times V_{jd} \right) \right)
+$$
+
+This calculation can still be performed with linear complexity with regards to sequence length. The sum over $j \leq i$ is in fact the ith element of the cumulated sum of over $j$. If implemented correctly calculating a cumulated sum needs only loop along the sumation dimension. Thus the cumulated sum calculation is of complexity $O(L_K \times D^2)$ (looping over $j$, $k$ and $d$). and the final calculation is of complexity $O(L_Q \times D)$.
