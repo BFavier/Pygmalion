@@ -128,14 +128,23 @@ class FourrierKernelAttention(torch.nn.Module):
 
     @staticmethod
     def _attention_linear(q: torch.Tensor, k: torch.Tensor, v: torch.Tensor,
-                          pq: torch.Tensor, pk: torch.Tensor, mask_future: bool,
-                          key_mask: Optional[torch.Tensor], scaled: bool,
+                          position_coeff: torch.Tensor, pq: torch.Tensor, pk: torch.Tensor,
+                          mask_future: bool, key_mask: Optional[torch.Tensor], scaled: bool,
                           future_offset: int) -> torch.Tensor:
         """
         see self._attention_naive doc's
         """
-        ...
-        raise NotImplementedError()
+        N, H, Lq, d = q.shape
+        N, H, Lk, d = k.shape
+        if key_mask is not None:
+            k = torch.masked_fill(k, key_mask.unsqueeze(1).unsqueeze(-1).expand(-1, H, -1, d).to(k.device), 0.)
+        attention = (FourrierKernelAttention._compute_part(position_coeff, q, pq, k, pk, v, torch.cos, mask_future)
+                     + FourrierKernelAttention._compute_part(position_coeff, q, pq, k, pk, v, torch.sin, mask_future))
+        if scaled:
+            unit = torch.ones(N, H, Lk, 1, device=q.device)
+            attention /= (FourrierKernelAttention._compute_part(position_coeff, q, pq, k, pk, unit, torch.cos, mask_future)
+                          + FourrierKernelAttention._compute_part(position_coeff, q, pq, k, pk, unit, torch.sin, mask_future))
+        return attention
 
     @staticmethod
     def _attention_naive(q: torch.Tensor, k: torch.Tensor, v: torch.Tensor,
@@ -184,8 +193,50 @@ class FourrierKernelAttention(torch.nn.Module):
             mask = _mask_chronological(Lq, Lk, score.device, future_offset).reshape(1, 1, Lq, Lk)
             score = torch.masked_fill(score, mask, 0)
         if scaled:
-            score = score / score.abs().sum(dim=-1).unsqueeze(-1)
+            score = score / score.sum(dim=-1).unsqueeze(-1)
         if key_mask is not None:
             score = torch.masked_fill(score, key_mask.reshape(N, 1, 1, Lk).to(score.device), 0.)
         attention = torch.matmul(score, v)
         return attention
+    
+    @staticmethod
+    def _compute_part(c: torch.Tensor, q: torch.Tensor, pq: torch.Tensor,
+                      k: torch.Tensor, pk: torch.Tensor, v: torch.Tensor,
+                      cos_sin: Callable, masked: bool) -> torch.Tensor:
+        """
+        Compute
+        \sum_k (c_k * q_{ik} * cos_sin(pq)_i * \sum_j (k_{jk} * cos_sin(pk)_j * v_{jd}))
+        If masked is True, the sum over j is replaced with a cumulated sum
+        
+        Parameters
+        ----------
+        c : torch.Tensor
+            position coefficient of shape (H, d)
+        q : torch.Tensor
+            tensor of queries, post kernel function application, of shape (N, H, Lq, d)
+        pq : torch.Tensor
+            tensor of query positions, post projection to embedding dim, of shape (N, H, Lq, d)
+        k : torch.Tensor
+            tensor of queries, post kernel function application, of shape (N, H, Lk, d)
+        pq : torch.Tensor
+            tensor of query positions, post projection to embedding dim, of shape (N, H, Lk, d)
+        v : torch.Tensor
+            tensor of value vectors, of shape (N, H, Lk, d)
+        cos_sin : callable
+            cos function or sin function
+        masked : bool
+            If True, compute masked future variant
+        """
+        N, H, Lq, d = q.shape
+        N, H, Lk, d = k.shape
+        if masked:
+            right = torch.einsum("nhjk, nhjk, nhjd -> nhjkd", k, cos_sin(pk), v)
+            right = right[:, :, :Lq, ...]
+            if Lq > Lk:
+                right = torch.cat([right, right[:, :, -1:, ...].expand(-1, -1, Lq-Lk, -1, -1)], dim=2)
+            right = torch.cumsum(right, dim=2)
+            left = torch.einsum("hk, nhik, nhik, nhikd -> nhid", c, q, cos_sin(pq), right)
+        else:
+            right = torch.einsum("nhjk, nhjk, nhjd -> nhkd", k, cos_sin(pk), v)
+            left = torch.einsum("hk, nhik, nhik, nhkd -> nhid", c, q, cos_sin(pq), right)
+        return left
