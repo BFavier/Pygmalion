@@ -69,6 +69,7 @@ class TimeSeriesRegressor(NeuralNetwork):
                                                       dropout=dropout, activation=activation,
                                                       attention_type=attention_type,
                                                       gradient_checkpointing=gradient_checkpointing,
+                                                      mask_future=True,
                                                       **attention_kwargs)
         self.head = torch.nn.Linear(embedding_dim, len(self.targets))
 
