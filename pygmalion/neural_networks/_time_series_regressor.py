@@ -6,7 +6,7 @@ from .layers.positional_encoding import POSITIONAL_ENCODING_TYPE
 from .layers import Dropout, Normalizer
 from ._conversions import named_to_tensor, tensor_to_dataframe
 from ._neural_network import NeuralNetwork
-from ._loss_functions import RMSE
+from ._loss_functions import MSE
 
 
 class TimeSeriesRegressor(NeuralNetwork):
@@ -122,14 +122,14 @@ class TimeSeriesRegressor(NeuralNetwork):
         x, y_target = x.to(self.device), y_target.to(self.device)
         if t is not None:
             t = t.to(self.device)
-        y_pred = self(x[:, :-1, :], t[:, :-1], padding_mask[:, :-1])
+        y_pred = self(x[:, :-1, :], t[:, :-1] if t is not None else None, padding_mask[:, :-1])
         if self.target_normalizer is not None:
             y_target = self.target_normalizer(y_target, padding_mask)
         if weights is not None:
             if padding_mask is not None:
                 weights = weights * ~padding_mask[:, 1:]
             weights = weights.unsqueeze(-1)
-        return RMSE(y_pred, y_target[:, 1:, :], weights)
+        return MSE(y_pred, y_target[:, 1:, :], weights)
 
     @property
     def device(self) -> torch.device:
