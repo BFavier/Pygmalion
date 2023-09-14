@@ -3,15 +3,17 @@ import pygmalion as ml
 import matplotlib.pyplot as plt
 from pygmalion.datasets.generators import OrbitalTrajectoryGenerator
 from pygmalion.neural_networks import TimeSeriesRegressor
-from pygmalion.neural_networks.layers.transformers import FourrierKernelAttention
+from pygmalion.neural_networks.layers.transformers.multihead_attention import FourrierKernelAttention
 
 DEVICE = "cuda:0" if torch.cuda.device_count() > 0 else "cpu"
 model = TimeSeriesRegressor(inputs=["x", "y", "u", "v"],
                             targets=["x", "y", "u", "v"],
                             observation_column="obj", time_column="t",
-                            n_stages=4, projection_dim=16, n_heads=4,
+                            normalize=True,
+                            n_stages=4, projection_dim=16, n_heads=8,
                             attention_type=FourrierKernelAttention,
-                            attention_kwargs={"linear_complexity": False})
+                            attention_kwargs={"linear_complexity": True}
+                            )
 model.to(DEVICE)
 
 
@@ -22,15 +24,16 @@ class Batchifyer:
 
     def __iter__(self):
         for batch in self.data_generator:
-            yield model.data_to_tensor(batch)
+            X, T, padding_mask, Y = model.data_to_tensor(batch)
+            yield X, T, padding_mask, Y
     
     def get_batch(self):
         return next(iter(self.data_generator))
 
 
-batchifyer = Batchifyer(1, 30)
-train_data = next(iter(batchifyer))
-train_losses, val_losses, grad, best_step = model.fit(batchifyer, keep_best=False)
+batchifyer = Batchifyer(1, 100)
+val_data = next(iter(batchifyer))
+train_losses, val_losses, grad, best_step = model.fit(batchifyer, val_data, keep_best=False, learning_rate=1.0E-4)
 ml.utilities.plot_losses(train_losses, val_losses, grad, best_step)
 plt.show()
 
