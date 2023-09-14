@@ -10,7 +10,7 @@ model = TimeSeriesRegressor(inputs=["x", "y", "u", "v"],
                             targets=["x", "y", "u", "v"],
                             observation_column="obj", time_column="t",
                             normalize=True,
-                            n_stages=4, projection_dim=16, n_heads=8,
+                            n_stages=6, projection_dim=16, n_heads=8,
                             attention_type=FourrierKernelAttention,
                             attention_kwargs={"linear_complexity": True}
                             )
@@ -24,16 +24,15 @@ class Batchifyer:
 
     def __iter__(self):
         for batch in self.data_generator:
-            X, T, padding_mask, Y = model.data_to_tensor(batch)
-            yield X, T, padding_mask, Y
+            yield model.data_to_tensor(batch)
     
     def get_batch(self):
         return next(iter(self.data_generator))
 
 
-batchifyer = Batchifyer(1, 100)
+batchifyer = Batchifyer(3, 100)
 val_data = next(iter(batchifyer))
-train_losses, val_losses, grad, best_step = model.fit(batchifyer, val_data, keep_best=False, learning_rate=1.0E-4)
+train_losses, val_losses, grad, best_step = model.fit(batchifyer, val_data, keep_best=False, learning_rate=1.0E-3)
 ml.utilities.plot_losses(train_losses, val_losses, grad, best_step)
 plt.show()
 
