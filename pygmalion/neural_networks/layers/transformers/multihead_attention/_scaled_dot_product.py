@@ -148,7 +148,7 @@ class ScaledDotProductAttention(torch.nn.Module):
         if mask_future:
             score = score.masked_fill(_mask_chronological(Lq, Lk, score.device, future_offset).reshape(1, 1, Lq, Lk), -float("inf"))
         if padding_mask is not None:
-            score = score.masked_fill(padding_mask.reshape(N, 1, 1, Lk), -float("inf"))
+            score = score.masked_fill(padding_mask.to(score.device).reshape(N, 1, 1, Lk), -float("inf"))
         score = torch.softmax(score, dim=-1)
         attention = torch.matmul(score, v)
         return attention
