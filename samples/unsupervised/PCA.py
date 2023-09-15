@@ -9,7 +9,7 @@ ml.datasets.boston_housing(data_path)
 df = pd.read_csv(data_path / "boston_housing.csv")
 x = df[[c for c in df.columns if c != "medv"]]
 pca = ml.unsupervised.PCA()
-pca.train(x)
+pca.fit(x)
 pca.plot_explained_variance()
 plt.show()
 res = pca(x)
