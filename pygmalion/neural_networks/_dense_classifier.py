@@ -1,6 +1,6 @@
 import torch
 import pandas as pd
-from typing import List, Union, Iterable, Optional
+from typing import List, Union, Iterable, Optional, Callable
 from ._conversions import classes_to_tensor, tensor_to_classes
 from ._conversions import named_to_tensor, tensor_to_probabilities
 from ._neural_network import NeuralNetworkClassifier
@@ -13,7 +13,7 @@ class DenseClassifier(NeuralNetworkClassifier):
     def __init__(self, inputs: Iterable[str],
                  target: str, classes: Iterable[str],
                  hidden_layers: Iterable[int],
-                 activation: str = "relu",
+                 activation: Union[Callable, str] = "relu",
                  normalize: bool = True,
                  dropout: Optional[float] = None):
         """
@@ -22,9 +22,17 @@ class DenseClassifier(NeuralNetworkClassifier):
         inputs : Iterable of str
             the column names of the input variables in a dataframe
         target : str
-            the ...
-        ...
-
+            the name of the target column
+        classes : iterable of str
+            unique classes the model can predict
+        hidden_layers : iterable of int
+            number of features of each hidden layer of the multi layers perceptron
+        activation : callable or str
+            activation function, or its name
+        normalize : bool
+            whether to normalize inputs and intermediate results
+        dropout : float or None
+            the dropout probability at each hidden layer, if any
         """
         super().__init__(classes)
         self.inputs = tuple(inputs)

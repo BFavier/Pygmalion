@@ -34,10 +34,12 @@ class DenseRegressor(NeuralNetwork):
             the column names of the input variables in a dataframe
         target : str or Iterable of str
             the column name(s) of the variable(s) to predict
-        activation : str or Callable or torch.nn.Module
+        hidden_layers : iterable of int
+            number of features of each hidden layer of the multi layers perceptron
+        activation : str or Callable
             the activation function
         normalize : bool
-            whether or not to add normalization layers
+            whether or not to normalize inputs, hidden layers and target
         dropout : float or None
             the dropout after each hidden layer if provided
         """
