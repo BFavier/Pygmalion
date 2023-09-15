@@ -1,8 +1,6 @@
 import torch
 from typing import Tuple, Optional
-from pygmalion.neural_networks.layers._activation import Activation
-from pygmalion.neural_networks.layers._normalization import FeaturesNorm
-from pygmalion.neural_networks.layers._dropout import Dropout2d
+from pygmalion.neural_networks.layers import Activation, FeaturesNorm, Dropout2d
 from ._padded_conv import PaddedConv2d
 
 
