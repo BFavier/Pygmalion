@@ -109,7 +109,7 @@ class KernelizedAttention(torch.nn.Module):
         return self.query.weight.device
 
     @staticmethod
-    def _attention_linear(kernel: Callable, q: torch.Tensor, k: torch.Tensor,
+    def _attention_linear(kernel: Callable, Q: torch.Tensor, K: torch.Tensor,
                           v: torch.Tensor, mask_future: bool,
                           key_mask: Optional[torch.Tensor],
                           RPE: Optional[torch.nn.Embedding],
@@ -119,7 +119,7 @@ class KernelizedAttention(torch.nn.Module):
         """
         if future_offset != 0:
             raise ValueError("Linear complexity not implemented for 'future_offset' != 0")
-        q, k = kernel(q), kernel(k)
+        q, k = kernel(Q), kernel(K)
         N, H, Lq, _ = q.shape
         N, H, Lk, _ = k.shape
         D = v.shape[-1]
@@ -171,7 +171,7 @@ class KernelizedAttention(torch.nn.Module):
             if key_mask is not None:
                 v_scaling = torch.masked_fill(v_scaling, key_mask.reshape(N, 1, Lk, 1), 0.)
             scale = KernelizedAttention._attention_linear(
-                kernel, q, k, v_scaling, mask_future, key_mask, RPE, scaled=False)
+                kernel, Q, K, v_scaling, mask_future, key_mask, RPE, scaled=False)
             attention = attention / scale
         return attention
 
