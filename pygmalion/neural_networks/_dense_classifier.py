@@ -5,7 +5,7 @@ from ._conversions import classes_to_tensor, tensor_to_classes
 from ._conversions import named_to_tensor, tensor_to_probabilities
 from ._neural_network import NeuralNetworkClassifier
 from ._loss_functions import cross_entropy
-from .layers import Activation, Normalizer, FeaturesNorm, Dropout
+from .layers import Normalizer, Dense
 
 
 class DenseClassifier(NeuralNetworkClassifier):
@@ -33,12 +33,8 @@ class DenseClassifier(NeuralNetworkClassifier):
         in_features = len(inputs)
         self.input_normalizer = Normalizer(1, in_features)
         for out_features in hidden_layers:
-            self.layers.append(torch.nn.Linear(in_features, out_features))
-            if normalize:
-                self.layers.append(FeaturesNorm(1, out_features))
-            self.layers.append(Activation(activation))
-            if dropout is not None:
-                self.layers.append(Dropout(dropout))
+            self.layers.append(Dense(in_features, out_features, normalize=normalize,
+                                     activation=activation, dropout=dropout))
             in_features = out_features
         out_features = len(self.classes)
         self.output = torch.nn.Linear(in_features, out_features)

@@ -6,7 +6,7 @@ from ._conversions import tensor_to_floats
 from ._conversions import named_to_tensor, tensor_to_dataframe
 from ._neural_network import NeuralNetwork
 from ._loss_functions import MSE
-from .layers import Activation, Normalizer, FeaturesNorm, Dropout
+from .layers import Normalizer, Dense
 
 
 class DenseRegressor(NeuralNetwork):
@@ -48,11 +48,8 @@ class DenseRegressor(NeuralNetwork):
         in_features = len(inputs)
         self.input_normalizer = Normalizer(1, in_features)
         for out_features in hidden_layers:
-            self.layers.append(torch.nn.Linear(in_features, out_features))
-            if normalize:
-                self.layers.append(FeaturesNorm(1, out_features))
-            self.layers.append(Activation(activation))
-            self.layers.append(Dropout(dropout))
+            self.layers.append(Dense(in_features, out_features, normalize=normalize,
+                                     activation=activation, dropout=dropout))
             in_features = out_features
         out_features = 1 if isinstance(target, str) else len(self.target)
         self.output = torch.nn.Linear(in_features, out_features)
