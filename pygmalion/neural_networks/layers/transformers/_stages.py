@@ -2,6 +2,7 @@ import torch
 from typing import Optional
 from .multihead_attention import ATTENTION_TYPE, ScaledDotProductAttention
 from pygmalion.neural_networks.layers._dropout import Dropout
+from pygmalion.neural_networks.layers._activation import Activation
 
 
 class TransformerEncoderStage(torch.nn.Module):
@@ -14,7 +15,7 @@ class TransformerEncoderStage(torch.nn.Module):
                  **kwargs):
         super().__init__()
         dim = projection_dim * n_heads
-        self.activation = getattr(torch, activation)
+        self.activation = Activation(activation)
         self.self_attention = attention_type(projection_dim, n_heads, mask_future=mask_future, **kwargs)
         self.intermediate_norm = torch.nn.LayerNorm(dim)
         self.intermediate_dropout = Dropout(dropout)
@@ -55,6 +56,9 @@ class TransformerEncoderStage(torch.nn.Module):
         X = self.out_dropout(X)
         X = self.out_norm(X + input)
         return X.reshape(N, L, -1)
+    
+    def generate(self, X: torch.Tensor):
+        pass
 
     @property
     def device(self) -> torch.device:
@@ -69,7 +73,7 @@ class TransformerDecoderStage(torch.nn.Module):
                  **kwargs):
         super().__init__()
         dim = projection_dim * n_heads
-        self.activation = getattr(torch, activation)
+        self.activation = Activation(activation)
         self.masked_self_attention = attention_type(projection_dim, n_heads, mask_future=True, **kwargs)
         self.first_dropout = Dropout(dropout)
         self.first_norm = torch.nn.LayerNorm(dim)
