@@ -111,7 +111,7 @@ class FourrierKernelAttention(torch.nn.Module):
         q, k, v = q.transpose(1, 2), k.transpose(1, 2), v.transpose(1, 2)
         if self.linear_complexity and (future_offset == 0):
             attention = self._attention_linear(
-                q, k, v, self.position_coeffs, pq, pk, self.mask_future, key_mask, self.scaled, future_offset)
+                q, k, v, self.position_coeffs, pq, pk, self.mask_future, key_mask, self.scaled)
         else:
             attention = self._attention_naive(
                 q, k, v, self.position_coeffs, pq, pk, self.mask_future, key_mask, self.scaled, future_offset)
@@ -129,8 +129,8 @@ class FourrierKernelAttention(torch.nn.Module):
     @staticmethod
     def _attention_linear(q: torch.Tensor, k: torch.Tensor, v: torch.Tensor,
                           position_coeff: torch.Tensor, pq: torch.Tensor, pk: torch.Tensor,
-                          mask_future: bool, key_mask: Optional[torch.Tensor], scaled: bool,
-                          future_offset: int) -> torch.Tensor:
+                          mask_future: bool, key_mask: Optional[torch.Tensor], scaled: bool
+                          ) -> torch.Tensor:
         """
         see self._attention_naive doc's
         """
