@@ -31,8 +31,8 @@ class Normalizer(torch.nn.Module):
         self.num_features = num_features
         self.eps = eps
         self.n_observations = 0
-        self.running_mean = torch.zeros(num_features, device=device, dtype=dtype)
-        self.running_var = torch.ones(num_features, device=device, dtype=dtype)
+        self.running_mean = torch.nn.Parameter(torch.zeros(num_features, device=device, dtype=dtype), requires_grad=False)
+        self.running_var = torch.nn.Parameter(torch.ones(num_features, device=device, dtype=dtype), requires_grad=False)
 
     def forward(self, X: torch.Tensor, mask: Optional[torch.Tensor]=None, track_running_stats: bool=True) -> torch.Tensor:
         """
@@ -49,19 +49,21 @@ class Normalizer(torch.nn.Module):
         torch.Tensor :
             tensor of floats of shape (N, ..., num_features, ...) normalized along the given dimension
         """
+        X = X.to(self.device)
+        if mask is not None:
+            mask = mask.to(self.device)
         if X.shape[self.dim] != self.num_features:
-            raise ValueError(f"Expected tensor of shape (N, *, {self.num_features}, *) but got {tuple(X.shape)}")
+            raise ValueError(f"Expected {self.num_features} size for dimension {self.dim} but got tensor of shape {tuple(X.shape)}")
         if self.training and track_running_stats:
             with torch.no_grad():
-                self.running_mean, self.running_var = self.running_mean.to(X.device), self.running_var.to(X.device)
                 Xr = X.moveaxis(self.dim, 0).reshape(self.num_features, -1)
                 if mask is not None:
                     Xr = Xr * ~mask.to(Xr.device).reshape(-1).unsqueeze(0)
                 n = Xr.shape[-1] if mask is None else Xr.shape[-1] - mask.sum()
                 mean = Xr.sum(dim=-1) / max(1, n)
                 var = torch.sum((Xr - mean.unsqueeze(-1))**2, dim=-1) / max(1, n)
-                self.running_var = (self.n_observations/(self.n_observations+n)) * self.running_var + (n/(self.n_observations+n)) * var + self.n_observations*n/(self.n_observations+n)**2 * (mean - self.running_mean)**2
-                self.running_mean = self.running_mean * (self.n_observations / (self.n_observations + n)) + mean * (n / (self.n_observations + n))
+                self.running_var.data = (self.n_observations/(self.n_observations+n)) * self.running_var + (n/(self.n_observations+n)) * var + self.n_observations*n/(self.n_observations+n)**2 * (mean - self.running_mean)**2
+                self.running_mean.data = self.running_mean * (self.n_observations / (self.n_observations + n)) + mean * (n / (self.n_observations + n))
                 self.n_observations += n
         shape = [self.num_features if i == self.dim % len(X.shape) else 1 for i, _ in enumerate(X.shape)]
         X = (X - self.running_mean.reshape(shape)) / (self.running_var.reshape(shape) + self.eps)**0.5
@@ -71,5 +73,9 @@ class Normalizer(torch.nn.Module):
         """
         Unapply normalization
         """
-        shape = [self.num_features if i == self.dim else 1 for i, _ in enumerate(Y.shape)]
+        shape = [self.num_features if i == self.dim % len(Y.shape) else 1 for i, _ in enumerate(Y.shape)]
         return Y * (self.running_var.reshape(shape) + self.eps)**0.5 + self.running_mean.reshape(shape)
+
+    @property
+    def device(self) -> torch.device:
+        return self.running_mean.device
