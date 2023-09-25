@@ -1,5 +1,6 @@
 import torch
 import pandas as pd
+import numpy as np
 from typing import Union, Optional, Iterable
 from .layers.transformers import TransformerEncoder, ATTENTION_TYPE, FourrierKernelAttention
 from .layers.positional_encoding import POSITIONAL_ENCODING_TYPE
@@ -29,6 +30,10 @@ class TimeSeriesRegressor(NeuralNetwork):
             the class names
         tokenizer : Tokenizer
             tokenizer of the input sentences
+        observation_column : str
+            column by which the dataframe will be grouped when grouping observations
+        time_column : str or None
+            The name of the time column if any. Usefull for non equally spaced time series.
         n_stages : int
             number of stages in the encoder and decoder
         projection_dim : int
@@ -73,7 +78,7 @@ class TimeSeriesRegressor(NeuralNetwork):
                                                       **attention_kwargs)
         self.head = torch.nn.Linear(embedding_dim, len(self.targets))
 
-    def forward(self, X: torch.Tensor, T: Optional[torch.Tensor], padding_mask: Optional[torch.Tensor]):
+    def forward(self, X: torch.Tensor, T: Optional[torch.Tensor], T_next: Optional[torch.Tensor], padding_mask: Optional[torch.Tensor]):
         """
         performs the encoding part of the network
 
@@ -82,6 +87,8 @@ class TimeSeriesRegressor(NeuralNetwork):
         X : torch.Tensor
             tensor of floats of shape (N, L, D)
         T : torch.Tensor or None
+            tensor of floats of shape (N, L)
+        T_next : torch.Tensor or None
             tensor of floats of shape (N, L)
         padding_mask : torch.Tensor or None
             tensor of booleans of shape (N, L)
@@ -101,7 +108,7 @@ class TimeSeriesRegressor(NeuralNetwork):
         if self.positional_encoding is not None:
             X = self.positional_encoding(X)
         X = self.dropout_input(X.reshape(N*L, -1)).reshape(N, L, -1)
-        attention_kwargs = {"query_positions": T, "key_positions": T} if T is not None else {}
+        attention_kwargs = {"query_positions": T_next, "key_positions": T} if T is not None else {}
         X = self.transformer_encoder(X, padding_mask, attention_kwargs=attention_kwargs)
         return self.head(X)
 
@@ -122,7 +129,8 @@ class TimeSeriesRegressor(NeuralNetwork):
         x, y_target = x.to(self.device), y_target.to(self.device)
         if t is not None:
             t = t.to(self.device)
-        y_pred = self(x[:, :-1, :], t[:, :-1] if t is not None else None, padding_mask[:, :-1])
+        y_pred = self(x[:, :-1, :], t[:, :-1] if t is not None else None,
+                      t[:, 1:] if t is not None else None, padding_mask[:, :-1])
         if self.target_normalizer is not None:
             y_target = self.target_normalizer(y_target, padding_mask)
         if weights is not None:
@@ -183,3 +191,30 @@ class TimeSeriesRegressor(NeuralNetwork):
 
     def _tensor_to_y(self, tensor: torch.Tensor) -> pd.DataFrame:
         return tensor_to_dataframe(tensor, self.targets)
+
+    def predict(self, df_past: pd.DataFrame, df_future: Optional[pd.DataFrame]):
+        self.eval()
+        df_future = df_future.copy()
+        df_future[list(self.targets)] = None
+        indexes = [len(self.inputs) + self.targets.index(x) if x in self.targets else i
+                   for i, x in enumerate(self.inputs)]
+        X_past, T, _ = self._x_to_tensor(df_past, device=self.device)
+        X_future, T_future, _ = self._x_to_tensor(df_future, device=self.device)
+        X = X_past
+        with torch.no_grad():
+            for i in range(X_future.shape[1]):
+                if self.input_normalizer is not None:
+                    X = self.input_normalizer(X, None)
+                if self.positional_encoding is not None:
+                    X = self.positional_encoding(X)
+                if T_future is not None:
+                    T = torch.cat([T, T_future[:, i:i+1, :]], dim=1)
+                    attention_kwargs = {"query_positions": T[:, :-1, :], "key_positions": T[:, 1:, :]}
+                else:
+                    attention_kwargs = {}
+                Y = self.transformer_encoder(self.embedding(X), None, attention_kwargs=attention_kwargs)[:, -1:, :]
+                Y = self.head(Y)
+                if self.target_normalizer is not None:
+                    Y = self.target_normalizer.unscale(Y)
+                Y = torch.cat([X_future[:, i:i+1, :], Y], dim=2)[..., indexes]
+                X = torch.cat([X, Y], dim=1)
