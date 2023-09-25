@@ -18,6 +18,8 @@ class TimeSeriesRegressor(NeuralNetwork):
                  activation: str = "relu",
                  dropout: Union[float, None] = None,
                  normalize: bool = True,
+                 std_noise: float = 0.,
+                 mask_n_firsts: int = 1,
                  gradient_checkpointing: bool = True,
                  positional_encoding_type: Optional[POSITIONAL_ENCODING_TYPE] = None,
                  positional_encoding_kwargs: dict={},
@@ -44,6 +46,14 @@ class TimeSeriesRegressor(NeuralNetwork):
             activation function
         dropout : float or None
             dropout probability if any
+        normalize : bool
+            if True, the inputs and targets ar enormalized
+        std_noise : float
+            Standard deviation of normaly distribued noise with zero mean
+            added to input during training.
+        mask_n_firsts : int
+            Number of initial points ignored in the loss during training.
+            Must be at least 1.
         gradient_checkpointing : bool
             If True, uses gradient checkpointing to reduce memory usage during
             training at the expense of computation time.
@@ -61,6 +71,8 @@ class TimeSeriesRegressor(NeuralNetwork):
         self.targets = list(targets)
         self.observation_column = observation_column
         self.time_column = str(time_column) if time_column is not None else None
+        self.std_noise = std_noise
+        self.mask_n_firsts = mask_n_firsts
         embedding_dim = projection_dim*n_heads
         self.input_normalizer = Normalizer(-1, len(inputs)) if normalize else None
         self.target_normalizer = Normalizer(-1, len(targets)) if normalize else None
@@ -112,7 +124,7 @@ class TimeSeriesRegressor(NeuralNetwork):
         X = self.transformer_encoder(X, padding_mask, attention_kwargs=attention_kwargs)
         return self.head(X)
 
-    def loss(self, x: torch.Tensor, t: Optional[torch.Tensor], padding_mask: torch.Tensor,
+    def loss(self, x: torch.Tensor, t: Optional[torch.Tensor], padding_mask: Optional[torch.Tensor],
              y_target: torch.Tensor, weights: Optional[torch.Tensor]=None):
         """
         Parameters
@@ -121,23 +133,28 @@ class TimeSeriesRegressor(NeuralNetwork):
             tensor of floats of shape (N, L, D)
         t : torch.Tensor or None
             if provided, the time as a tensor of floats of shape (N, L)
-        padding_mask : torch.Tensor
+        padding_mask : torch.Tensor or None
             tensor of booleans of shape (N, L)
         y_target : torch.Tensor
             tensor of floats of shape (N, L, D)
         """
+        N, L, D = x.shape
         x, y_target = x.to(self.device), y_target.to(self.device)
         if t is not None:
             t = t.to(self.device)
-        y_pred = self(x[:, :-1, :], t[:, :-1] if t is not None else None,
-                      t[:, 1:] if t is not None else None, padding_mask[:, :-1])
+        noise = torch.normal(torch.zeros((N, L-1, D), device=x.device),
+                             torch.full((N, L-1, D), self.std_noise, device=x.device))
+        y_pred = self(x[:, :-1, :]+noise, t[:, :-1] if t is not None else None,
+                      t[:, 1:] if t is not None else None,
+                      padding_mask[:, :-1] if padding_mask is not None else None)
         if self.target_normalizer is not None:
             y_target = self.target_normalizer(y_target, padding_mask)
+        masked = (torch.arange(L).unsqueeze(0) >= self.mask_n_firsts)
+        if padding_mask is not None:
+            masked = masked * ~padding_mask
         if weights is not None:
-            if padding_mask is not None:
-                weights = weights * ~padding_mask[:, 1:]
-            weights = weights.unsqueeze(-1)
-        return MSE(y_pred, y_target[:, 1:, :], weights)
+            masked = masked * weights
+        return MSE(y_pred, y_target[:, 1:, :], masked[:, 1:].unsqueeze(-1))
 
     @property
     def device(self) -> torch.device:
@@ -174,7 +191,8 @@ class TimeSeriesRegressor(NeuralNetwork):
             T = None
         if device is not None:
             X = X.to(device)
-            T = T.to(device)
+            if T is not None:
+                T = T.to(device)
             padding_mask = padding_mask.to(device)
         return X, T, padding_mask
 
@@ -192,29 +210,39 @@ class TimeSeriesRegressor(NeuralNetwork):
     def _tensor_to_y(self, tensor: torch.Tensor) -> pd.DataFrame:
         return tensor_to_dataframe(tensor, self.targets)
 
-    def predict(self, df_past: pd.DataFrame, df_future: Optional[pd.DataFrame]):
+    def predict(self, past: pd.DataFrame, future: pd.DataFrame):
         self.eval()
-        df_future = df_future.copy()
-        df_future[list(self.targets)] = None
-        indexes = [len(self.inputs) + self.targets.index(x) if x in self.targets else i
-                   for i, x in enumerate(self.inputs)]
-        X_past, T, _ = self._x_to_tensor(df_past, device=self.device)
-        X_future, T_future, _ = self._x_to_tensor(df_future, device=self.device)
-        X = X_past
-        with torch.no_grad():
-            for i in range(X_future.shape[1]):
-                if self.input_normalizer is not None:
-                    X = self.input_normalizer(X, None)
-                if self.positional_encoding is not None:
-                    X = self.positional_encoding(X)
-                if T_future is not None:
-                    T = torch.cat([T, T_future[:, i:i+1, :]], dim=1)
-                    attention_kwargs = {"query_positions": T[:, :-1, :], "key_positions": T[:, 1:, :]}
-                else:
-                    attention_kwargs = {}
-                Y = self.transformer_encoder(self.embedding(X), None, attention_kwargs=attention_kwargs)[:, -1:, :]
-                Y = self.head(Y)
-                if self.target_normalizer is not None:
-                    Y = self.target_normalizer.unscale(Y)
-                Y = torch.cat([X_future[:, i:i+1, :], Y], dim=2)[..., indexes]
-                X = torch.cat([X, Y], dim=1)
+        dfs = []
+        for obs in future[self.observation_column].unique():
+            df_past = past[past[self.observation_column] == obs]
+            df_future = future[future[self.observation_column] == obs]
+            df_future = df_future.copy()
+            df_future[list(self.targets)] = None
+            indexes = [len(self.inputs) + self.targets.index(x) if x in self.targets else i
+                    for i, x in enumerate(self.inputs)]
+            X_past, T, _ = self._x_to_tensor(df_past, device=self.device)
+            X_future, T_future, _ = self._x_to_tensor(df_future, device=self.device)
+            X = X_past
+            with torch.no_grad():
+                for i in range(X_future.shape[1]):
+                    if self.input_normalizer is not None:
+                        X = self.input_normalizer(X, None)
+                    if self.positional_encoding is not None:
+                        X = self.positional_encoding(X)
+                    if T_future is not None:
+                        T = torch.cat([T, T_future[:, i:i+1, :]], dim=1)
+                        attention_kwargs = {"query_positions": T[:, :-1, :], "key_positions": T[:, 1:, :]}
+                    else:
+                        attention_kwargs = {}
+                    Y = self.transformer_encoder(self.embedding(X), None, attention_kwargs=attention_kwargs)[:, -1:, :]
+                    Y = self.head(Y)
+                    if self.target_normalizer is not None:
+                        Y = self.target_normalizer.unscale(Y)
+                    Y = torch.cat([X_future[:, i:i+1, :], Y], dim=2)[..., indexes]
+                    X = torch.cat([X, Y], dim=1)
+            df = pd.DataFrame(data=X.squeeze(0).detach().cpu().numpy()[len(df_past):], columns=self.targets)
+            df[self.observation_column] = obs
+            if T_future is not None:
+                df[self.time_column] = T_future.squeeze(0).detach().cpu().numpy().reshape(-1)
+            dfs.append(df)
+        return pd.concat(dfs)
