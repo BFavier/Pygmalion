@@ -1,6 +1,6 @@
 import torch
 import pandas as pd
-import numpy as np
+from warnings import warn
 from typing import Union, Optional, Iterable
 from .layers.transformers import TransformerEncoder, ATTENTION_TYPE, FourrierKernelAttention
 from .layers.positional_encoding import POSITIONAL_ENCODING_TYPE
@@ -19,7 +19,7 @@ class TimeSeriesRegressor(NeuralNetwork):
                  dropout: Union[float, None] = None,
                  normalize: bool = True,
                  std_noise: float = 0.,
-                 mask_n_firsts: int = 1,
+                 n_min_points: int = 1,
                  gradient_checkpointing: bool = True,
                  positional_encoding_type: Optional[POSITIONAL_ENCODING_TYPE] = None,
                  positional_encoding_kwargs: dict={},
@@ -51,8 +51,8 @@ class TimeSeriesRegressor(NeuralNetwork):
         std_noise : float
             Standard deviation of normaly distribued noise with zero mean
             added to input during training.
-        mask_n_firsts : int
-            Number of initial points ignored in the loss during training.
+        n_min_points : int
+            Minimum number of points as initial condition to be able to make a prediction.
             Must be at least 1.
         gradient_checkpointing : bool
             If True, uses gradient checkpointing to reduce memory usage during
@@ -72,7 +72,7 @@ class TimeSeriesRegressor(NeuralNetwork):
         self.observation_column = observation_column
         self.time_column = str(time_column) if time_column is not None else None
         self.std_noise = std_noise
-        self.mask_n_firsts = mask_n_firsts
+        self.n_min_points = n_min_points
         embedding_dim = projection_dim*n_heads
         self.input_normalizer = Normalizer(-1, len(inputs)) if normalize else None
         self.target_normalizer = Normalizer(-1, len(targets)) if normalize else None
@@ -154,7 +154,7 @@ class TimeSeriesRegressor(NeuralNetwork):
         target = y_target[:, 1:, :] - y_target[:, :-1, :]
         if self.target_normalizer is not None:
             target = self.target_normalizer(target, padding_mask[:, :-1] if padding_mask is not None else None)
-        masked = (torch.arange(L).unsqueeze(0) >= self.mask_n_firsts)
+        masked = (torch.arange(L).unsqueeze(0) >= self.n_min_points)
         if padding_mask is not None:
             masked = masked * ~padding_mask
         if weights is not None:
@@ -220,6 +220,8 @@ class TimeSeriesRegressor(NeuralNetwork):
         dfs = []
         for obs in future[self.observation_column].unique():
             df_past = past[past[self.observation_column] == obs]
+            if len(df_past) < self.n_min_points:
+                warn(f"Tried predicting time series from an initial condition of less than n_min_points={self.n_min_points} points for observation {obs}")
             df_future = future[future[self.observation_column] == obs]
             df_future = df_future.copy()
             df_future[list(self.targets)] = None
