@@ -7,7 +7,7 @@ from .layers.positional_encoding import POSITIONAL_ENCODING_TYPE
 from .layers import Dropout, Normalizer
 from ._conversions import named_to_tensor, tensor_to_dataframe
 from ._neural_network import NeuralNetwork
-from ._loss_functions import MSE
+from ._loss_functions import RMSE
 
 
 class TimeSeriesRegressor(NeuralNetwork):
@@ -142,19 +142,24 @@ class TimeSeriesRegressor(NeuralNetwork):
         x, y_target = x.to(self.device), y_target.to(self.device)
         if t is not None:
             t = t.to(self.device)
-        noise = torch.normal(torch.zeros((N, L-1, D), device=x.device),
-                             torch.full((N, L-1, D), self.std_noise, device=x.device))
-        y_pred = self(x[:, :-1, :]+noise, t[:, :-1] if t is not None else None,
+        if self.training:
+            noise = torch.normal(torch.zeros((N, L-1, D), device=x.device),
+                                torch.full((N, L-1, D), self.std_noise, device=x.device))
+        else:
+            noise = 0.
+        y_pred = self(x[:, :-1, :]+noise,
+                      t[:, :-1] if t is not None else None,
                       t[:, 1:] if t is not None else None,
                       padding_mask[:, :-1] if padding_mask is not None else None)
+        target = y_target[:, 1:, :] - y_target[:, :-1, :]
         if self.target_normalizer is not None:
-            y_target = self.target_normalizer(y_target, padding_mask)
+            target = self.target_normalizer(target, padding_mask[:, :-1] if padding_mask is not None else None)
         masked = (torch.arange(L).unsqueeze(0) >= self.mask_n_firsts)
         if padding_mask is not None:
             masked = masked * ~padding_mask
         if weights is not None:
             masked = masked * weights
-        return MSE(y_pred, y_target[:, 1:, :], masked[:, 1:].unsqueeze(-1))
+        return RMSE(y_pred, target, masked[:, 1:].unsqueeze(-1))
 
     @property
     def device(self) -> torch.device:
@@ -225,19 +230,22 @@ class TimeSeriesRegressor(NeuralNetwork):
             X = X_past
             with torch.no_grad():
                 for i in range(X_future.shape[1]):
+                    x = X
                     if self.input_normalizer is not None:
-                        X = self.input_normalizer(X, None)
+                        x = self.input_normalizer(x, None)
+                    x = self.embedding(x)
                     if self.positional_encoding is not None:
-                        X = self.positional_encoding(X)
+                        x = self.positional_encoding(x)
                     if T_future is not None:
                         T = torch.cat([T, T_future[:, i:i+1, :]], dim=1)
                         attention_kwargs = {"query_positions": T[:, :-1, :], "key_positions": T[:, 1:, :]}
                     else:
                         attention_kwargs = {}
-                    Y = self.transformer_encoder(self.embedding(X), None, attention_kwargs=attention_kwargs)[:, -1:, :]
+                    Y = self.transformer_encoder(x, None, attention_kwargs=attention_kwargs)[:, -1:, :]
                     Y = self.head(Y)
                     if self.target_normalizer is not None:
                         Y = self.target_normalizer.unscale(Y)
+                    Y = Y + X[:, -1:, :]
                     Y = torch.cat([X_future[:, i:i+1, :], Y], dim=2)[..., indexes]
                     X = torch.cat([X, Y], dim=1)
             df = pd.DataFrame(data=X.squeeze(0).detach().cpu().numpy()[len(df_past):], columns=self.targets)
