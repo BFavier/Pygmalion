@@ -5,7 +5,7 @@ import pandas as pd
 class OrbitalTrajectoryGenerator:
 
     def __init__(self, n_batches: int, batch_size: int, T: np.ndarray=np.linspace(0.0, 5.0, 501),
-                 dt_min: float=0., tol: float=1.0E-6, verbose: bool=False):
+                 dt_min: float=0., tol: float=1.0E-10, verbose: bool=False):
         """
         Parameters
         ----------
