@@ -6,7 +6,7 @@ import time
 
 N_OBJECTS = 100
 t0 = time.perf_counter()
-df = OrbitalTrajectoryGenerator.generate_batch(batch_size=N_OBJECTS, dt_min=0., tol=1.0E-6)
+df = OrbitalTrajectoryGenerator.generate_batch(batch_size=N_OBJECTS, dt_min=0., tol=1.0E-5)
 t1 = time.perf_counter()
 print(f"Execution time: {t1-t0:.3g} seconds")
 

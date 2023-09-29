@@ -4,8 +4,8 @@ import pandas as pd
 
 class OrbitalTrajectoryGenerator:
 
-    def __init__(self, n_batches: int, batch_size: int, T: float=5.0,
-                 dt: float=1.0E-2, dt_min: float=0., tol: float=1.0E-6, verbose: bool=False):
+    def __init__(self, n_batches: int, batch_size: int, T: np.ndarray=np.linspace(0.0, 5.0, 501),
+                 dt_min: float=0., tol: float=1.0E-6, verbose: bool=False):
         """
         Parameters
         ----------
@@ -13,10 +13,8 @@ class OrbitalTrajectoryGenerator:
             number of batches to yield in an interation
         batch_size : int
             number of objects orbital trajectory to generate each batch
-        T : float
-            time duration of the generated orbits
-        dt : float
-            time steps of the trajectory snapshots
+        T : np.ndarray
+            array of interpolation times of shape (n_times,)
         dt_min : float
             minimum time step during integration
         tol : float
@@ -27,17 +25,16 @@ class OrbitalTrajectoryGenerator:
         self.n_batches = n_batches
         self.batch_size = batch_size
         self.T = T
-        self.dt = dt
         self.dt_min = dt_min
         self.tol = tol
         self.verbose = verbose
 
     def __iter__(self):
         for _ in range(self.n_batches):
-            yield self.generate_batch(self.batch_size, self.T, self.dt, self.dt_min, self.tol, self.verbose)
+            yield self.generate_batch(self.batch_size, self.T, self.dt_min, self.tol, self.verbose)
 
     @staticmethod
-    def generate_batch(batch_size: int, T: float=5.0, dt: float=1.0E-2,
+    def generate_batch(batch_size: int, T: np.ndarray=np.linspace(0.0, 5.0, 501),
                        dt_min: float=0., tol=1.0E-6, verbose: bool=False):
         """
         Generates a single batch of trajectories
@@ -51,17 +48,8 @@ class OrbitalTrajectoryGenerator:
         rot = np.stack([np.cos(theta), -np.sin(theta)], axis=1)
         V = np.maximum(1.0, np.random.normal(0.4, 1.2, size=(batch_size, 1)) * escape_velocity) * rot
         y0 = np.concatenate([X, V], axis=-1)
-        df = OrbitalTrajectoryGenerator.runge_kutta_fehlberg(y0, T, dt, dt_min, tol, verbose)
-        # filter points out of bounds
-        filtered = []
-        for obj, sub in df.groupby("obj"):
-            out_of_bounds = (sub[["x", "y"]].abs() > 3).any(axis=1) | (sub[["u", "v"]].abs() > 10).any(axis=1)
-            if out_of_bounds.any():
-                i = out_of_bounds.argmax()
-                filtered.append(sub.iloc[:i])
-            else:
-                filtered.append(sub)
-        df = pd.concat(filtered)
+        df = OrbitalTrajectoryGenerator.runge_kutta_fehlberg(y0, T, dt_min, tol, verbose)
+        df["obj"] = df["obj"].astype(int)
         return df
 
     @staticmethod
@@ -86,7 +74,7 @@ class OrbitalTrajectoryGenerator:
         return np.concatenate([V, GM/(r**2) * -ur], axis=-1)
     
     @staticmethod
-    def runge_kutta_fehlberg(y0: np.ndarray, T: float, dt: float, dt_min: float, tol: float, verbose: bool) -> pd.DataFrame:
+    def runge_kutta_fehlberg(y0: np.ndarray, T: np.ndarray, dt_min: float, tol: float, verbose: bool) -> pd.DataFrame:
         """
         Perform dynamic time step integration of the problem using runge kutta fehlberg method.
         This is to avoid adding scipy.integrate.ode as a dependency.
@@ -100,51 +88,43 @@ class OrbitalTrajectoryGenerator:
         y0 : np.ndarray
             initial conditions of (x, y, u, v)
             array of floats of shape (n_objects, 4)
-        T : float
-            integration time
-        dt : float
-            maximum time step, and final interpolated time steps
+        T : np.ndarray
+            array of interpolation times of shape (n_times,)
         dt_min : float
             minimum time step
         tol : float
-            maximum tolerated error per second of integration
-        
+            maximum tolerated order of magnitude of error per second of integration
+
         Returns
         -------
         pd.DataFrame :
             dataframe containing the (x, y, u, v) at each time 't', for each object 'obj'
         """
+        n_obj, _ = y0.shape
         dydt = OrbitalTrajectoryGenerator.derivatives
-        y, t, h = y0, 0., dt
-        parameters = [y]
-        times = [t]
-        while t < T:
-            k1 = dydt(y)
-            k2 = dydt(y + h/4 * k1)
-            k3 = dydt(y + h*3/32 * k1 + h*9/32 * k2)
-            k4 = dydt(y + h*1932/2197 * k1 + h*-7200/2197 * k2 + h*7296/2197 * k3)
-            k5 = dydt(y + h*439/216 * k1 + h*-8 * k2 + h*3680/513 * k3 + h*-845/4104 * k4)
-            k6 = dydt(y + h*-8/27 * k1 + h*2 * k2 + h*-3544/2565 * k3 + h*1859/4104 * k4 + h*-11/40 * k5)
-            RK5 = (16/135*k1 + 6656/12825*k3 + 28561/56430*k4 - 9/50*k5 + 2/55*k6)
-            RK4 = (25/216*k1 + 1408/2565*k3 + 2197/4104*k4 - 1/5*k5)
-            error = np.max(np.abs(RK4 - RK5))
-            h = h * (tol / (2*error))**(1/5)
-            if error > tol or h == dt_min:
-                continue
-            elif verbose:
-                print(f"t={t:.3g}, Δt={h:.3g}, error={error:.3g}")
-            h = max(dt_min, min(h, dt))
-            t += h
-            y = y + h*RK5
-            parameters.append(y)
-            times.append(t)
-        times = np.array(times)
-        interp_times = np.arange(0, T+dt, dt)
-        interp = [np.stack([np.interp(interp_times, times, p) for p in obj.T], axis=1)
-                  for obj in np.stack(parameters, axis=1)]
-        interp_times = np.concatenate([interp_times]*len(interp))
-        data = np.concatenate([np.concatenate(interp, axis=0), interp_times[:, None]], axis=1)
-        objects = np.concatenate([np.full((len(_),), i, dtype=np.int64) for i, _ in enumerate(interp)])
-        df = pd.DataFrame(data=data, columns=["x", "y", "u", "v", "t"])
-        df["obj"] = objects
+        y, t, h = y0, T[0], (T[1] - T[0])
+        obj = np.arange(n_obj)[:, None]
+        data = [np.concatenate([obj, y0], axis=1)]
+        for t_next in T[1:]:
+            while t < t_next:
+                k1 = dydt(y)
+                k2 = dydt(y + h/4 * k1)
+                k3 = dydt(y + h*3/32 * k1 + h*9/32 * k2)
+                k4 = dydt(y + h*1932/2197 * k1 + h*-7200/2197 * k2 + h*7296/2197 * k3)
+                k5 = dydt(y + h*439/216 * k1 + h*-8 * k2 + h*3680/513 * k3 + h*-845/4104 * k4)
+                k6 = dydt(y + h*-8/27 * k1 + h*2 * k2 + h*-3544/2565 * k3 + h*1859/4104 * k4 + h*-11/40 * k5)
+                RK5 = (16/135*k1 + 6656/12825*k3 + 28561/56430*k4 - 9/50*k5 + 2/55*k6)
+                RK4 = (25/216*k1 + 1408/2565*k3 + 2197/4104*k4 - 1/5*k5)
+                error = np.max(np.abs(RK4 - RK5))
+                h = h * (tol / (2*error))**(1/5)
+                if error > tol or h == dt_min:
+                    continue
+                elif verbose:
+                    print(f"t={t:.3g}, Δt={h:.3g}, error={error:.3g}")
+                h = min(max(dt_min, h), t_next-t)
+                t += h
+                y = y + h*RK5
+            data.append(np.concatenate([obj, y], axis=1))
+        data = np.concatenate([np.stack(data, axis=1), np.repeat(T[None, :, None], n_obj, axis=0)], axis=-1)
+        df = pd.DataFrame(data=data.reshape(-1, 6), columns=["obj", "x", "y", "u", "v", "t"])
         return df
