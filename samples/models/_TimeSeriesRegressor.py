@@ -24,7 +24,7 @@ model.to(DEVICE)
 class Batchifyer:
 
     def __init__(self, n_batches: int, batch_size: int):
-        self.data_generator = OrbitalTrajectoryGenerator(n_batches=n_batches, batch_size=batch_size, tol=1.0E-6)
+        self.data_generator = OrbitalTrajectoryGenerator(n_batches=n_batches, batch_size=batch_size, dt_min=1.0E-6, tol=1.0E-6)
 
     def __iter__(self):
         for batch in self.data_generator:
@@ -37,7 +37,7 @@ class Batchifyer:
                     filtered.append(sub.iloc[:i])
                 else:
                     filtered.append(sub)
-            df = pd.concat(filtered)
+            batch = pd.concat(filtered)
             yield model.data_to_tensor(batch)
     
     def get_batch(self):

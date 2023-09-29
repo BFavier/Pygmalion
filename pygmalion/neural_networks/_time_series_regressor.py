@@ -128,13 +128,13 @@ class TimeSeriesRegressor(NeuralNetwork):
         Parameters
         ----------
         x : torch.Tensor
-            tensor of floats of shape (N, L, D)
+            tensor of floats of shape (N, L, D) of inputs at each time step
         t : torch.Tensor or None
             if provided, the time as a tensor of floats of shape (N, L)
         padding_mask : torch.Tensor or None
             tensor of booleans of shape (N, L)
         y_target : torch.Tensor
-            tensor of floats of shape (N, L, D)
+            tensor of floats of shape (N, L, D) of targets at each time step
         """
         N, L, D = x.shape
         x, y_target = x.to(self.device), y_target.to(self.device)
@@ -144,7 +144,9 @@ class TimeSeriesRegressor(NeuralNetwork):
                       t[:, :-1] if t is not None else None,
                       t[:, 1:] if t is not None else None,
                       padding_mask[:, :-1] if padding_mask is not None else None)
-        target = y_target[:, 1:, :]
+        referential = torch.cat([x[:, :-1, :], torch.zeros((N, L-1, 1), device=self.device)], dim=-1)  # value of the target at previous time step, if the target is in the inputs, otherwise 0
+        index = [self.inputs.index(c) if c in self.inputs else -1 for c in self.targets]
+        target = y_target[:, 1:, :] - referential[..., index]
         if self.target_normalizer is not None:
             target = self.target_normalizer(target, padding_mask[:, :-1] if padding_mask is not None else None)
         masked = (torch.arange(L).unsqueeze(0) >= self.n_min_points)
@@ -217,7 +219,7 @@ class TimeSeriesRegressor(NeuralNetwork):
                 warn(f"Tried predicting time series from an initial condition of less than n_min_points={self.n_min_points} points for observation {obs}")
             df_future = future[future[self.observation_column] == obs]
             df_future = df_future.copy()
-            # df_future[list(self.targets)] = None
+            df_future[list(self.targets)] = None
             input_indexes = [len(self.inputs) + self.targets.index(x) if x in self.targets else i
                              for i, x in enumerate(self.inputs)]  # index of the newly predicted model inputs in the concatenation of input and prediction
             X_past, T, _ = self._x_to_tensor(df_past, device=self.device)
@@ -242,7 +244,11 @@ class TimeSeriesRegressor(NeuralNetwork):
                     Y = self.head(Y)
                     if self.target_normalizer is not None:
                         Y = self.target_normalizer.unscale(Y)
-                    # Y = Y + X[:, -1:, :]
+                    # adding predicted difference to previous time step values
+                    referential = torch.cat([X[:, -1:, :], torch.zeros((1, 1, 1), device=self.device)], dim=-1)  # value of the target at previous time step, if the target is in the inputs, otherwise 0
+                    index = [self.inputs.index(c) if c in self.inputs else -1 for c in self.targets]
+                    Y = Y + referential[..., index]
+                    # append to predictions and inputs
                     predictions = torch.cat([predictions, Y.squeeze(0)], dim=0)
                     new_inputs = torch.cat([X_future[:, i:i+1, :], Y], dim=2)[..., input_indexes]
                     X = torch.cat([X, new_inputs], dim=1)
