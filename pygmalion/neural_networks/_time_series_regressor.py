@@ -144,7 +144,9 @@ class TimeSeriesRegressor(NeuralNetwork):
                       T[:, :-1] if T is not None else None,
                       T[:, 1:] if T is not None else None,
                       padding_mask[:, :-1] if padding_mask is not None else None)
-        target = Y_target[:, 1:, :] - Y_target[:, :-1, :]
+        referential = torch.cat([X[:, :-1, :], torch.zeros((N, L-1, 1), device=self.device)], dim=-1)  # value of the target at previous time step, if the target is in the inputs, otherwise 0
+        index = [self.inputs.index(c) if c in self.inputs else -1 for c in self.targets]
+        target = Y_target[:, 1:, :] - referential[..., index]
         if self.target_normalizer is not None:
             target = self.target_normalizer(target, padding_mask[:, :-1] if padding_mask is not None else None)
         masked = (torch.arange(L).unsqueeze(0) >= self.n_min_points)
