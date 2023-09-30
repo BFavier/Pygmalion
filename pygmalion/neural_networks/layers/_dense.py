@@ -10,8 +10,9 @@ class Dense(torch.nn.Module):
     """
 
     def __init__(self, in_features: int, out_features: int,
-                 normalize: bool, activation: Union[str, Callable],
-                 dropout: Optional[float]):
+                 normalize: bool=True,
+                 activation: Union[str, Callable]=torch.relu,
+                 dropout: Optional[float]=None):
         """
         Parameters
         ----------

@@ -93,13 +93,13 @@ class TimeSeriesRegressor(NeuralNetwork):
         Parameters
         ----------
         X : torch.Tensor
-            tensor of floats of shape (N, L, D)
+            tensor of floats of shape (N, L, D) of properties at current time step
         T : torch.Tensor or None
-            tensor of floats of shape (N, L)
+            tensor of floats of shape (N, L) of time at current time step
         T_next : torch.Tensor or None
-            tensor of floats of shape (N, L)
+            tensor of floats of shape (N, L) of time at nexst time step
         padding_mask : torch.Tensor or None
-            tensor of booleans of shape (N, L)
+            tensor of booleans of shape (N, L) of whether the current time step is padding
 
         Returns
         -------
@@ -122,8 +122,8 @@ class TimeSeriesRegressor(NeuralNetwork):
         X = self.transformer_encoder(X, padding_mask, attention_kwargs=attention_kwargs)
         return self.head(X)
 
-    def loss(self, x: torch.Tensor, t: Optional[torch.Tensor], padding_mask: Optional[torch.Tensor],
-             y_target: torch.Tensor, weights: Optional[torch.Tensor]=None):
+    def loss(self, X: torch.Tensor, T: Optional[torch.Tensor], padding_mask: Optional[torch.Tensor],
+             Y_target: torch.Tensor, weights: Optional[torch.Tensor]=None):
         """
         Parameters
         ----------
@@ -136,17 +136,15 @@ class TimeSeriesRegressor(NeuralNetwork):
         y_target : torch.Tensor
             tensor of floats of shape (N, L, D) of targets at each time step
         """
-        N, L, D = x.shape
-        x, y_target = x.to(self.device), y_target.to(self.device)
-        if t is not None:
-            t = t.to(self.device)
-        y_pred = self(x[:, :-1, :],
-                      t[:, :-1] if t is not None else None,
-                      t[:, 1:] if t is not None else None,
+        N, L, D = X.shape
+        X, Y_target = X.to(self.device), Y_target.to(self.device)
+        if T is not None:
+            T = T.to(self.device)
+        y_pred = self(X[:, :-1, :],
+                      T[:, :-1] if T is not None else None,
+                      T[:, 1:] if T is not None else None,
                       padding_mask[:, :-1] if padding_mask is not None else None)
-        referential = torch.cat([x[:, :-1, :], torch.zeros((N, L-1, 1), device=self.device)], dim=-1)  # value of the target at previous time step, if the target is in the inputs, otherwise 0
-        index = [self.inputs.index(c) if c in self.inputs else -1 for c in self.targets]
-        target = y_target[:, 1:, :] - referential[..., index]
+        target = Y_target[:, 1:, :] - Y_target[:, :-1, :]
         if self.target_normalizer is not None:
             target = self.target_normalizer(target, padding_mask[:, :-1] if padding_mask is not None else None)
         masked = (torch.arange(L).unsqueeze(0) >= self.n_min_points)
@@ -228,20 +226,10 @@ class TimeSeriesRegressor(NeuralNetwork):
             predictions = torch.zeros((0, len(self.targets)), device=self.device, dtype=torch.float)
             with torch.no_grad():
                 for i in range(X_future.shape[1]):
-                    x = X
-                    if self.input_normalizer is not None:
-                        x = self.input_normalizer(x, None)
-                    x = self.embedding(x)
-                    if self.positional_encoding is not None:
-                        x = self.positional_encoding(x)
                     if T_future is not None:
                         T = torch.cat([T, T_future[:, i:i+1, :]], dim=1)
-                        t = self.time_normalizer(T) if self.time_normalizer is not None else T
-                        attention_kwargs = {"query_positions": t[:, :-1, :], "key_positions": t[:, 1:, :]}
-                    else:
-                        attention_kwargs = {}
-                    Y = self.transformer_encoder(x, None, attention_kwargs=attention_kwargs)[:, -1:, :]
-                    Y = self.head(Y)
+                    Y = self(X, T[:, :-1] if T is not None else None,
+                             T[:, 1:] if T is not None else None, None)[:, -1:, :]
                     if self.target_normalizer is not None:
                         Y = self.target_normalizer.unscale(Y)
                     # adding predicted difference to previous time step values

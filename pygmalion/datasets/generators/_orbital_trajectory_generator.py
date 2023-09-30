@@ -5,7 +5,7 @@ import pandas as pd
 class OrbitalTrajectoryGenerator:
 
     def __init__(self, n_batches: int, batch_size: int, T: np.ndarray=np.linspace(0.0, 5.0, 501),
-                 dt_min: float=0., tol: float=1.0E-10, verbose: bool=False):
+                 dt_min: float=0., tol: float=1.0E-6, verbose: bool=False):
         """
         Parameters
         ----------
@@ -116,12 +116,11 @@ class OrbitalTrajectoryGenerator:
                 RK5 = (16/135*k1 + 6656/12825*k3 + 28561/56430*k4 - 9/50*k5 + 2/55*k6)
                 RK4 = (25/216*k1 + 1408/2565*k3 + 2197/4104*k4 - 1/5*k5)
                 error = np.max(np.abs(RK4 - RK5))
-                h = h * (tol / (2*error))**(1/5)
-                if error > tol or h == dt_min:
-                    continue
-                elif verbose:
-                    print(f"t={t:.3g}, Δt={h:.3g}, error={error:.3g}")
+                factor = (tol / (2*error))**(1/5)
+                h = h * factor
                 h = min(max(dt_min, h), t_next-t)
+                if verbose:
+                    print(f"t={t:.3g}, Δt={h:.3g}, error={error:.3g}, factor={factor:.3g}", flush=True)
                 t += h
                 y = y + h*RK5
             data.append(np.concatenate([obj, y], axis=1))
