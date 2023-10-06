@@ -1,4 +1,5 @@
 import torch
+from itertools import repeat
 from typing import Optional, List, Tuple, Sequence
 from .multihead_attention import ATTENTION_TYPE, ScaledDotProductAttention
 from ._stages import TransformerEncoderStage, TransformerDecoderStage
@@ -24,7 +25,8 @@ class TransformerEncoder(torch.nn.Module):
                                                        dropout=dropout, activation=activation,
                                                        attention_type=attention_type, mask_future=mask_future, **kwargs))
 
-    def forward(self, X: torch.Tensor, padding_mask: Optional[torch.Tensor] = None, attention_kwargs: dict = {}):
+    def forward(self, X: torch.Tensor, padding_mask: Optional[torch.Tensor] = None,
+                histories: Optional[Tuple[dict]] = None, attention_kwargs: dict = {}):
         """
         Parameter
         ---------
@@ -35,6 +37,8 @@ class TransformerEncoder(torch.nn.Module):
             * D number of features
         padding_mask : torch.tensor or None
             tensor of booleans of shape (N, L) of tokens to ignore
+        histories : tuple of dict, or None
+            history for each stage
         attention_kwargs : dict
             additional kwargs passed to self attention
 
@@ -43,11 +47,13 @@ class TransformerEncoder(torch.nn.Module):
         torch.Tensor
             tensor of shape (N, L, D)
         """
-        for stage in self.stages:
+        if histories is None:
+            histories = repeat(None)
+        for history, stage in zip(histories, self.stages):
             if self.gradient_checkpointing and self.training:
-                X = checkpoint(stage, X, padding_mask, attention_kwargs)
+                X = checkpoint(stage, X, padding_mask, history, attention_kwargs)
             else:
-                X = stage(X, padding_mask, attention_kwargs)
+                X = stage(X, padding_mask, history, attention_kwargs)
         return X
 
 
@@ -70,7 +76,8 @@ class TransformerDecoder(torch.nn.Module):
                                                        attention_type=attention_type, **kwargs))
 
     def forward(self, Y: torch.Tensor, encoded: torch.Tensor,
-                encoded_padding_mask: Optional[torch.Tensor] = None):
+                encoded_padding_mask: Optional[torch.Tensor] = None,
+                histories: Optional[Tuple[dict]] = None):
         """
         Parameter
         ---------
@@ -80,17 +87,21 @@ class TransformerDecoder(torch.nn.Module):
             Tensor of shape (N, Lk, D)
         encoded_padding_mask : torch.Tensor or None
             mask of shape (N, Lk)
+        histories : tuple of dict, or None
+            history for each stage
 
         Returns
         -------
         torch.Tensor
             tensor of shape (N, L, D)
         """
-        for stage in self.stages:
+        if histories is None:
+            histories = repeat(None)
+        for history, stage in zip(histories, self.stages):
             if self.gradient_checkpointing and self.training:
-                Y = checkpoint(stage, Y, encoded, encoded_padding_mask)
+                Y = checkpoint(stage, Y, encoded, encoded_padding_mask, history)
             else:
-                Y = stage(Y, encoded, encoded_padding_mask)
+                Y = stage(Y, encoded, encoded_padding_mask, history)
         return Y
 
     def predict(self, intermediate: List[torch.Tensor],

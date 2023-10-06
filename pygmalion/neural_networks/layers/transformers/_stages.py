@@ -26,6 +26,7 @@ class TransformerEncoderStage(torch.nn.Module):
 
     def forward(self, X: torch.Tensor,
                 padding_mask: Optional[torch.Tensor] = None,
+                history: Optional[dict] = None,
                 attention_kwargs: dict = {}):
         """
         Parameter
@@ -37,6 +38,8 @@ class TransformerEncoderStage(torch.nn.Module):
             * D number of features
         padding_mask : torch.tensor or None
             tensor of booleans of shape (N, L) of tokens to ignore
+        history : dict
+            historized tensors to prepend to Y for keys of self attention
         attention_kwargs : dict
             kwargs passed to self_attention
 
@@ -48,7 +51,18 @@ class TransformerEncoderStage(torch.nn.Module):
         X = X.to(self.device)
         N, L, _ = X.shape
         input = X.reshape(N * L, -1)
-        X = self.self_attention(X, X, padding_mask, padding_mask, **attention_kwargs).reshape(N * L, -1)
+        if history is not None:
+            K = history.get("keys")
+            if K is not None:
+                future_offset = K.shape[1]
+                K = torch.cat([K.to(X.device), X], dim=1)
+                if padding_mask is not None:
+                    padding_mask = torch.cat([torch.zeros((N, future_offset), device=padding_mask.device)], dim=1)
+            history["keys"] = K
+        else:
+            K = X
+            future_offset = 0
+        X = self.self_attention(X, K, padding_mask, padding_mask, future_offset=future_offset, **attention_kwargs).reshape(N * L, -1)
         X = self.intermediate_dropout(X) + input
         X = self.intermediate_norm(X)
         input = X
@@ -85,8 +99,9 @@ class TransformerDecoderStage(torch.nn.Module):
         self.out_dropout = Dropout(dropout)
         self.out_norm = torch.nn.LayerNorm(dim)
 
-    def forward(self, Y, encoded,
-                encoded_padding_mask: Optional[torch.Tensor] = None):
+    def forward(self, Y: torch.Tensor, encoded: torch.Tensor,
+                encoded_padding_mask: Optional[torch.Tensor] = None,
+                history: Optional[dict] = None):
         """
         Parameter
         ---------
@@ -96,6 +111,8 @@ class TransformerDecoderStage(torch.nn.Module):
             Tensor of shape (N, Lk, D)
         encoded_padding_mask : torch.Tensor or None
             mask of shape (N, Lk)
+        history : dict
+            historized tensors to prepend to Y for keys of self attention
 
         Returns
         -------
@@ -106,12 +123,21 @@ class TransformerDecoderStage(torch.nn.Module):
         Y = Y.to(self.device)
         N, L, _ = Y.shape
         input = Y.reshape(N * L, -1)
-        Y = self.masked_self_attention(Y, Y).reshape(N * L, -1)
+        if history is not None:
+            K = history.get("keys")
+            if K is not None:
+                future_offset = K.shape[1]
+                K = torch.cat([K.to(Y.device), Y], dim=1)
+            history["keys"] = K
+        else:
+            K = Y
+            future_offset = 0
+        Y = self.masked_self_attention(Y, K, future_offset=future_offset).reshape(N * L, -1)
         Y = self.first_dropout(Y)
         Y = self.first_norm(Y + input).reshape(N, L, -1)
         input = Y.reshape(N * L, -1)
         Y = self.attention(Y, encoded, query_mask=None,
-                           key_mask=encoded_padding_mask).reshape(N * L, -1)
+                           key_mask=encoded_padding_mask, future_offset=future_offset).reshape(N * L, -1)
         Y = self.second_dropout(Y)
         Y = self.second_norm(Y + input)
         input = Y
