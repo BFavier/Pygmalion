@@ -152,7 +152,8 @@ class TextTranslator(NeuralNetwork):
         N, L = Y.shape
         Y = self.embedding_output(Y)
         if self.positional_encoding_output is not None:
-            Y = self.positional_encoding_output(Y)
+            offset = history[0].get("query_offset", 0) if history is not None else 0
+            Y = self.positional_encoding_output(Y, offset=offset)
         Y = self.dropout_output(Y.reshape(N*L, -1)).reshape(N, L, -1)
         Y = self.transformer_decoder(Y, encoded, encoded_padding_mask, history)
         return self.head(Y)
@@ -242,7 +243,7 @@ class TextTranslator(NeuralNetwork):
     #         translations = [self.tokenizer_output.decode(p.cpu().tolist()) for p in predicted]
     #         return translations
 
-    def predict(self, sequence: str, max_tokens: Optional[int] = None, n_beams: int = 1) -> List[str]:
+    def predict(self, string: str, max_tokens: Optional[int] = None, n_beams: int = 1) -> List[str]:
         """
         Predict a translation for the given sequence using beam search,
         outputing at most 'max_tokens' tokens.
@@ -250,7 +251,7 @@ class TextTranslator(NeuralNetwork):
         self.eval()
         with torch.no_grad():
             # encode input
-            X = self._x_to_tensor([sequence], self.device, raise_on_longer_sequences=True)
+            X = self._x_to_tensor([string], self.device, raise_on_longer_sequences=True)
             START = self.tokenizer_output.START
             END = self.tokenizer_output.END
             PAD = self.tokenizer_input.PAD
@@ -266,8 +267,10 @@ class TextTranslator(NeuralNetwork):
                                                    encoded, encoded_padding_mask, history), dim=-1))
                                          for sequence, history in zip(sequences, histories)]
                 beam_search(n_beams, sequences, histories, sum_likelyhoods, predicted_likelyhoods)
+                if all(sequence[-1] == END for sequence in sequences):
+                    break
             # get final beams
-            return [self.tokenizer_output.decode(sequence) for sequence in sequences]
+            return [self.tokenizer_output.decode(sequence[1:-1]) for sequence in sequences]
 
 
     def _predict_naive(self, sequences: List[str], max_tokens: Optional[int] = None) -> List[str]:
