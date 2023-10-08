@@ -47,11 +47,11 @@ class FourrierKernelAttention(torch.nn.Module):
         self.scaled = scaled
 
     def forward(self, query: torch.Tensor, key: torch.Tensor,
+                history : Optional[dict] = None,
                 query_mask: Optional[torch.Tensor] = None,
                 key_mask: Optional[torch.Tensor] = None,
                 query_positions: Optional[torch.Tensor] = None,
-                key_positions: Optional[torch.Tensor] = None,
-                future_offset: int=0):
+                key_positions: Optional[torch.Tensor] = None):
         """
         Apply scaled dot product attention to a batch of 'N' sentences pairs,
         with 'H' the number of heads, and 'D' the projection dimension.
@@ -70,10 +70,12 @@ class FourrierKernelAttention(torch.nn.Module):
             tensor of shape (N, Lq, D)
         key : torch.Tensor
             tensor of shape (N, Lk, D)
+        history : dict or None
+            A dict of historized key tensors or None
         query_mask : torch.Tensor or None
             Tensor of booleans of shape (N, Lq)
             or None if tokens should not be masked.
-            Masked queries are set to null vector after transformation.
+            Masked queries are set to 0 vector after transformation.
         key_mask : torch.Tensor or None
             Tensor of booleans of shape (N, Lk)
             or None if tokens should not be masked.
@@ -82,7 +84,7 @@ class FourrierKernelAttention(torch.nn.Module):
             Tensor of query positions of shape (N, Lq, P)
         key_positions : torch.Tensor or None
             Tensor of query positions of shape (N, Lk, P)
-        future_offset : int
+        query_offset : int
             Add the given offset to the query positions for future masking.
             This is intended for evaluation mode, where representation of
             previously generated tokens must not be generated several times.
@@ -95,26 +97,43 @@ class FourrierKernelAttention(torch.nn.Module):
         query, key = query.to(self.device), key.to(self.device)
         N, Lq, _ = query.shape
         N, Lk, _ = key.shape
-        # set default positions
-        if query_positions is None:
-            query_positions = torch.arange(Lq, dtype=query.dtype, device=query.device).reshape(1, Lq, 1).expand(N, -1, self.position_dimension)
-        if key_positions is None:
-            key_positions = torch.arange(Lk, dtype=key.dtype, device=key.device).reshape(1, Lk, 1).expand(N, -1, self.position_dimension)
         # project into 'n_heads' different subspaces
         q = self.kernel_function(self.query(query).reshape(N, Lq, self.n_heads, self.projection_dim))
         k = self.kernel_function(self.key(key).reshape(N, Lk, self.n_heads, self.projection_dim))
         v = self.value(key).reshape(N, Lk, self.n_heads, self.projection_dim)
+        q, k, v = q.transpose(1, 2), k.transpose(1, 2), v.transpose(1, 2)
+        # offset
+        query_offset = 0 if history is None else history.get("query_offset", 0)
+        # get positions
+        if query_positions is None:
+            query_positions = torch.arange(query_offset, Lq+query_offset, dtype=query.dtype, device=query.device).reshape(1, Lq, 1).expand(N, -1, self.position_dimension)
+        if key_positions is None:
+            key_positions = torch.arange(Lk, dtype=key.dtype, device=key.device).reshape(1, Lk, 1).expand(N, -1, self.position_dimension)
         pq = (torch.einsum("nlp, hkp -> nhlk", query_positions, self.position_weight)
               + self.position_bias.reshape(1, self.n_heads, 1, self.projection_dim))
-        pk = torch.einsum("nlp, hkp -> nhlk", query_positions, self.position_weight)
+        pk = torch.einsum("nlp, hkp -> nhlk", key_positions, self.position_weight)
+        # append history to keys and vice versa
+        if history is not None:
+            K = history.get("key")
+            if K is not None:
+                k = torch.cat([K.to(k.device), k], dim=2)
+            V = history.get("value")
+            if V is not None:
+                v = torch.cat([V.to(v.device), v], dim=2)
+            PK = history.get("key_position")
+            if PK is not None:
+                pk = torch.cat([PK.to(pk.device), pk], dim=2)
+            history["key"] = k
+            history["value"] = v
+            history["key_position"] = pk
+            history["query_offset"] = query_offset + q.shape[2]
         # compute attention
-        q, k, v = q.transpose(1, 2), k.transpose(1, 2), v.transpose(1, 2)
-        if self.linear_complexity and (future_offset == 0):
+        if self.linear_complexity:
             attention = self._attention_linear(
-                q, k, v, self.position_coeffs, pq, pk, self.mask_future, key_mask, self.scaled)
+                q, k, v, self.position_coeffs, pq, pk, self.mask_future, key_mask, self.scaled, query_offset)
         else:
             attention = self._attention_naive(
-                q, k, v, self.position_coeffs, pq, pk, self.mask_future, key_mask, self.scaled, future_offset)
+                q, k, v, self.position_coeffs, pq, pk, self.mask_future, key_mask, self.scaled, query_offset)
         attention = attention.transpose(2, 1).reshape(N, Lq, -1)
         # mask queries if needed
         if query_mask is not None:
@@ -129,8 +148,8 @@ class FourrierKernelAttention(torch.nn.Module):
     @staticmethod
     def _attention_linear(q: torch.Tensor, k: torch.Tensor, v: torch.Tensor,
                           position_coeff: torch.Tensor, pq: torch.Tensor, pk: torch.Tensor,
-                          mask_future: bool, key_mask: Optional[torch.Tensor], scaled: bool
-                          ) -> torch.Tensor:
+                          mask_future: bool, key_mask: Optional[torch.Tensor], scaled: bool,
+                          query_offset: int) -> torch.Tensor:
         """
         see self._attention_naive doc's
         """
@@ -138,19 +157,19 @@ class FourrierKernelAttention(torch.nn.Module):
         N, H, Lk, d = k.shape
         if key_mask is not None:
             k = torch.masked_fill(k, key_mask.unsqueeze(1).unsqueeze(-1).expand(-1, H, -1, d).to(k.device), 0.)
-        attention = (FourrierKernelAttention._compute_part(position_coeff, q, pq, k, pk, v, torch.cos, mask_future)
-                     + FourrierKernelAttention._compute_part(position_coeff, q, pq, k, pk, v, torch.sin, mask_future))
+        attention = (FourrierKernelAttention._compute_part(position_coeff, q, pq, k, pk, v, torch.cos, mask_future, query_offset)
+                     + FourrierKernelAttention._compute_part(position_coeff, q, pq, k, pk, v, torch.sin, mask_future, query_offset))
         if scaled:
             unit = torch.ones(N, H, Lk, 1, device=q.device)
-            attention /= (FourrierKernelAttention._compute_part(position_coeff, q, pq, k, pk, unit, torch.cos, mask_future)
-                          + FourrierKernelAttention._compute_part(position_coeff, q, pq, k, pk, unit, torch.sin, mask_future))
+            attention /= (FourrierKernelAttention._compute_part(position_coeff, q, pq, k, pk, unit, torch.cos, mask_future, query_offset)
+                          + FourrierKernelAttention._compute_part(position_coeff, q, pq, k, pk, unit, torch.sin, mask_future, query_offset))
         return attention
 
     @staticmethod
     def _attention_naive(q: torch.Tensor, k: torch.Tensor, v: torch.Tensor,
                          position_coeff: torch.Tensor, pq: torch.Tensor, pk: torch.Tensor,
                          mask_future: bool, key_mask: Optional[torch.Tensor], scaled: bool,
-                         future_offset: int) -> torch.Tensor:
+                         query_offset: int) -> torch.Tensor:
         """
         Parameters
         ----------
@@ -171,7 +190,7 @@ class FourrierKernelAttention(torch.nn.Module):
             in the sequence 
         key_mask : torch.Tensor or None
             tensor of booleans of shape (N, Lk)
-        future_offset : int
+        query_offset : int
             Add the given offset to the query positions for future masking.
             This is intended for evaluation mode, where representation of
             previously generated tokens must not be generated several times.
@@ -190,7 +209,7 @@ class FourrierKernelAttention(torch.nn.Module):
         score = (torch.einsum("nhqd, nhkd, hd, nhqd, nhkd -> nhqk", q, k, position_coeff, cos_pq, cos_pk)
                  + torch.einsum("nhqd, nhkd, hd, nhqd, nhkd -> nhqk", q, k, position_coeff, sin_pq, sin_pk))
         if mask_future:
-            mask = _mask_chronological(Lq, Lk, score.device, future_offset).reshape(1, 1, Lq, Lk)
+            mask = _mask_chronological(Lq, Lk, score.device, query_offset).reshape(1, 1, Lq, Lk)
             score = torch.masked_fill(score, mask, 0)
         if scaled:
             score = score / score.sum(dim=-1).unsqueeze(-1)
@@ -202,7 +221,7 @@ class FourrierKernelAttention(torch.nn.Module):
     @staticmethod
     def _compute_part(c: torch.Tensor, q: torch.Tensor, pq: torch.Tensor,
                       k: torch.Tensor, pk: torch.Tensor, v: torch.Tensor,
-                      cos_sin: Callable, masked: bool) -> torch.Tensor:
+                      cos_sin: Callable, masked: bool, query_offset: int) -> torch.Tensor:
         """
         Compute
         \sum_k (c_k * q_{ik} * cos_sin(pq)_i * \sum_j (k_{jk} * cos_sin(pk)_j * v_{jd}))
@@ -231,10 +250,10 @@ class FourrierKernelAttention(torch.nn.Module):
         N, H, Lk, d = k.shape
         if masked:
             right = torch.einsum("nhjk, nhjk, nhjd -> nhjkd", k, cos_sin(pk), v)
-            right = right[:, :, :Lq, ...]
-            if Lq > Lk:
-                right = torch.cat([right, right[:, :, -1:, ...].expand(-1, -1, Lq-Lk, -1, -1)], dim=2)
+            if Lq+query_offset > Lk:
+                right = torch.cat([right, right[:, :, -1:, ...].expand(-1, -1, Lq+query_offset-Lk, -1, -1)], dim=2)
             right = torch.cumsum(right, dim=2)
+            right = right[:, :, query_offset:Lq+query_offset, ...]
             left = torch.einsum("hk, nhik, nhik, nhikd -> nhid", c, q, cos_sin(pq), right)
         else:
             right = torch.einsum("nhjk, nhjk, nhjd -> nhkd", k, cos_sin(pk), v)

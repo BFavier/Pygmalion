@@ -1,6 +1,6 @@
 import torch
 from typing import Union, Callable, Optional
-from . import Activation, FeaturesNorm, Dropout
+from . import Activation, LayerNorm, Dropout
 
 
 class Dense(torch.nn.Module):
@@ -30,7 +30,7 @@ class Dense(torch.nn.Module):
         super().__init__()
         self.linear = torch.nn.Linear(in_features, out_features)
         if normalize:
-            self.normalization = FeaturesNorm(-1, out_features)
+            self.normalization = LayerNorm(-1, out_features)
         else:
             self.normalization = None
         self.activation = Activation(activation)

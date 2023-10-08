@@ -122,6 +122,28 @@ class TimeSeriesRegressor(NeuralNetwork):
         X = self.transformer_encoder(X, padding_mask, attention_kwargs=attention_kwargs)
         return self.head(X)
 
+    def _predict_tensor(self, X: torch.Tensor, T: Optional[torch.Tensor]) -> torch.Tensor:
+        """
+        """
+        N, L, _ = X.shape
+        input_indexes = [len(self.inputs) + self.targets.index(x) if x in self.targets else i
+                         for i, x in enumerate(self.inputs)]  # index of the newly predicted model inputs in the concatenation of input and prediction
+        X = X[:, :1, :]
+        with torch.no_grad():
+            for i in range(L-1):
+                Y = self(X, T[:, :i+1] if T is not None else None,
+                         T[:, 1:i+2] if T is not None else None, None)[:, -1:, :]
+                if self.target_normalizer is not None:
+                    Y = self.target_normalizer.unscale(Y)
+                # adding predicted difference to previous time step values
+                referential = torch.cat([X[:, -1:, :], torch.zeros((N, 1, 1), device=self.device)], dim=-1)  # value of the target at previous time step, if the target is in the inputs, otherwise 0
+                index = [self.inputs.index(c) if c in self.inputs else -1 for c in self.targets]
+                Y = Y + referential[..., index]
+                # append to inputs
+                new_inputs = torch.cat([X[:, -1:, :], Y], dim=2)[..., input_indexes]
+                X = torch.cat([X, new_inputs], dim=1)
+        return X
+
     def loss(self, X: torch.Tensor, T: Optional[torch.Tensor], padding_mask: Optional[torch.Tensor],
              Y_target: torch.Tensor, weights: Optional[torch.Tensor]=None):
         """
@@ -140,7 +162,13 @@ class TimeSeriesRegressor(NeuralNetwork):
         X, Y_target = X.to(self.device), Y_target.to(self.device)
         if T is not None:
             T = T.to(self.device)
-        y_pred = self(X[:, :-1, :],
+        if self.training:
+            inputs = self._predict_tensor(X, T)
+            weights = None
+        else:
+            inputs = X
+            weights = None
+        y_pred = self(inputs[:, :-1, :],
                       T[:, :-1] if T is not None else None,
                       T[:, 1:] if T is not None else None,
                       padding_mask[:, :-1] if padding_mask is not None else None)
@@ -149,9 +177,9 @@ class TimeSeriesRegressor(NeuralNetwork):
         target = Y_target[:, 1:, :] - referential[..., index]
         if self.target_normalizer is not None:
             target = self.target_normalizer(target, padding_mask[:, :-1] if padding_mask is not None else None)
-        masked = (torch.arange(L).unsqueeze(0) >= self.n_min_points)
+        masked = (torch.arange(L, device=self.device).unsqueeze(0) >= self.n_min_points)
         if padding_mask is not None:
-            masked = masked * ~padding_mask
+            masked = masked * ~padding_mask.to(self.device)
         if weights is not None:
             masked = masked * weights
         return MSE(y_pred, target, masked[:, 1:].unsqueeze(-1))

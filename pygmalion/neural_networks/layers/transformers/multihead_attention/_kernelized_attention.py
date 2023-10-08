@@ -43,9 +43,9 @@ class KernelizedAttention(torch.nn.Module):
         self.scaled = scaled
 
     def forward(self, query: torch.Tensor, key: torch.Tensor,
+                history : Optional[dict] = None,
                 query_mask: Optional[torch.Tensor] = None,
-                key_mask: Optional[torch.Tensor] = None,
-                future_offset: int=0):
+                key_mask: Optional[torch.Tensor] = None):
         """
         Apply scaled dot product attention to a batch of 'N' sentences pairs,
         with 'H' the number of heads, and 'D' the projection dimension.
@@ -64,6 +64,7 @@ class KernelizedAttention(torch.nn.Module):
             tensor of shape (N, Lq, D)
         key : torch.Tensor
             tensor of shape (N, Lk, D)
+        history : 
         query_mask : torch.Tensor or None
             Tensor of booleans of shape (N, Lq)
             or None if padding tokens should not be masked.
@@ -72,10 +73,6 @@ class KernelizedAttention(torch.nn.Module):
             Tensor of booleans of shape (N, Lk)
             or None if padding tokens should not be masked.
             Attention scores to masked keys is set to 0
-        future_offset : int
-            Add the given offset to the query positions for future masking.
-            This is intended for evaluation mode, where representation of
-            previously generated tokens must not be generated several times.
 
         Returns
         -------
@@ -89,14 +86,27 @@ class KernelizedAttention(torch.nn.Module):
         q = self.kernel_function(self.query(query).reshape(N, Lq, self.n_heads, self.projection_dim))
         k = self.kernel_function(self.key(key).reshape(N, Lk, self.n_heads, self.projection_dim))
         v = self.value(key).reshape(N, Lk, self.n_heads, self.projection_dim)
-        # compute attention
         q, k, v = q.transpose(1, 2), k.transpose(1, 2), v.transpose(1, 2)
+        # append history to keys and vice versa
+        query_offset = 0
+        if history is not None:
+            K = history.get("key")
+            if K is not None:
+                k = torch.cat([K.to(k.device), k], dim=2)
+            V = history.get("value")
+            if V is not None:
+                v = torch.cat([V.to(v.device), v], dim=2)
+            query_offset = history.get("query_offset", 0)
+            history["key"] = k
+            history["value"] = v
+            history["query_offset"] = query_offset + q.shape[2]
+        # compute attention
         if self.linear_complexity:
             attention = self._attention_linear(
-                self.kernel_function, q, k, v, self.mask_future, key_mask, self.relative_positional_encoding, self.scaled, future_offset)
+                self.kernel_function, q, k, v, self.mask_future, key_mask, self.relative_positional_encoding, self.scaled, query_offset)
         else:
             attention = self._attention_naive(
-                self.kernel_function, q, k, v, self.mask_future, key_mask, self.relative_positional_encoding, self.scaled, future_offset)
+                self.kernel_function, q, k, v, self.mask_future, key_mask, self.relative_positional_encoding, self.scaled, query_offset)
         attention = attention.transpose(2, 1).reshape(N, Lq, -1)
         # mask queries if needed
         if query_mask is not None:
@@ -113,12 +123,12 @@ class KernelizedAttention(torch.nn.Module):
                           v: torch.Tensor, mask_future: bool,
                           key_mask: Optional[torch.Tensor],
                           RPE: Optional[torch.nn.Embedding],
-                          scaled: bool, future_offset: int = 0) -> torch.Tensor:
+                          scaled: bool, query_offset: int = 0) -> torch.Tensor:
         """
         see self._attention_naive doc
         """
-        if future_offset != 0:
-            raise ValueError("Linear complexity not implemented for 'future_offset' != 0")
+        if query_offset != 0:
+            raise ValueError("Linear complexity not implemented for 'query_offset' != 0")
         q, k = kernel(Q), kernel(K)
         N, H, Lq, _ = q.shape
         N, H, Lk, _ = k.shape
@@ -180,7 +190,7 @@ class KernelizedAttention(torch.nn.Module):
                          v: torch.Tensor, mask_future: bool,
                          key_mask: Optional[torch.Tensor],
                          RPE: Optional[torch.nn.Embedding],
-                         scaled: bool, future_offset: int = 0) -> torch.Tensor:
+                         scaled: bool, query_offset: int = 0) -> torch.Tensor:
         """
         Parameters
         ----------
@@ -202,7 +212,7 @@ class KernelizedAttention(torch.nn.Module):
             tensor of shape (2*R+1, D) or None
         scaled : bool
             if True, the attention scores of any query to all keys sums up to 1
-        future_offset : int
+        query_offset : int
             Add the given offset to the query positions for future masking.
             This is intended for evaluation mode, where representation of
             previously generated tokens must not be generated several times.
@@ -222,11 +232,11 @@ class KernelizedAttention(torch.nn.Module):
             r = RPE.weight.shape[0] // 2
             P = torch.clip(r + torch.arange(Lk, device=score.device).reshape(1, Lk)
                            - torch.arange(Lq, device=score.device).reshape(Lq, 1)
-                           - future_offset,
+                           - query_offset,
                            0, 2*r)
             score = score + torch.einsum("qkd, nhqd -> nhqk", kernel(RPE(P)), q)
         if mask_future:
-            mask = _mask_chronological(Lq, Lk, score.device, future_offset).reshape(1, 1, Lq, Lk)
+            mask = _mask_chronological(Lq, Lk, score.device, query_offset).reshape(1, 1, Lq, Lk)
             score = torch.masked_fill(score, mask, 0)
         if key_mask is not None:
             score = torch.masked_fill(score, key_mask.reshape(N, 1, 1, Lk), 0)

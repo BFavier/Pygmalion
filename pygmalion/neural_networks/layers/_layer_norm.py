@@ -1,9 +1,9 @@
 import torch
 
 
-class FeaturesNorm(torch.nn.Module):
+class LayerNorm(torch.nn.Module):
     """
-    Similar to layer norm but normalize along any given dimension.
+    Similar to torch vanilla layer norm but normalizes along any given dimension.
     Performs normalization of each observation along a given dimension,
     and an optional additional affine transform
     """

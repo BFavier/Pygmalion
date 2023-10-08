@@ -16,7 +16,7 @@ def _align(tensor: torch.Tensor, n: int, dim: int) -> torch.Tensor:
     return tensor
 
 
-def _mask_chronological(Lq: int, Lk: int, device: torch.device, future_offset: int=0) -> torch.Tensor:
+def _mask_chronological(Lq: int, Lk: int, device: torch.device, query_offset: int=0) -> torch.Tensor:
     """
     A mask for transformers attention
 
@@ -28,6 +28,8 @@ def _mask_chronological(Lq: int, Lk: int, device: torch.device, future_offset: i
         the sequence length of keys
     device : torch.device
         the device to store the mask tensor on
+    query_offset : int
+        offset of the query positions
 
     Returns
     -------
@@ -35,7 +37,7 @@ def _mask_chronological(Lq: int, Lk: int, device: torch.device, future_offset: i
         tensor of booleans of shape (Lq, Lk)
     """
     mask = torch.ones(Lq, Lk, dtype=torch.bool, device=device)
-    mask = torch.triu(mask, diagonal=1+future_offset)
+    mask = torch.triu(mask, diagonal=1+query_offset)
     return mask
 
 

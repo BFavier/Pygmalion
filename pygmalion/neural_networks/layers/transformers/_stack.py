@@ -1,6 +1,6 @@
 import torch
 from itertools import repeat
-from typing import Optional, List, Tuple, Sequence
+from typing import Optional, Tuple, Sequence
 from .multihead_attention import ATTENTION_TYPE, ScaledDotProductAttention
 from ._stages import TransformerEncoderStage, TransformerDecoderStage
 from torch.utils.checkpoint import checkpoint
@@ -15,7 +15,7 @@ class TransformerEncoder(torch.nn.Module):
                  dropout: Optional[float] = None, activation: str = "relu",
                  gradient_checkpointing: bool = True,
                  attention_type: ATTENTION_TYPE = ScaledDotProductAttention,
-                 mask_future=False,
+                 mask_future=False, expanding_factor: float = 4.0,
                  **kwargs):
         super().__init__()
         self.stages: Sequence[TransformerEncoderStage] = torch.nn.ModuleList()
@@ -23,7 +23,8 @@ class TransformerEncoder(torch.nn.Module):
         for stage in range(n_stages):
             self.stages.append(TransformerEncoderStage(projection_dim, n_heads,
                                                        dropout=dropout, activation=activation,
-                                                       attention_type=attention_type, mask_future=mask_future, **kwargs))
+                                                       attention_type=attention_type, mask_future=mask_future,
+                                                       expanding_factor=expanding_factor, **kwargs))
 
     def forward(self, X: torch.Tensor, padding_mask: Optional[torch.Tensor] = None,
                 histories: Optional[Tuple[dict]] = None, attention_kwargs: dict = {}):
@@ -49,8 +50,10 @@ class TransformerEncoder(torch.nn.Module):
         """
         if histories is None:
             histories = repeat(None)
+        else:
+            assert len(histories) == len(self.stages)
         for history, stage in zip(histories, self.stages):
-            if self.gradient_checkpointing and self.training:
+            if self.gradient_checkpointing and torch.is_grad_enabled():
                 X = checkpoint(stage, X, padding_mask, history, attention_kwargs)
             else:
                 X = stage(X, padding_mask, history, attention_kwargs)
@@ -66,6 +69,7 @@ class TransformerDecoder(torch.nn.Module):
                  dropout: Optional[float] = None, activation: str = "relu",
                  gradient_checkpointing: bool = True, 
                  attention_type: ATTENTION_TYPE = ScaledDotProductAttention,
+                 expanding_factor: float = 4.0,
                  **kwargs):
         super().__init__()
         self.stages: Sequence[TransformerDecoderStage] = torch.nn.ModuleList()
@@ -73,7 +77,8 @@ class TransformerDecoder(torch.nn.Module):
         for stage in range(n_stages):
             self.stages.append(TransformerDecoderStage(projection_dim, n_heads,
                                                        dropout=dropout, activation=activation,
-                                                       attention_type=attention_type, **kwargs))
+                                                       attention_type=attention_type,
+                                                       expanding_factor=expanding_factor, **kwargs))
 
     def forward(self, Y: torch.Tensor, encoded: torch.Tensor,
                 encoded_padding_mask: Optional[torch.Tensor] = None,
@@ -97,42 +102,11 @@ class TransformerDecoder(torch.nn.Module):
         """
         if histories is None:
             histories = repeat(None)
+        else:
+            assert len(histories) == len(self.stages)
         for history, stage in zip(histories, self.stages):
-            if self.gradient_checkpointing and self.training:
+            if self.gradient_checkpointing and torch.is_grad_enabled():
                 Y = checkpoint(stage, Y, encoded, encoded_padding_mask, history)
             else:
                 Y = stage(Y, encoded, encoded_padding_mask, history)
         return Y
-
-    def predict(self, intermediate: List[torch.Tensor],
-                Q: torch.Tensor, encoded: torch.Tensor,
-                encoded_padding_mask: Optional[torch.Tensor]
-                ) -> Tuple[List[torch.Tensor], torch.Tensor]:
-        """
-        Efficiently predict the next representation of a new predicted vector 'Q',
-        and feed the tensors of previously predicted tensors intermediate
-        representations 'intermediate'.
-
-        Parameter
-        ---------
-        intermediate : torch.Tensor
-            Tensor of shape (N, Lq-1, D)
-        Q : torch.Tensor
-            Tensor of shape (N, 1, D)
-        encoded : torch.Tensor
-            Tensor of shape (N, Lk, D)
-        encoded_padding_mask : torch.Tensor or None
-            mask of shape (N, Lk)
-
-        Returns
-        -------
-        tuple :
-            tuple of updated (intermediate, Q)
-        """
-        assert not self.training
-        new = []
-        for stage, rep in zip(self.stages, intermediate):
-            Y = torch.cat([rep, Q], dim=1)
-            new.append(Y)
-            Q = stage.predict(Y, encoded, encoded_padding_mask)
-        return new, Q

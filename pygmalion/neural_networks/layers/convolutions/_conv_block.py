@@ -1,6 +1,6 @@
 import torch
 from typing import Tuple, Optional
-from pygmalion.neural_networks.layers import Activation, FeaturesNorm, Dropout2d
+from pygmalion.neural_networks.layers import Activation, LayerNorm, Dropout2d
 from ._padded_conv import PaddedConv2d
 
 
@@ -42,7 +42,7 @@ class ConvBlock(torch.nn.Module):
                 features = out_features
             self.layers.append(PaddedConv2d(in_features, features, kernel_size, stride))
             if normalize:
-                self.layers.append(FeaturesNorm(1, features))
+                self.layers.append(LayerNorm(1, features))
             self.layers.append(Activation(activation))
             stride = (1, 1)
             in_features = features
