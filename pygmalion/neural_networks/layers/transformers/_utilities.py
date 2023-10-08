@@ -44,9 +44,3 @@ def _log_exp_kernel(x: torch.Tensor) -> torch.Tensor:
     a default kernel function for kernelized attention
     """
     return torch.log(1 + torch.exp(x))
-
-
-def beam_search() -> torch.Tensor:
-    """
-    """
-    pass

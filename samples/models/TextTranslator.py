@@ -7,6 +7,9 @@ from pygmalion.datasets.generators import RomanNumeralsGenerator
 import IPython
 import matplotlib.pyplot as plt
 
+import os
+os.environ["CUDA_LAUNCH_BLOCKING"] = "1"
+
 DEVICE = "cuda:0" if torch.cuda.device_count() > 0 else "cpu"
 tokenizer = AsciiCharTokenizer()
 model = TextTranslator(tokenizer, tokenizer, n_stages=4, projection_dim=16, n_heads=4,
@@ -31,6 +34,7 @@ train_losses, val_losses, grad, best_step = model.fit(train_data, n_steps=3000, 
 ml.utilities.plot_losses(train_losses, val_losses, grad, best_step)
 plt.show()
 
+model.to("cpu")
 for n in torch.randint(0, 1999, size=(10,)):
-    print(f"{n} >>> {model.predict(f'{n}')}")
+    print(f"{n} >>> {model.predict(f'{n}', max_tokens=100)[0]}")
 IPython.embed()
