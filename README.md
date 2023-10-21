@@ -120,7 +120,7 @@ A DenseClassifier (or multi layer perceptron classifier) predicts a str class va
 
 A ProbabilityDistribution is a multilayer perceptron used to learn the CDF (Cumulated Distribution Function) of tabular data in an unsupervised fashion. Countrary to gaussian mixture models it's PDF (Probability Density Function) is not constrained to beeing positive which makes it a degenerate distribution function. This model is usefull for anomaly detection, or training domain learning.
 
-![distribution predictions](https://raw.githubusercontent.com/BFavier/Pygmalion/main/images/distribution.png)
+![distribution predictions](https://raw.githubusercontent.com/BFavier/Pygmalion/main/images/density.png)
 
 ### **ImageClassifier**
 
