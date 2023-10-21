@@ -164,14 +164,14 @@ A TextClassifier classifies text inputs. It is implemented as a transformer enco
 A TextTranslator model predicts a string outputs for a string inputs. It is implemented as an encoder/decoder transformer. Here below some predictions of a model trained to translate arabic numerals to roman numerals.
 
 ~~~
-402 >>> ['CDII']
-863 >>> ['DCCCLXIII']
-1275 >>> ['MCCLXXV']
-798 >>> ['DCCXCVIII']
-1532 >>> ['MDXXXII']
-223 >>> ['CCXXIII']
-90 >>> ['XC']
-1261 >>> ['MCCLXI']
-1032 >>> ['MXXXII']
-432 >>> ['CDXXXII']
+1411 >>> MCDXI
+1132 >>> MCXXXII
+1354 >>> MCCCLIV
+1469 >>> MCDLXIX
+1290 >>> MCCXC
+1698 >>> MDCXCVIII
+657 >>> DCLVII
+132 >>> CXXXII
+1662 >>> MDCLXII
+1150 >>> MCL
 ~~~
