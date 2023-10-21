@@ -16,16 +16,16 @@ X, Y = np.meshgrid(np.linspace(-1, 1, 100), np.linspace(-1, 1, 100))
 DF = pd.DataFrame(data=np.stack([X.reshape(-1), Y.reshape(-1)], axis=1), columns=["x", "y"])
 CDF = np.cumsum(np.cumsum(pdf(X, Y), axis=1), axis=0)
 
-x, y = (np.random.uniform(-2, 2, size=5000) for _ in range(2))
+x, y = (np.random.uniform(-2, 2, size=10_000) for _ in range(2))
 df = pd.DataFrame(data=np.stack([x, y], axis=1), columns=["x", "y"])
 p = pdf(x, y)
 t = np.random.uniform(0., 1., size=(p.size,))
 df = df[t < p.reshape(-1)]
 
-model = ml.neural_networks.ProbabilityDistribution(["x", "y"], [50, 50])
+model = ml.neural_networks.ProbabilityDistribution(["x", "y"], [150, 50], activation="tanh")
 model.to(DEVICE)
 train_data = model.data_to_tensor(df)
-train_losses, val_losses, grad, best_step = model.fit(train_data, validation_data=None, n_steps=5_000, learning_rate=1.0E-3, keep_best=False)
+train_losses, val_losses, grad, best_step = model.fit(train_data, validation_data=None, n_steps=10_000, learning_rate=1.0E-3, keep_best=False)
 ml.utilities.plot_losses(train_losses, val_losses, grad, best_step, log_scale=True)
 
 
