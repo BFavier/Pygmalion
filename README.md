@@ -116,6 +116,12 @@ A DenseRegressor (or multi layer perceptron regressor) predicts a scalar value g
 
 A DenseClassifier (or multi layer perceptron classifier) predicts a str class value given an input of several variables. An example of DenseClassifier training was presented in a previous section.
 
+### **ProbabilityDistribution**
+
+A ProbabilityDistribution is a multilayer perceptron used to learn the CDF (Cumulated Distribution Function) of tabular data in an unsupervised fashion. Countrary to gaussian mixture models it's PDF (Probability Density Function) is not constrained to beeing positive which makes it a degenerate distribution function. This model is usefull for anomaly detection, or training domain learning.
+
+![distribution predictions](https://raw.githubusercontent.com/BFavier/Pygmalion/main/images/distribution.png)
+
 ### **ImageClassifier**
 
 An ImageClassifier predicts a str class given as input an image. Here below the predictions of a model trained on the fashion-MNIST dataset.
