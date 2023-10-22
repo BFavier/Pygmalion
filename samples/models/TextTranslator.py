@@ -7,9 +7,6 @@ from pygmalion.datasets.generators import RomanNumeralsGenerator
 import IPython
 import matplotlib.pyplot as plt
 
-import os
-os.environ["CUDA_LAUNCH_BLOCKING"] = "1"
-
 DEVICE = "cuda:0" if torch.cuda.device_count() > 0 else "cpu"
 tokenizer = AsciiCharTokenizer()
 model = TextTranslator(tokenizer, tokenizer, n_stages=4, projection_dim=16, n_heads=4,
