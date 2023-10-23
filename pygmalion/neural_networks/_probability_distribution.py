@@ -17,7 +17,7 @@ class ProbabilityDistribution(NeuralNetwork):
     """
 
     def __init__(self, inputs: List[str], hidden_features: list[int],
-                 normalize: bool=False, activation: str = "elu",
+                 normalize: bool=False, activation: str = "tanh",
                  dropout: Optional[float] = None):
         super().__init__()
         self.inputs = list(inputs)
