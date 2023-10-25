@@ -1,7 +1,5 @@
 import pathlib
 import IPython
-import torch
-from typing import Optional
 import pygmalion as ml
 import pygmalion.decision_trees as dt
 import pandas as pd
