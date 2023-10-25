@@ -1,5 +1,5 @@
 from ._decision_tree import DecisionTreeRegressor, DATAFRAME_LIKE
-from typing import List, Iterable, Optional, Union
+from typing import List, Iterable, Optional, Union, Tuple
 from itertools import repeat
 from warnings import warn
 import pandas as pd
@@ -18,7 +18,7 @@ class GradientBoostingClassifier(Model):
         self.inputs = inputs
         self.target = target
         self.classes = classes
-        self.trees = []
+        self.trees: List[Tuple(float, DecisionTreeRegressor)] = []
         self._class_to_index = {c: i for i, c in enumerate(classes)}
 
     def fit(self, data: Union[pd.DataFrame, Iterable[pd.DataFrame]],
@@ -28,6 +28,9 @@ class GradientBoostingClassifier(Model):
             device: torch.device="cpu", dtype: np.dtype=np.float64):
         if isinstance(data, pd.DataFrame):
             data = repeat(data)
+            single_batch = True
+        else:
+            single_batch = False
         if verbose:
             data = tqdm(data, total=n_trees)
         try:
@@ -48,7 +51,11 @@ class GradientBoostingClassifier(Model):
                 else:
                     class_mask = np.zeros((len(self.classes), len(df)), dtype=np.int32)
                     class_mask[class_indexes, np.arange(len(df))] = 1
-                    predicted = self.predict(df, probabilities=True).to_numpy()
+                    if single_batch:
+                        lr, _trees = self.trees[-1]
+                        predicted += lr * np.stack([tree.predict(df) for tree in _trees], axis=1)
+                    else:
+                        predicted = self.predict(df, probabilities=True).to_numpy()
                     targets = class_mask * (1 - predicted.T)
                     for trg in targets:
                         tree = DecisionTreeRegressor(self.inputs, self.target)
@@ -114,3 +121,14 @@ class GradientBoostingClassifier(Model):
         obj.target = dump["target"]
         obj.classes = dump["classes"]
         return obj
+
+    @property
+    def feature_importances(self) -> dict[str: dict]:
+        """
+        Returns a dictionnary of feature importance for each target class and for each input feature
+        """
+        fis = [(lr, [tree.feature_importances for tree in trees]) for lr, trees in self.trees]
+        fi = {c: {k: sum(_fis[i].get(k, 0.) * lr for lr, _fis in fis) for k in self.inputs}
+              for i, c in enumerate(self.classes)}
+        fi = {c: {k: v for k, v in sorted(d.items(), key=lambda item: item[1], reverse=True)} for c, d in fi.items()}
+        return fi

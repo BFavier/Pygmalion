@@ -140,6 +140,21 @@ class DecisionTree(Model):
         obj.target = dump["target"]
         obj.leafs = set(b for b in obj.branches if b.is_leaf)
         return obj
+
+    @property
+    def feature_importances(self) -> dict:
+        """
+        Returns a dictionnary of feature importance for each input feature
+        """
+        fi = {k: 0. for k in self.inputs}
+        branches = [self.root]
+        for branch in self.branches:
+            if branch.gain is not None:
+                fi[branch.variable] += branch.gain
+                branches.append(branch.inferior_or_equal)
+                branches.append(branch.superior)
+        fi = {k: v for k, v in sorted(fi.items(), key=lambda item: item[1], reverse=True)}
+        return fi
     
     def _as_dataframe(self, data: DATAFRAME_LIKE) -> pd.DataFrame:
         """
