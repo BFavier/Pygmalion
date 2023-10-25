@@ -1,4 +1,5 @@
-from typing import List, Dict, Iterable, Optional
+from typing import List, Dict, Iterable, Optional, Union
+from itertools import repeat
 import pandas as pd
 import numpy as np
 from tqdm import tqdm
@@ -17,32 +18,36 @@ class GradientBoostingRegressor(Model):
         """
         self.inputs = inputs
         self.target = target
-        self.trees = []
+        self.trees : List[DecisionTreeRegressor] = []
         self.monotonicity_constraints = monotonicity_constraints
     
-    def fit(self, df: pd.DataFrame, n_trees: int=100, learning_rate: float=0.1,
+    def fit(self, data: Union[pd.DataFrame, Iterable[pd.DataFrame]],
+            n_trees: int=100, learning_rate: float=0.1,
             max_depth: Optional[int]=None, min_leaf_size: int=1,
             max_leaf_count: Optional[int]=None,
             verbose: bool=True, device: torch.device="cpu"):
         """
         """
-        df = df.copy()
-        counter = range(n_trees)
+        if isinstance(data, pd.DataFrame):
+            data = repeat(data)
         if verbose:
-            counter = tqdm(counter)
+            data = tqdm(data, total=n_trees)
         try:
-            for _ in counter:
+            for i, df in enumerate(data):
+                if i >= n_trees:
+                    break
+                df = df.copy()
+                if i > 0:
+                    df[self.target] = df[self.target] - self.predict(df)
                 lr = 1.0 if len(self.trees) == 0 else learning_rate
                 md = 0 if len(self.trees) == 0 else max_depth
                 tree = DecisionTreeRegressor(self.inputs, self.target, self.monotonicity_constraints)
                 tree.fit(df, max_depth=md, min_leaf_size=min_leaf_size,
-                         max_leaf_count=max_leaf_count,
-                         device=device)
+                         max_leaf_count=max_leaf_count, device=device)
                 self.trees.append((lr, tree))
-                df[self.target] -= lr * tree.predict(df)
                 if verbose:
                     RMSE = np.mean(df[self.target]**2)**0.5
-                    counter.set_postfix(**{"train RMSE": f"{RMSE:.3g}"})
+                    data.set_postfix(**{"train RMSE": f"{RMSE:.3g}"})
         except KeyboardInterrupt:
             pass
 
