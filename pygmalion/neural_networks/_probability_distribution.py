@@ -18,7 +18,7 @@ class ProbabilityDistribution(NeuralNetwork):
 
     def __init__(self, inputs: List[str], hidden_features: list[int],
                  normalize: bool=False, activation: str = "tanh",
-                 dropout: Optional[float] = None):
+                 dropout: Optional[float] = None, monotonic=False):
         super().__init__()
         self.inputs = list(inputs)
         self.normalizer = Normalizer(-1, len(inputs)) if normalize else None
@@ -27,9 +27,12 @@ class ProbabilityDistribution(NeuralNetwork):
         self.layers = torch.nn.ModuleList()
         in_features = len(inputs)
         for out_features in hidden_features:
-            self.layers.append(Dense(in_features, out_features, normalize=normalize, activation=activation, dropout=dropout))
+            self.layers.append(Dense(in_features, out_features,
+                                     normalize=normalize and not monotonic,
+                                     activation=activation, dropout=dropout,
+                                     monotonic=monotonic))
             in_features = out_features
-        self.head = torch.nn.Linear(in_features, 1)
+        self.head = Dense(in_features, 1, normalize=False, activation=torch.sigmoid, monotonic=monotonic)
 
     def forward(self, X: torch.Tensor) -> torch.Tensor:
         """
@@ -39,7 +42,7 @@ class ProbabilityDistribution(NeuralNetwork):
             X = self.normalizer(X)
         for layer in self.layers:
             X = layer(X)
-        return torch.sigmoid(self.head(X)).squeeze(-1)
+        return self.head(X).squeeze(-1)
 
     def _cdf(self, X: torch.Tensor) -> torch.Tensor:
         """
@@ -144,4 +147,4 @@ class ProbabilityDistribution(NeuralNetwork):
 
     @property
     def device(self) -> torch.device:
-        return self.head.weight.device
+        return self.head.linear.weight.device
