@@ -18,7 +18,7 @@ class Activation(torch.nn.Module):
     def __init__(self, activation: Union[str, Callable]):
         super().__init__()
         assert isinstance(activation, str) or callable(activation)
-        assert not isinstance(activation, LambdaType), "Lambda function cannot be pickled and saved on disk"
+        assert not callable(activation) or activation.__name__ != "<lambda>", "Lambda function cannot be pickled and saved on disk"
         self.function = self._as_callable(activation)
 
     def __repr__(self):
