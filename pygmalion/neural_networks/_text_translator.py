@@ -259,7 +259,7 @@ class TextTranslator(NeuralNetwork):
             encoded = self(X, encoded_padding_mask)
             # decode encoded input
             sequences = [[START]]
-            histories = [tuple({} for _ in self.transformer_decoder.stages)]
+            histories = [tuple({} for _ in self.decoder.stages)]
             sum_likelyhoods = [0.]
             counter = range(max_tokens) if max_tokens is not None else count(0)
             for _ in counter:
