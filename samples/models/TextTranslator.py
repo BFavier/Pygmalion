@@ -1,6 +1,6 @@
 import torch
 import pygmalion as ml
-from pygmalion.tokenizers import AsciiCharTokenizer
+from pygmalion.tokenizers import DummyTokenizer
 from pygmalion.neural_networks import TextTranslator
 from pygmalion.neural_networks.layers.positional_encoding import LearnedPositionalEncoding
 from pygmalion.datasets.generators import RomanNumeralsGenerator
@@ -8,7 +8,7 @@ import IPython
 import matplotlib.pyplot as plt
 
 DEVICE = "cuda:0" if torch.cuda.device_count() > 0 else "cpu"
-tokenizer = AsciiCharTokenizer()
+tokenizer = DummyTokenizer()
 model = TextTranslator(tokenizer, tokenizer, n_stages=4, projection_dim=16, n_heads=4,
                        positional_encoding_type=LearnedPositionalEncoding,
                        input_positional_encoding_kwargs={"sequence_length": 10},
