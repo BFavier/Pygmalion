@@ -11,13 +11,14 @@ from pygmalion.neural_networks.layers.transformers.multihead_attention import Fo
 from pygmalion.neural_networks.layers.positional_encoding import SinusoidalPositionalEncoding, LearnedPositionalEncoding
 
 DEVICE = "cuda:0" if torch.cuda.device_count() > 0 else "cpu"
-model = TimeSeriesRegressor(inputs=["x", "y"], targets=["x", "y"],
+model = TimeSeriesRegressor(inputs=[], targets=["x", "y"],
                             observation_column="obj", time_column=None,
-                            normalize=True, n_min_points=1,
-                            n_stages=4, projection_dim=16, n_heads=4,
+                            normalize=False, n_min_points=2,
+                            n_stages=1, projection_dim=16, n_heads=4,
                             attention_type=FourrierKernelAttention,
                             attention_kwargs={"linear_complexity": True},
-                            # positional_encoding_type=SinusoidalPositionalEncoding
+                            positional_encoding_type=LearnedPositionalEncoding,
+                            positional_encoding_kwargs={"sequence_length": 1000}
                             )
 model.to(DEVICE)
 
@@ -52,7 +53,7 @@ class Batchifyer:
 batchifyer = Batchifyer(1, 10)
 val_batch = batchifyer.get_batch()
 val_data = model.data_to_tensor(val_batch)
-train_losses, val_losses, grad, best_step = model.fit(val_data, val_data, n_steps=1_000, keep_best=False, learning_rate=1.0E-4)
+train_losses, val_losses, grad, best_step = model.fit(val_data, val_data, n_steps=1_000, keep_best=False)
 ml.utilities.plot_losses(train_losses, val_losses, grad, best_step)
 
 val_batch = val_batch[val_batch.obj < 10]
