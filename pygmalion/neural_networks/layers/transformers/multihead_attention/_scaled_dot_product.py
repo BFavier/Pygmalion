@@ -53,13 +53,13 @@ class ScaledDotProductAttention(torch.nn.Module):
             tensor of shape (N, Lq, D)
         key : torch.Tensor
             tensor of shape (N, Lk, D)
-        key_mask : torch.Tensor or None
-            Tensor of booleans of shape (N, Lk) or None
-            Attention scores to masked keys is set to 0
         query_mask : torch.Tensor or None
             Tensor of booleans of shape (N, Lq)
             or None if padding tokens should not be masked.
             Masked queries are set to null vector after transformation.
+        key_mask : torch.Tensor or None
+            Tensor of booleans of shape (N, Lk) or None
+            Attention scores to masked keys is set to 0
 
         Returns
         -------

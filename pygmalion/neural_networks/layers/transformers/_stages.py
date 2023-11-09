@@ -74,12 +74,13 @@ class TransformerDecoderStage(torch.nn.Module):
     def __init__(self, projection_dim: int, n_heads: int,
                  dropout: Optional[float] = None, activation: str = "relu",
                  attention_type: ATTENTION_TYPE = ScaledDotProductAttention,
+                 mask_future: bool = True,
                  expanding_factor: float = 4.0,
                  **kwargs):
         super().__init__()
         dim = projection_dim * n_heads
         self.activation = Activation(activation)
-        self.masked_self_attention = attention_type(projection_dim, n_heads, mask_future=True, **kwargs)
+        self.masked_self_attention = attention_type(projection_dim, n_heads, mask_future=mask_future, **kwargs)
         self.first_dropout = Dropout(dropout)
         self.first_norm = torch.nn.LayerNorm(dim)
         self.attention = attention_type(projection_dim, n_heads, mask_future=False, **kwargs)
@@ -91,6 +92,7 @@ class TransformerDecoderStage(torch.nn.Module):
         self.out_norm = torch.nn.LayerNorm(dim)
 
     def forward(self, Y: torch.Tensor, encoded: torch.Tensor,
+                Y_padding_mask : Optional[torch.Tensor] = None,
                 encoded_padding_mask: Optional[torch.Tensor] = None,
                 history: Optional[dict] = None):
         """
@@ -100,6 +102,8 @@ class TransformerDecoderStage(torch.nn.Module):
             Tensor of shape (N, Lq, D)
         encoded : torch.Tensor
             Tensor of shape (N, Lk, D)
+        Y_padding_mask : torch.tensor or None
+            mask of shape (N, Lq)
         encoded_padding_mask : torch.Tensor or None
             mask of shape (N, Lk)
         history : dict
@@ -114,7 +118,8 @@ class TransformerDecoderStage(torch.nn.Module):
         Y = Y.to(self.device)
         N, L, _ = Y.shape
         input = Y.reshape(N * L, -1)
-        Y = self.masked_self_attention(Y, Y, history).reshape(N * L, -1)
+        Y = self.masked_self_attention(Y, Y, history, query_mask=None,
+                                       key_mask=Y_padding_mask).reshape(N * L, -1)
         Y = self.first_dropout(Y)
         Y = self.first_norm(Y + input).reshape(N, L, -1)
         input = Y.reshape(N * L, -1)

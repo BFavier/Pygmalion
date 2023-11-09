@@ -81,16 +81,16 @@ class TextTranslator(NeuralNetwork):
         else:
             self.positional_encoding_input = positional_encoding_type(embedding_dim, **input_positional_encoding_kwargs)
             self.positional_encoding_output = positional_encoding_type(embedding_dim, **output_positional_encoding_kwargs)
-        self.transformer_encoder = TransformerEncoder(n_stages, projection_dim, n_heads,
-                                                      dropout=dropout, activation=activation,
-                                                      attention_type=attention_type,
-                                                      gradient_checkpointing=gradient_checkpointing,
-                                                      **attention_kwargs)
-        self.transformer_decoder = TransformerDecoder(n_stages, projection_dim, n_heads,
-                                                      dropout=dropout, activation=activation,
-                                                      attention_type=attention_type,
-                                                      gradient_checkpointing=gradient_checkpointing,
-                                                      **attention_kwargs)
+        self.encoder = TransformerEncoder(n_stages, projection_dim, n_heads,
+                                          dropout=dropout, activation=activation,
+                                          attention_type=attention_type,
+                                          gradient_checkpointing=gradient_checkpointing,
+                                          **attention_kwargs)
+        self.decoder = TransformerDecoder(n_stages, projection_dim, n_heads,
+                                          dropout=dropout, activation=activation,
+                                          attention_type=attention_type,
+                                          gradient_checkpointing=gradient_checkpointing,
+                                          **attention_kwargs)
         self.head = torch.nn.Linear(embedding_dim, self.tokenizer_output.n_tokens)
 
     def forward(self, X: torch.Tensor, padding_mask: Optional[torch.Tensor]):
@@ -122,11 +122,11 @@ class TextTranslator(NeuralNetwork):
         if self.positional_encoding_input is not None:
             X = self.positional_encoding_input(X)
         X = self.dropout_input(X.reshape(N*L, -1)).reshape(N, L, -1)
-        X = self.transformer_encoder(X, padding_mask)
+        X = self.encoder(X, padding_mask)
         return X
 
     def decode(self, Y: torch.Tensor, encoded: torch.Tensor, encoded_padding_mask: Optional[torch.Tensor],
-               history: Optional[Tuple[dict]]=None):
+               history: Optional[Tuple[dict]]=None) -> torch.Tensor:
         """
         performs the decoding part of the network
 
@@ -155,7 +155,7 @@ class TextTranslator(NeuralNetwork):
             offset = history[0].get("query_offset", 0) if history is not None else 0
             Y = self.positional_encoding_output(Y, offset=offset)
         Y = self.dropout_output(Y.reshape(N*L, -1)).reshape(N, L, -1)
-        Y = self.transformer_decoder(Y, encoded, encoded_padding_mask, history)
+        Y = self.decoder(Y, encoded, None, encoded_padding_mask, history)
         return self.head(Y)
 
     def loss(self, x, y_target, weights=None):

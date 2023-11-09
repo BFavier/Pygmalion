@@ -46,7 +46,11 @@ class DummyTokenizer(Tokenizer):
 
     @property
     def vocabulary(self):
-        return tuple(bytes([i]) for i in range(256))
+        return tuple(bytes([i]) for i in range(256)) + tuple(self.special_tokens)
+
+    @property
+    def n_tokens(self) -> int:
+        return len(self.vocabulary)
 
     @property
     def dump(self):
