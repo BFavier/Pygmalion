@@ -42,7 +42,7 @@ class TransformerEncoderStage(torch.nn.Module):
         history : dict
             historized tensors to prepend to Y for keys of self attention
         attention_kwargs : dict
-            kwargs passed to self_attention
+            kwargs passed to self attention
 
         Returns
         -------
@@ -83,7 +83,7 @@ class TransformerDecoderStage(torch.nn.Module):
         self.masked_self_attention = attention_type(projection_dim, n_heads, mask_future=mask_future, **kwargs)
         self.first_dropout = Dropout(dropout)
         self.first_norm = torch.nn.LayerNorm(dim)
-        self.attention = attention_type(projection_dim, n_heads, mask_future=False, **kwargs)
+        self.cross_attention = attention_type(projection_dim, n_heads, mask_future=False, **kwargs)
         self.second_dropout = Dropout(dropout)
         self.second_norm = torch.nn.LayerNorm(dim)
         self.expand = torch.nn.Linear(dim, int(dim * expanding_factor))
@@ -94,7 +94,9 @@ class TransformerDecoderStage(torch.nn.Module):
     def forward(self, Y: torch.Tensor, encoded: torch.Tensor,
                 Y_padding_mask : Optional[torch.Tensor] = None,
                 encoded_padding_mask: Optional[torch.Tensor] = None,
-                history: Optional[dict] = None):
+                history: Optional[dict] = None,
+                self_attention_kwargs: dict = {},
+                cross_attention_kwargs: dict = {}):
         """
         Parameter
         ---------
@@ -108,6 +110,10 @@ class TransformerDecoderStage(torch.nn.Module):
             mask of shape (N, Lk)
         history : dict
             historized tensors to prepend to Y for keys of self attention
+        self_attention_kwargs : dict
+            kwargs passed to self attention
+        cross_attention_kwargs : dict
+            kwargs passed to cross attention
 
         Returns
         -------
@@ -119,13 +125,15 @@ class TransformerDecoderStage(torch.nn.Module):
         N, L, _ = Y.shape
         input = Y.reshape(N * L, -1)
         Y = self.masked_self_attention(Y, Y, history, query_mask=None,
-                                       key_mask=Y_padding_mask).reshape(N * L, -1)
+                                       key_mask=Y_padding_mask,
+                                       **self_attention_kwargs).reshape(N * L, -1)
         Y = self.first_dropout(Y)
         Y = self.first_norm(Y + input).reshape(N, L, -1)
         input = Y.reshape(N * L, -1)
         cross_attention_history = history={"query_offset": history.get("query_offset")} if history is not None else None
-        Y = self.attention(Y, encoded, cross_attention_history, query_mask=None,
-                           key_mask=encoded_padding_mask).reshape(N * L, -1)
+        Y = self.cross_attention(Y, encoded, cross_attention_history, query_mask=None,
+                                 key_mask=encoded_padding_mask,
+                                 **cross_attention_kwargs).reshape(N * L, -1)
         Y = self.second_dropout(Y)
         Y = self.second_norm(Y + input)
         input = Y

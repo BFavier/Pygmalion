@@ -84,7 +84,9 @@ class TransformerDecoder(torch.nn.Module):
     def forward(self, Y: torch.Tensor, encoded: torch.Tensor,
                 Y_padding_mask : Optional[torch.Tensor] = None,
                 encoded_padding_mask: Optional[torch.Tensor] = None,
-                histories: Optional[Tuple[dict]] = None):
+                histories: Optional[Tuple[dict]] = None,
+                self_attention_kwargs: dict = {},
+                cross_attention_kwargs: dict = {}):
         """
         Parameter
         ---------
@@ -98,6 +100,10 @@ class TransformerDecoder(torch.nn.Module):
             mask of shape (N, Lk)
         histories : tuple of dict, or None
             history for each stage
+        self_attention_kwargs : dict
+            additional kwargs passed to self attention
+        cross_attention_kwargs : dict
+            additional kwargs passed to cross attention
 
         Returns
         -------
@@ -110,7 +116,7 @@ class TransformerDecoder(torch.nn.Module):
             assert len(histories) == len(self.stages)
         for history, stage in zip(histories, self.stages):
             if self.gradient_checkpointing and torch.is_grad_enabled():
-                Y = checkpoint(stage, Y, encoded, Y_padding_mask, encoded_padding_mask, history)
+                Y = checkpoint(stage, Y, encoded, Y_padding_mask, encoded_padding_mask, history, self_attention_kwargs, cross_attention_kwargs)
             else:
-                Y = stage(Y, encoded, Y_padding_mask, encoded_padding_mask, history)
+                Y = stage(Y, encoded, Y_padding_mask, encoded_padding_mask, history, self_attention_kwargs, cross_attention_kwargs)
         return Y
