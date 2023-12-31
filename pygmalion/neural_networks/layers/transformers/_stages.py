@@ -76,13 +76,17 @@ class TransformerDecoderStage(torch.nn.Module):
                  attention_type: ATTENTION_TYPE = ScaledDotProductAttention,
                  mask_future: bool = True,
                  expanding_factor: float = 4.0,
+                 self_attention: bool = True,
                  **kwargs):
         super().__init__()
         dim = projection_dim * n_heads
         self.activation = Activation(activation)
-        self.masked_self_attention = attention_type(projection_dim, n_heads, mask_future=mask_future, **kwargs)
-        self.first_dropout = Dropout(dropout)
-        self.first_norm = torch.nn.LayerNorm(dim)
+        if self_attention:
+            self.self_attention = attention_type(projection_dim, n_heads, mask_future=mask_future, **kwargs)
+            self.first_dropout = Dropout(dropout)
+            self.first_norm = torch.nn.LayerNorm(dim)
+        else:
+            self.self_attention = None
         self.cross_attention = attention_type(projection_dim, n_heads, mask_future=False, **kwargs)
         self.second_dropout = Dropout(dropout)
         self.second_norm = torch.nn.LayerNorm(dim)
@@ -123,12 +127,13 @@ class TransformerDecoderStage(torch.nn.Module):
         encoded = encoded.to(self.device)
         Y = Y.to(self.device)
         N, L, _ = Y.shape
-        input = Y.reshape(N * L, -1)
-        Y = self.masked_self_attention(Y, Y, history, query_mask=None,
-                                       key_mask=Y_padding_mask,
-                                       **self_attention_kwargs).reshape(N * L, -1)
-        Y = self.first_dropout(Y)
-        Y = self.first_norm(Y + input).reshape(N, L, -1)
+        if self.self_attention is not None:
+            input = Y.reshape(N * L, -1)
+            Y = self.self_attention(Y, Y, history, query_mask=None,
+                                    key_mask=Y_padding_mask,
+                                    **self_attention_kwargs).reshape(N * L, -1)
+            Y = self.first_dropout(Y)
+            Y = self.first_norm(Y + input).reshape(N, L, -1)
         input = Y.reshape(N * L, -1)
         cross_attention_history = history={"query_offset": history.get("query_offset")} if history is not None else None
         Y = self.cross_attention(Y, encoded, cross_attention_history, query_mask=None,
@@ -144,4 +149,4 @@ class TransformerDecoderStage(torch.nn.Module):
 
     @property
     def device(self) -> torch.device:
-        return self.masked_self_attention.key.weight.device
+        return self.self_attention.key.weight.device

@@ -70,6 +70,7 @@ class TransformerDecoder(torch.nn.Module):
                  gradient_checkpointing: bool = True, 
                  attention_type: ATTENTION_TYPE = ScaledDotProductAttention,
                  mask_future: bool=True, expanding_factor: float = 4.0,
+                 self_attention: bool = True,
                  **kwargs):
         super().__init__()
         self.stages: Sequence[TransformerDecoderStage] = torch.nn.ModuleList()
@@ -79,7 +80,9 @@ class TransformerDecoder(torch.nn.Module):
                                                        dropout=dropout, activation=activation,
                                                        attention_type=attention_type,
                                                        mask_future=mask_future,
-                                                       expanding_factor=expanding_factor, **kwargs))
+                                                       expanding_factor=expanding_factor,
+                                                       self_attention=self_attention,
+                                                       **kwargs))
 
     def forward(self, Y: torch.Tensor, encoded: torch.Tensor,
                 Y_padding_mask : Optional[torch.Tensor] = None,
