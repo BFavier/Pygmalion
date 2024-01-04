@@ -1,10 +1,9 @@
 import torch
 import pandas as pd
 from typing import Optional, Iterable
-from .layers.transformers import TransformerEncoder, TransformerDecoder, ATTENTION_TYPE, FourrierKernelAttention
-from .layers.positional_encoding import POSITIONAL_ENCODING_TYPE
+from .layers.transformers import TransformerEncoder, TransformerDecoder, ATTENTION_TYPE, ScaledDotProductAttention
 from .layers import Normalizer
-from ._conversions import named_to_tensor, tensor_to_dataframe
+from ._conversions import named_to_tensor, tensor_to_dataframe, floats_to_tensor
 from ._neural_network import NeuralNetwork
 from ._loss_functions import MSE
 
@@ -19,7 +18,7 @@ class TimeSeriesRegressor(NeuralNetwork):
                  normalize: bool = True,
                  gradient_checkpointing: bool = True,
                  positional_encoding: bool = False,
-                 attention_type: ATTENTION_TYPE = FourrierKernelAttention,
+                 attention_type: ATTENTION_TYPE = ScaledDotProductAttention,
                  mask_future: bool = False,
                  attention_kwargs: dict = {}):
         """
@@ -167,24 +166,28 @@ class TimeSeriesRegressor(NeuralNetwork):
         """
         y_pred = self(X, Tx, x_padding_mask, Ty, y_padding_mask)
         w = (weights * ~y_padding_mask).unsqueeze(-1) if weights is not None else ~y_padding_mask.unsqueeze(-1)
-        return MSE(y_pred, Y, w)
+        return MSE(y_pred, self.target_normalizer(Y, y_padding_mask), w)
 
     @property
     def device(self) -> torch.device:
         return self.head.weight.device
 
-    def data_to_tensor(self, df: pd.DataFrame,
+    def data_to_tensor(self, inputs: pd.DataFrame, targets: pd.DataFrame,
                        device: Optional[torch.device] = None,
                        input_sequence_length: Optional[int] = None,
                        target_sequence_length: Optional[int] = None,
                        raise_on_longer_sequences: bool = False) -> tuple:
-        X, Tx, x_padding_mask = self._x_to_tensor(df, device, input_sequence_length, raise_on_longer_sequences)
-        Y, Ty, y_padding_mask = self._y_to_tensor(df, device, target_sequence_length)
+        diff = set.difference(set(inputs[self.observation_column]), set(targets[self.observation_column]))
+        if len(diff) > 0:
+            raise ValueError(f"Some values of the '{self.observation_column}' column are present in only one of the input/target dataframes: {diff}")
+        X, Tx, x_padding_mask = self._x_to_tensor(inputs, device, input_sequence_length, raise_on_longer_sequences)
+        Y, Ty, y_padding_mask = self._y_to_tensor(targets, device, target_sequence_length)
         return X, Tx, x_padding_mask, Y, Ty, y_padding_mask
 
     def _x_to_tensor(self, df: pd.DataFrame, device: Optional[torch.device] = None,
                      padded_sequence_length: Optional[int] = None,
                      raise_on_longer_sequences: bool = False):
+        df = df.sort_values(by=[self.observation_column]+([self.time_column] if self.time_column is not None else []), axis="columns")
         if raise_on_longer_sequences and padded_sequence_length is not None:
             for obs, x in df.groupby(self.observation_column):
                 if len(x) > padded_sequence_length:
@@ -198,7 +201,7 @@ class TimeSeriesRegressor(NeuralNetwork):
                                     for x in Xs if len(x) <= padded_sequence_length], dim=0)
         if self.time_column is not None:
             Ts = [named_to_tensor(x, [self.time_column])
-                for _, x in df.groupby(self.observation_column)]
+                  for _, x in df.groupby(self.observation_column)]
             T = torch.stack([torch.cat([t, torch.zeros([padded_sequence_length-len(t), 1])])
                              for t in Ts if len(t) <= padded_sequence_length], dim=0)
         else:
@@ -213,6 +216,7 @@ class TimeSeriesRegressor(NeuralNetwork):
     def _y_to_tensor(self, df: pd.DataFrame, device: Optional[torch.device] = None,
                      padded_sequence_length: Optional[int] = None,
                      raise_on_longer_sequences: bool = False):
+        df = df.sort_values(by=[self.observation_column]+([self.time_column] if self.time_column is not None else []), axis="columns")
         if raise_on_longer_sequences and padded_sequence_length is not None:
             for obs, y in df.groupby(self.observation_column):
                 if len(y) > padded_sequence_length:
@@ -226,7 +230,7 @@ class TimeSeriesRegressor(NeuralNetwork):
                                     for y in Ys if len(y) <= padded_sequence_length], dim=0)
         if self.time_column is not None:
             Ts = [named_to_tensor(y, [self.time_column])
-                for _, y in df.groupby(self.observation_column)]
+                  for _, y in df.groupby(self.observation_column)]
             T = torch.stack([torch.cat([t, torch.zeros([padded_sequence_length-len(t), 1])])
                              for t in Ts if len(t) <= padded_sequence_length], dim=0)
         else:
@@ -243,21 +247,18 @@ class TimeSeriesRegressor(NeuralNetwork):
        df = tensor_to_dataframe(y_pred.reshape(-1, D), self.targets)
        return df[~padding_mask.reshape(-1).cpu().numpy()]
 
-    def predict(self, past: pd.DataFrame, future: pd.DataFrame):
+    def predict(self, df: pd.DataFrame, times: Optional[Iterable[float]]=None) -> pd.DataFrame:
         """
         """
         self.eval()
-        _, Y, Ty, y_padding_mask = self.data_to_tensor(past, device=self.device)
-        if self.target_normalizer is not None:
-            Y = self.target_normalizer(Y, y_padding_mask)
-        df = pd.concat([past, future]).sort_values(self.observation_column if self.time_column is None else [self.observation_column, self.time_column])
+        df = df.sort_values(by=[self.observation_column]+([self.time_column] if self.time_column is not None else []), axis="columns")
         X, Tx, x_padding_mask = self._x_to_tensor(df, device=self.device)
         with torch.no_grad():
-            predicted = self(X, Y, Tx, Ty, x_padding_mask, y_padding_mask)
-            if self.target_normalizer is not None:
-                predicted = self.target_normalizer.unscale(predicted)
-        pred = self._tensor_to_y(predicted, x_padding_mask)
-        pred[self.observation_column] = df[self.observation_column]
-        if self.time_column is not None:
-            pred[self.time_column] = df[self.time_column]
-        return pred
+            y_pred = self(X, Tx, x_padding_mask, floats_to_tensor(times).reshape(1, -1, 1))
+        if self.target_normalizer is not None:
+            y_pred = self.target_normalizer.unscale(y_pred)
+        y_pred = y_pred.cpu().numpy()
+        dfs = [pd.DataFrame(data=data, columns=self.targets) for data in y_pred]
+        for sub, obs in zip(dfs, df[self.observation_column].unique()):
+            sub[self.observation_column] = obs
+        return pd.concat(dfs)

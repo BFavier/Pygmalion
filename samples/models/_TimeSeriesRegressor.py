@@ -1,6 +1,7 @@
 """
 The seasons - Copernicus
 """
+import random
 import torch
 import pygmalion as ml
 import pandas as pd
@@ -8,18 +9,11 @@ import matplotlib.pyplot as plt
 from pygmalion.datasets.generators import OrbitalTrajectoryGenerator
 from pygmalion.neural_networks import TimeSeriesRegressor
 from pygmalion.neural_networks.layers.transformers.multihead_attention import FourrierKernelAttention, ScaledDotProductAttention
-from pygmalion.neural_networks.layers.positional_encoding import SinusoidalPositionalEncoding, LearnedPositionalEncoding
 
 DEVICE = "cuda:0" if torch.cuda.device_count() > 0 else "cpu"
-model = TimeSeriesRegressor(inputs=[], targets=["x", "y"],
-                            observation_column="obj", time_column=None,
-                            normalize=False, n_min_points=2,
-                            n_stages=1, projection_dim=16, n_heads=4,
-                            attention_type=FourrierKernelAttention,
-                            attention_kwargs={"linear_complexity": True},
-                            positional_encoding_type=LearnedPositionalEncoding,
-                            positional_encoding_kwargs={"sequence_length": 1000}
-                            )
+model = TimeSeriesRegressor(inputs=["x", "y"], targets=["x", "y"], observation_column="obj",
+                            time_column=None, normalize=False,
+                            n_stages=1, projection_dim=16, n_heads=4)
 model.to(DEVICE)
 
 
@@ -39,15 +33,17 @@ class Batchifyer:
         """
         Filter out next steps as soon as data get out of bounds
         """
-        filtered = []
+        inputs = []
+        targets = []
         for obj, sub in df.groupby("obj"):
-            out_of_bounds = (sub[["x", "y"]].abs() > 3).any(axis=1) | (sub[["u", "v"]].abs() > 10).any(axis=1)
+            out_of_bounds = (sub[["x", "y"]].abs() > 3).any(axis=1)  # | (sub[["u", "v"]].abs() > 10).any(axis=1)
             if out_of_bounds.any():
                 i = out_of_bounds.argmax()
-                filtered.append(sub.iloc[:i])
-            else:
-                filtered.append(sub)
-        return pd.concat(filtered)
+                sub = sub.iloc[:i]
+            i = random.randint(2, len(sub)-1)
+            inputs.append(sub.iloc[:i])
+            targets.append(sub.iloc[i:])
+        return pd.concat(inputs), pd.concat(targets)
 
 
 batchifyer = Batchifyer(1, 10)
