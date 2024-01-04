@@ -54,7 +54,7 @@ class Batchifyer:
 
 batchifyer = Batchifyer(1, 10)
 val_batch = batchifyer.get_batch()
-val_data = model.data_to_tensor(*val_batch, model.device, 500, 499)
+val_data = model.data_to_tensor(*val_batch, model.device)
 train_losses, val_losses, grad, best_step = model.fit(val_data, val_data, n_steps=1_000, keep_best=False, learning_rate=1.0E-4)
 ml.utilities.plot_losses(train_losses, val_losses, grad, best_step)
 

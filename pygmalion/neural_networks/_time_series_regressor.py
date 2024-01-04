@@ -115,6 +115,7 @@ class TimeSeriesRegressor(NeuralNetwork):
             tensor of floats of shape (N, Lx, n_targets)
         """
         X = X.to(self.device)
+        N, _, _ = X.shape
         if x_padding_mask is not None:
             x_padding_mask = x_padding_mask.to(self.device)
         if y_padding_mask is not None:
@@ -122,11 +123,11 @@ class TimeSeriesRegressor(NeuralNetwork):
         if Tx is not None:
             Tx = Tx.to(dtype=X.dtype, device=X.device)
         else:
-            Tx = torch.arange(0, x_padding_mask.shape[1], dtype=X.dtype, device=self.device).reshape(1, -1, 1)
+            Tx = torch.arange(0, x_padding_mask.shape[1], dtype=X.dtype, device=self.device).reshape(1, -1, 1).expand(N, -1, -1)
         if Ty is not None:
             Ty = Ty.to(dtype=X.dtype, device=X.device)
         else:
-            Ty = (torch.arange(0, Ly, dtype=X.dtype, device=self.device).reshape(1, -1, 1) + (~x_padding_mask).sum(dim=-1).reshape(-1, 1, 1))
+            Ty = (torch.arange(0, Ly, dtype=X.dtype, device=self.device).reshape(1, -1, 1).expand(N, -1, -1) + (~x_padding_mask).sum(dim=-1).reshape(-1, 1, 1))
         if self.input_normalizer is not None:
             X = self.input_normalizer(X, x_padding_mask)
         if self.time_normalizer is not None:
