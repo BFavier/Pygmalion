@@ -66,7 +66,7 @@ class TransformerEncoderStage(torch.nn.Module):
 
     @property
     def device(self) -> torch.device:
-        return self.self_attention.key.weight.device
+        return self.contract.weight.device
 
 
 class TransformerDecoderStage(torch.nn.Module):
@@ -149,4 +149,4 @@ class TransformerDecoderStage(torch.nn.Module):
 
     @property
     def device(self) -> torch.device:
-        return self.self_attention.key.weight.device
+        return self.contract.weight.device
