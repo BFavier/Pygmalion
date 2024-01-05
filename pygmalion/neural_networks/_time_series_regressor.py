@@ -25,7 +25,12 @@ class TimeSeriesRegressor(NeuralNetwork):
         """
         Parameters
         ----------
-        ...
+        inputs : Iterable of str
+            name of the columns used as past inputs for the forecast (can be the same as targets)
+        targets : Iterable
+            name of the columns to forecast in the future (can be the same as inputs)
+        observation_column : str
+            name of the id column by which individual time series should be grouped
         time_column : str or None
             The name of the time column if any. Usefull for non equally spaced time series.
         n_stages : int
@@ -47,6 +52,8 @@ class TimeSeriesRegressor(NeuralNetwork):
             If True, absolute time is encoded by adding linear projection of time to embeddings
         attention_type : ATTENTION_TYPE
             type of attention for multi head attention
+        send_time_to_attention : bool
+            If True, the time (discrete steps or not) is passed as argument to the attention
         attention_kwargs : dict
             additional kwargs passed to attention_type initializer
         """
@@ -141,8 +148,8 @@ class TimeSeriesRegressor(NeuralNetwork):
         encoded = self.encoder(X, x_padding_mask,
                                attention_kwargs={"query_positions": Tx, "key_positions": Tx} if self.send_time_to_attention else {})
         decoded = self.decoder(Y, encoded, y_padding_mask, x_padding_mask,
-                               self_attention_kwargs={"query_positions": Tx, "key_positions": Tx} if self.send_time_to_attention else {},
-                               cross_attention_kwargs={"query_positions": Tx, "key_positions": Ty} if self.send_time_to_attention else {})
+                               self_attention_kwargs={"query_positions": Ty, "key_positions": Ty} if self.send_time_to_attention else {},
+                               cross_attention_kwargs={"query_positions": Ty, "key_positions": Tx} if self.send_time_to_attention else {})
         return self.head(decoded)
 
     def loss(self, X: torch.Tensor, Tx: Optional[torch.Tensor], x_padding_mask: torch.Tensor,
