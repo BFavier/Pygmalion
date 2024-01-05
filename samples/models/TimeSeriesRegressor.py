@@ -9,12 +9,17 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from pygmalion.datasets.generators import OrbitalTrajectoryGenerator
 from pygmalion.neural_networks import TimeSeriesRegressor
-from pygmalion.neural_networks.layers.transformers.multihead_attention import FourrierKernelAttention, ScaledDotProductAttention
+from pygmalion.neural_networks.layers.transformers.multihead_attention import FourrierKernelAttention
 
 DEVICE = "cuda:0" if torch.cuda.device_count() > 0 else "cpu"
-model = TimeSeriesRegressor(inputs=["x", "y"], targets=["x", "y"], observation_column="obj",
-                            time_column="t", normalize=False,
-                            n_stages=4, projection_dim=16, n_heads=4)
+model = TimeSeriesRegressor(inputs=["x", "y"], targets=["x", "y"],
+                            observation_column="obj", time_column="t",
+                            n_stages=4, projection_dim=16, n_heads=4,
+                            # positional_encoding=False,
+                            # attention_type=FourrierKernelAttention,
+                            # send_time_to_attention=True,
+                            # attention_kwargs={"linear_complexity": False}
+                            )
 model.to(DEVICE)
 
 
