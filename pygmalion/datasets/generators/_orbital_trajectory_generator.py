@@ -49,7 +49,7 @@ class OrbitalTrajectoryGenerator:
         V = np.maximum(1.0, np.random.normal(0.4, 1.2, size=(batch_size, 1)) * escape_velocity) * rot
         y0 = np.concatenate([X, V], axis=-1)
         df = OrbitalTrajectoryGenerator.runge_kutta_fehlberg(y0, T, dt_min, tol, verbose)
-        df["obj"] = df["obj"].astype(int)
+        df["ID"] = df["ID"].astype(int)
         return df
 
     @staticmethod
@@ -98,13 +98,13 @@ class OrbitalTrajectoryGenerator:
         Returns
         -------
         pd.DataFrame :
-            dataframe containing the (x, y, u, v) at each time 't', for each object 'obj'
+            dataframe containing the (x, y, u, v) at each time 't', for each object 'ID'
         """
-        n_obj, _ = y0.shape
+        n_ID, _ = y0.shape
         dydt = OrbitalTrajectoryGenerator.derivatives
         y, t, h = y0, T[0], (T[1] - T[0])
-        obj = np.arange(n_obj)[:, None]
-        data = [np.concatenate([obj, y0], axis=1)]
+        ID = np.arange(n_ID)[:, None]
+        data = [np.concatenate([ID, y0], axis=1)]
         for t_next in T[1:]:
             while t < t_next:
                 k1 = dydt(y)
@@ -123,7 +123,7 @@ class OrbitalTrajectoryGenerator:
                     print(f"t={t:.3g}, Δt={h:.3g}, error={error:.3g}, factor={factor:.3g}", flush=True)
                 t += h
                 y = y + h*RK5
-            data.append(np.concatenate([obj, y], axis=1))
-        data = np.concatenate([np.stack(data, axis=1), np.repeat(T[None, :, None], n_obj, axis=0)], axis=-1)
-        df = pd.DataFrame(data=data.reshape(-1, 6), columns=["obj", "x", "y", "u", "v", "t"])
+            data.append(np.concatenate([ID, y], axis=1))
+        data = np.concatenate([np.stack(data, axis=1), np.repeat(T[None, :, None], n_ID, axis=0)], axis=-1)
+        df = pd.DataFrame(data=data.reshape(-1, 6), columns=["ID", "x", "y", "u", "v", "t"])
         return df
