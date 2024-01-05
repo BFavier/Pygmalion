@@ -262,15 +262,17 @@ class TimeSeriesRegressor(NeuralNetwork):
         times : pd.DataFrame, or Iterable of float, or int
             either a dataframe with observation/time columns
             or a unique sequence of times at which will be predicted the future of all past observations
-            or an integer number of time steps to predict for all past observations (used if there is no time column)
+            or - when no time_column was defined - an integer number of time steps to predict for all past observations
         """
         self.eval()
         X, Tx, x_padding_mask = self._x_to_tensor(df, device=self.device)
         if isinstance(times, int):
+            if self.time_column is None:
+                raise ValueError(f"If 'time_column' is provided to model's constructor, 'times' must be an iterable or dataframe of time steps, not an integer.")
             Ly, Ty, y_padding_mask = times, None, None
         else:
             if self.time_column is None:
-                raise ValueError(f"If no 'time_column' is provided to model's constructor, 'time' argument of the 'predict' method must be an integer number of time steps to predict.")
+                raise ValueError(f"If no 'time_column' is provided to model's constructor, 'times' argument of the 'predict' method must be an integer number of time steps to predict.")
             if isinstance(times, pd.DataFrame):
                 diff = set.difference(set(df[self.observation_column]), set(times[self.observation_column]))
                 if len(diff) > 0:
