@@ -253,17 +253,39 @@ class TimeSeriesRegressor(NeuralNetwork):
        df = tensor_to_dataframe(y_pred.reshape(-1, D), self.targets)
        return df[~padding_mask.reshape(-1).cpu().numpy()]
 
-    def predict(self, df: pd.DataFrame, times: Union[Iterable[float], int]=None) -> pd.DataFrame:
+    def predict(self, df: pd.DataFrame, times: Union[pd.DataFrame, Iterable[float], int]) -> pd.DataFrame:
         """
+        Parameters
+        ----------
+        df : pd.DataFrame
+            dataframe of time series to predict the futures of
+        times : pd.DataFrame, or Iterable of float, or int
+            either a dataframe with observation/time columns
+            or a unique sequence of times at which will be predicted the future of all past observations
+            or an integer number of time steps to predict for all past observations (used if there is no time column)
         """
         self.eval()
-        df = df.sort_values(by=[self.observation_column]+([self.time_column] if self.time_column is not None else []))
         X, Tx, x_padding_mask = self._x_to_tensor(df, device=self.device)
-        Ly = times if isinstance(times, int) else len(times)
-        Ty = None if isinstance(times, int) else floats_to_tensor(times, device=self.device).reshape(1, -1, 1)
+        if isinstance(times, int):
+            Ly, Ty, y_padding_mask = times, None, None
+        else:
+            if self.time_column is None:
+                raise ValueError(f"If no 'time_column' is provided to model's constructor, 'time' argument of the 'predict' method must be an integer number of time steps to predict.")
+            if isinstance(times, pd.DataFrame):
+                diff = set.difference(set(df[self.observation_column]), set(times[self.observation_column]))
+                if len(diff) > 0:
+                    raise ValueError(f"Some values of the '{self.observation_column}' column are present in only one of the df/times dataframes: {diff}")
+                dfy = times.copy()
+                dfy[self.targets] = 0
+                _, Ty, y_padding_mask = self._y_to_tensor(dfy, device=self.device)
+                Ly = Ty.shape[1]
+            elif hasattr(times, "__iter__"):
+                Ly, Ty, y_padding_mask = len(times), floats_to_tensor(times, device=self.device).reshape(1, -1, 1), None
+            else:
+                raise ValueError(f"'times' argument of type '{type(times)}' is unsupported")
         with torch.no_grad():
             y_pred = self(X, Tx, x_padding_mask,
-                          Ly, Ty, y_padding_mask=None)
+                          Ly, Ty, y_padding_mask)
         if self.target_normalizer is not None:
             y_pred = self.target_normalizer.unscale(y_pred)
         y_pred = y_pred.cpu().numpy()

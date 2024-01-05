@@ -29,7 +29,7 @@ class Batchifyer:
 
     def __iter__(self):
         for batch in self.data_generator:
-            yield model.data_to_tensor(self._filter(batch), self.device,
+            yield model.data_to_tensor(*self._filter(batch), self.device,
                                        self.sequence_length-1, self.sequence_length-2)
 
     def get_batch(self):
@@ -52,20 +52,18 @@ class Batchifyer:
         return pd.concat(inputs), pd.concat(targets)
 
 
-batchifyer = Batchifyer(1, 10)
-val_batch = batchifyer.get_batch()
-val_data = model.data_to_tensor(*val_batch, model.device)
-train_losses, val_losses, grad, best_step = model.fit(val_data, val_data, n_steps=1_000, keep_best=False, learning_rate=1.0E-4)
+batchifyer = Batchifyer(1, 100)
+train_losses, val_losses, grad, best_step = model.fit(batchifyer, n_steps=1_000, keep_best=False, learning_rate=1.0E-3)
 ml.utilities.plot_losses(train_losses, val_losses, grad, best_step)
 
-past, future = val_batch
-df = model.predict(past, future.t)
-
+# testing trained model
+past, future = Batchifyer(1, 10).get_batch()
+df = model.predict(past, future[["obj", "t"]])
 f, ax = plt.subplots()
 for i, (obj, sub) in enumerate(past.groupby("obj")):
+    full = pd.concat([sub, future[future.obj == obj]])
+    ax.plot(list(full.x), list(full.y), color=f"C{i}", linewidth=0.5)
     ax.plot(list(sub.x), list(sub.y), color=f"C{i}", linewidth=2, label=obj)
-    fut = future[future.obj == obj]
-    ax.plot(list(fut.x), list(fut.y), color=f"C{i}", linewidth=0.5)
     ax.scatter(list(df[df.obj == obj].x), list(df[df.obj == obj].y), color=f"C{i}", marker=".")
 plt.show()
 
