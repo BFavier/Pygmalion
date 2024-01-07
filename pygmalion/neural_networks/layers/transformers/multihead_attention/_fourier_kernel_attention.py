@@ -1,13 +1,13 @@
 import torch
 from typing import Optional, Callable
-from ._utilities import _align, _mask_chronological, _log_exp_kernel
+from ._utilities import _align, _mask_chronological
 
 
 class FourrierKernelAttention(torch.nn.Module):
 
     def __init__(self, projection_dim: int, n_heads: int,
                  mask_future: bool, position_dimension: int = 1,
-                 kernel_function: Callable = _log_exp_kernel,
+                 kernel_function: Callable = torch.exp,
                  linear_complexity: bool = True,
                  scaled: bool = True):
         """
@@ -40,7 +40,7 @@ class FourrierKernelAttention(torch.nn.Module):
         self.key = torch.nn.Linear(dim, dim, bias=False)
         self.value = torch.nn.Linear(dim, dim, bias=False)
         self.position_weight = torch.nn.parameter.Parameter(torch.rand(self.n_heads, self.position_dimension, self.projection_dim)*2 - 1)
-        self.position_bias = torch.nn.parameter.Parameter(torch.rand(self.n_heads, self.projection_dim)*2 - 1)
+        self.position_bias = torch.nn.parameter.Parameter((torch.rand(self.n_heads, self.projection_dim)*2 - 1) * torch.pi)
         self.kernel_function = kernel_function
         self.linear_complexity = linear_complexity
         self.scaled = scaled
@@ -109,7 +109,7 @@ class FourrierKernelAttention(torch.nn.Module):
         if key_positions is None:
             key_positions = torch.arange(Lk, dtype=key.dtype, device=key.device).reshape(1, Lk, 1).expand(N, -1, self.position_dimension)
         pq = (torch.einsum("nlp, hpd -> nhld", query_positions, self.position_weight)
-              + torch.sigmoid(self.position_bias.reshape(1, self.n_heads, 1, self.projection_dim)) * torch.pi)
+              + self.position_bias.reshape(1, self.n_heads, 1, self.projection_dim))
         pk = torch.einsum("nlp, hpd -> nhld", key_positions, self.position_weight)
         # append history to keys and vice versa
         if history is not None:
