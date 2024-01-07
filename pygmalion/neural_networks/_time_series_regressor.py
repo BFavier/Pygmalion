@@ -193,11 +193,12 @@ class TimeSeriesRegressor(NeuralNetwork):
         diff = set.difference(set(inputs[self.observation_column]), set(targets[self.observation_column]))
         if len(diff) > 0:
             raise ValueError(f"Some values of the '{self.observation_column}' column are present in only one of the input/target dataframes: {diff}")
-        X, Tx, x_padding_mask = self._x_to_tensor(inputs, device, input_sequence_length, raise_on_longer_sequences)
-        Y, Ty, y_padding_mask = self._y_to_tensor(targets, device, target_sequence_length)
+        X, Tx, x_padding_mask = self._x_to_tensor(self.inputs, inputs, device, input_sequence_length, raise_on_longer_sequences)
+        Y, Ty, y_padding_mask = self._x_to_tensor(self.targets, targets, device, target_sequence_length)
         return X, Tx, x_padding_mask, Y, Ty, y_padding_mask
 
-    def _x_to_tensor(self, df: pd.DataFrame, device: Optional[torch.device] = None,
+    def _x_to_tensor(self, features: list[str], df: pd.DataFrame,
+                     device: Optional[torch.device] = None,
                      padded_sequence_length: Optional[int] = None,
                      raise_on_longer_sequences: bool = False):
         df = df.sort_values(by=[self.observation_column]+([self.time_column] if self.time_column is not None else []))
@@ -205,10 +206,10 @@ class TimeSeriesRegressor(NeuralNetwork):
             for obs, x in df.groupby(self.observation_column):
                 if len(x) > padded_sequence_length:
                     raise RuntimeError(f"Found sequence longer than {padded_sequence_length} for observation '{obs}'")
-        Xs = [named_to_tensor(x, self.inputs) for _, x in df.groupby(self.observation_column)]
+        Xs = [named_to_tensor(x, features) for _, x in df.groupby(self.observation_column)]
         if padded_sequence_length is None:
             padded_sequence_length = max(len(x) for x in Xs)
-        X = torch.stack([torch.cat([x, torch.zeros([padded_sequence_length-len(x), len(self.inputs)])])
+        X = torch.stack([torch.cat([x, torch.zeros([padded_sequence_length-len(x), len(features)])])
                          for x in Xs if len(x) <= padded_sequence_length], dim=0)
         padding_mask = torch.stack([(torch.arange(padded_sequence_length) >= len(x))
                                     for x in Xs if len(x) <= padded_sequence_length], dim=0)
@@ -225,35 +226,6 @@ class TimeSeriesRegressor(NeuralNetwork):
                 T = T.to(device)
             padding_mask = padding_mask.to(device)
         return X, T, padding_mask
-
-    def _y_to_tensor(self, df: pd.DataFrame, device: Optional[torch.device] = None,
-                     padded_sequence_length: Optional[int] = None,
-                     raise_on_longer_sequences: bool = False):
-        df = df.sort_values(by=[self.observation_column]+([self.time_column] if self.time_column is not None else []))
-        if raise_on_longer_sequences and padded_sequence_length is not None:
-            for obs, y in df.groupby(self.observation_column):
-                if len(y) > padded_sequence_length:
-                    raise RuntimeError(f"Found sequence longer than {padded_sequence_length} for observation '{obs}'")
-        Ys = [named_to_tensor(y, self.targets) for _, y in df.groupby(self.observation_column)]
-        if padded_sequence_length is None:
-            padded_sequence_length = max(len(y) for y in Ys)
-        Y = torch.stack([torch.cat([y, torch.zeros([padded_sequence_length-len(y), len(self.targets)])])
-                         for y in Ys if len(y) <= padded_sequence_length], dim=0)
-        padding_mask = torch.stack([(torch.arange(padded_sequence_length) >= len(y))
-                                    for y in Ys if len(y) <= padded_sequence_length], dim=0)
-        if self.time_column is not None:
-            Ts = [named_to_tensor(y, [self.time_column])
-                  for _, y in df.groupby(self.observation_column)]
-            T = torch.stack([torch.cat([t, torch.zeros([padded_sequence_length-len(t), 1])])
-                             for t in Ts if len(t) <= padded_sequence_length], dim=0)
-        else:
-            T = None
-        if device is not None:
-            Y = Y.to(device)
-            if T is not None:
-                T = T.to(device)
-            padding_mask = padding_mask.to(device)
-        return Y, T, padding_mask
 
     def _tensor_to_y(self, y_pred: torch.Tensor, padding_mask: torch.Tensor) -> pd.DataFrame:
        N, L, D = y_pred.shape
@@ -272,7 +244,7 @@ class TimeSeriesRegressor(NeuralNetwork):
             or - when no time_column was defined - an integer number of time steps to predict for all past observations
         """
         self.eval()
-        X, Tx, x_padding_mask = self._x_to_tensor(df, device=self.device)
+        X, Tx, x_padding_mask = self._x_to_tensor(self.inputs, df, device=self.device)
         if isinstance(times, int):
             if self.time_column is None:
                 raise ValueError(f"If 'time_column' is provided to model's constructor, 'times' must be an iterable or dataframe of time steps, not an integer.")
@@ -286,7 +258,7 @@ class TimeSeriesRegressor(NeuralNetwork):
                     raise ValueError(f"Some values of the '{self.observation_column}' column are present in only one of the df/times dataframes: {diff}")
                 dfy = times.copy()
                 dfy[self.targets] = 0
-                _, Ty, y_padding_mask = self._y_to_tensor(dfy, device=self.device)
+                _, Ty, y_padding_mask = self._x_to_tensor(self.targets, dfy, device=self.device)
                 Ly = Ty.shape[1]
             elif hasattr(times, "__iter__"):
                 Ly, Ty, y_padding_mask = len(times), floats_to_tensor(times, device=self.device).reshape(1, -1, 1), None
@@ -297,8 +269,12 @@ class TimeSeriesRegressor(NeuralNetwork):
                           Ly, Ty, y_padding_mask)
         if self.target_normalizer is not None:
             y_pred = self.target_normalizer.unscale(y_pred)
-        y_pred = y_pred.cpu().numpy()
-        dfs = [pd.DataFrame(data=data, columns=self.targets) for data in y_pred]
+        if self.time_column is None:
+            dfs = [pd.DataFrame(data=data[~mask].cpu().numpy(), columns=self.targets) for data, mask in zip(y_pred, y_padding_mask)]
+        else:
+            dfs = [pd.DataFrame(data=torch.cat([data[~mask], t[~mask]], dim=-1).cpu().numpy(),
+                                columns=self.targets + [self.time_column])
+                   for data, t, mask in zip(y_pred, Ty, y_padding_mask)]
         for sub, obs in zip(dfs, df[self.observation_column].unique()):
             sub[self.observation_column] = obs
         return pd.concat(dfs)
