@@ -9,16 +9,17 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from pygmalion.datasets.generators import OrbitalTrajectoryGenerator
 from pygmalion.neural_networks import TimeSeriesRegressor
-from pygmalion.neural_networks.layers.transformers.multihead_attention import FourrierKernelAttention, KernelizedAttention
+from pygmalion.neural_networks.layers.transformers.multihead_attention import FourrierKernelAttention
 
 DEVICE = "cuda:0" if torch.cuda.device_count() > 0 else "cpu"
 model = TimeSeriesRegressor(inputs=["x", "y"], targets=["x", "y"],
                             observation_column="ID", time_column="t",
                             n_stages=4, projection_dim=16, n_heads=4,
-                            # positional_encoding=True,
-                            # attention_type=KernelizedAttention,
-                            # send_time_to_attention=False,
-                            # attention_kwargs={"linear_complexity": False}
+                            positional_encoding=False,
+                            gradient_checkpointing=False,
+                            attention_type=FourrierKernelAttention,
+                            send_time_to_attention=True,
+                            attention_kwargs={"linear_complexity": True}
                             )
 model.to(DEVICE)
 
@@ -30,7 +31,8 @@ class Batchifyer:
         self.device = torch.device(device)
         self.sequence_length = sequence_length
         self.data_generator = OrbitalTrajectoryGenerator(n_batches=n_batches, batch_size=batch_size,
-                                                         T=np.linspace(0.0, 5.0, sequence_length), dt_min=1.0E-4)
+                                                         T=np.linspace(0.0, 5.0, sequence_length),
+                                                         dt_min=1.0E-4)
 
     def __iter__(self):
         for batch in self.data_generator:
@@ -57,13 +59,12 @@ class Batchifyer:
         return pd.concat(inputs), pd.concat(targets)
 
 
-train_data = Batchifyer(1, 10)
-past, future = Batchifyer(1, 10).get_batch()
-test_data =  model.data_to_tensor(past, future, DEVICE)
+train_data = Batchifyer(1, 100)
 train_losses, val_losses, grad, best_step = model.fit(train_data, n_steps=10_000, keep_best=False, learning_rate=1.0E-3)
 ml.utilities.plot_losses(train_losses, val_losses, grad, best_step)
 
 # testing trained model
+past, future = Batchifyer(1, 10).get_batch()
 df = model.predict(past, future[["ID", "t"]])
 f, ax = plt.subplots()
 for i, (ID, sub) in enumerate(past.groupby("ID")):
