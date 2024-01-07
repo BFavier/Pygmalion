@@ -11,24 +11,24 @@ def kernel(x):
     return F.elu(x) + 1
 
 
-def naive_m(q, k, v, c, pq, pk, key_mask: Optional[torch.Tensor]=None, scaled: bool=True):
-    return FourrierKernelAttention._attention_naive(q, k, v, c, pq, pk, mask_future=True,
-                                                    key_mask=key_mask, scaled=scaled, future_offset=0)
+def naive_m(q, k, v,  pq, pk, key_mask: Optional[torch.Tensor]=None, scaled: bool=True):
+    return FourrierKernelAttention._attention_naive(q, k, v,  pq, pk, mask_future=True,
+                                                    key_mask=key_mask, scaled=scaled, query_offset=0)
 
 
-def naive_b(q, k, v, c, pq, pk, key_mask: Optional[torch.Tensor]=None, scaled: bool=True):
-    return FourrierKernelAttention._attention_naive(q, k, v, c, pq, pk, mask_future=False,
-                                                    key_mask=key_mask, scaled=scaled, future_offset=0)
+def naive_b(q, k, v,  pq, pk, key_mask: Optional[torch.Tensor]=None, scaled: bool=True):
+    return FourrierKernelAttention._attention_naive(q, k, v,  pq, pk, mask_future=False,
+                                                    key_mask=key_mask, scaled=scaled, query_offset=0)
 
 
-def linear_m(q, k, v, c, pq, pk, key_mask: Optional[torch.Tensor]=None, scaled: bool=True):
-    return FourrierKernelAttention._attention_linear(q, k, v, c, pq, pk, mask_future=True,
-                                                    key_mask=key_mask, scaled=scaled, future_offset=0)
+def linear_m(q, k, v,  pq, pk, key_mask: Optional[torch.Tensor]=None, scaled: bool=True):
+    return FourrierKernelAttention._attention_linear(q, k, v,  pq, pk, mask_future=True,
+                                                    key_mask=key_mask, scaled=scaled, query_offset=0)
 
 
-def linear_b(q, k, v, c, pq, pk, key_mask: Optional[torch.Tensor]=None, scaled: bool=True):
-    return FourrierKernelAttention._attention_linear(q, k, v, c, pq, pk, mask_future=False,
-                                                    key_mask=key_mask, scaled=scaled, future_offset=0)
+def linear_b(q, k, v,  pq, pk, key_mask: Optional[torch.Tensor]=None, scaled: bool=True):
+    return FourrierKernelAttention._attention_linear(q, k, v,  pq, pk, mask_future=False,
+                                                    key_mask=key_mask, scaled=scaled, query_offset=0)
 
 
 def test_equality_bidirectional():
@@ -36,20 +36,18 @@ def test_equality_bidirectional():
     q = kernel(torch.rand(N, H, Lq, D))
     k = kernel(torch.rand(N, H, Lk, D))
     v = torch.rand(N, H, Lk, D)
-    c = torch.rand(H, D)
     pq = torch.rand(N, H, Lq, D)
     pk = torch.rand(N, H, Lk, D)
-    assert torch.allclose(naive_b(q, k, v, c, pq, pk), linear_b(q, k, v, c, pq, pk))
+    assert torch.allclose(naive_b(q, k, v,  pq, pk), linear_b(q, k, v,  pq, pk))
 
 def test_equality_masked():
     N, H, Lq, Lk, D = 1, 1, 100, 110, 64
     q = kernel(torch.rand(N, H, Lq, D))
     k = kernel(torch.rand(N, H, Lk, D))
     v = torch.rand(N, H, Lk, D)
-    c = torch.rand(H, D)
     pq = torch.rand(N, H, Lq, D)
     pk = torch.rand(N, H, Lk, D)
-    assert torch.allclose(naive_m(q, k, v, c, pq, pk), linear_m(q, k, v, c, pq, pk))
+    assert torch.allclose(naive_m(q, k, v,  pq, pk), linear_m(q, k, v,  pq, pk))
 
 
 if __name__ == "__main__":
