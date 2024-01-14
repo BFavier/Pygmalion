@@ -125,7 +125,7 @@ A ProbabilityDistribution is a multilayer perceptron used to learn the CDF (Cumu
 
 ### **TimeSeriesRegressor**
 
-A TimeSeriesRegressor forecast future values of a time series.
+A TimeSeriesRegressor forecast future values of a time series. Here below a model trained to predict the next steps of random eliptical orbit trajectories.
 
 ![orbital_trajectory](https://raw.githubusercontent.com/BFavier/Pygmalion/main/images/orbital_trajectories.png)
 
