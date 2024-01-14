@@ -3,127 +3,106 @@ import pandas as pd
 
 
 class OrbitalTrajectoryGenerator:
+    """
+    Generator of eliptic orbital trajectories
+    """
 
-    def __init__(self, n_batches: int, batch_size: int, T: np.ndarray=np.linspace(0.0, 5.0, 501),
-                 dt_min: float=0., tol: float=1.0E-6, verbose: bool=False):
-        """
-        Parameters
-        ----------
-        n_batches : int
-            number of batches to yield in an interation
-        batch_size : int
-            number of objects orbital trajectory to generate each batch
-        T : np.ndarray
-            array of interpolation times of shape (n_times,)
-        dt_min : float
-            minimum time step during integration
-        tol : float
-            error tolerance per second of integration
-        verbose : bool
-            if True display integration progress
-        """
+    def __init__(self, n_batches: int, batch_size: int, n_steps: int=501):
         self.n_batches = n_batches
         self.batch_size = batch_size
-        self.T = T
-        self.dt_min = dt_min
-        self.tol = tol
-        self.verbose = verbose
+        self.n_steps = n_steps
 
     def __iter__(self):
         for _ in range(self.n_batches):
-            yield self.generate_batch(self.batch_size, self.T, self.dt_min, self.tol, self.verbose)
+            yield self.generate_batch(self.batch_size, self.n_steps)
 
     @staticmethod
-    def generate_batch(batch_size: int, T: np.ndarray=np.linspace(0.0, 5.0, 501),
-                       dt_min: float=0., tol=1.0E-6, verbose: bool=False):
+    def generate_batch(batch_size: int, n_steps: int=501):
         """
         Generates a single batch of trajectories
         """
-        r = np.random.uniform(0.5, 1.5, size=(batch_size, 1))  # Do not generate points too close to the center
-        phi = np.random.uniform(0, 2*np.pi, size=batch_size)
-        X = r * np.stack([np.cos(phi), -np.sin(phi)], axis=-1)
-        GM = 1.0
-        escape_velocity = (2*GM/r)**0.5
-        theta = np.random.uniform(0, 2*np.pi, size=batch_size)
-        rot = np.stack([np.cos(theta), -np.sin(theta)], axis=1)
-        V = np.maximum(1.0, np.random.normal(0.4, 1.2, size=(batch_size, 1)) * escape_velocity) * rot
-        y0 = np.concatenate([X, V], axis=-1)
-        df = OrbitalTrajectoryGenerator.runge_kutta_fehlberg(y0, T, dt_min, tol, verbose)
-        df["ID"] = df["ID"].astype(int)
+        a = np.ones(batch_size)
+        e = 1 - 2**(np.random.uniform(-4, 0, batch_size))
+        # e = np.random.uniform(0.7, 1.0, batch_size)
+        b = np.sqrt(a**2 * (1 - e**2))
+        t0 = np.random.uniform(0., 1., batch_size)
+        t = np.linspace(t0, t0+np.random.uniform(0.3, 2.0, batch_size), n_steps).transpose()
+        p = OrbitalTrajectoryGenerator.xy(t, a, b)
+        theta = np.random.uniform(-np.pi, np.pi, batch_size)
+        rot = np.stack([np.stack([np.cos(theta), -np.sin(theta)], axis=-1),
+                        np.stack([np.sin(theta), np.cos(theta)], axis=-1)], axis=-2)
+        p = p @ rot
+        df = pd.DataFrame(data=p.reshape(-1, 2), columns=["x", "y"])
+        df["t"] = t.reshape(-1)
+        df["ID"] = np.tile(np.arange(batch_size).reshape(batch_size, 1), (1, n_steps)).reshape(-1)
         return df
 
     @staticmethod
-    def derivatives(data: np.ndarray) -> np.ndarray:
+    def iterative_solver(E: np.ndarray, e: np.ndarray, M: np.ndarray, n_max_steps: int=100, tol: float=1.0E-4):
         """
-        returns the derivative of (x, y, u, v) with regards to time
+        Solves iteratively 'E - e*sin(E) = M' using newton raphson
+        """
+        # E = M + e*np.sin(E)
+        error = np.abs(E - e*np.sin(e) - M)
+        if (np.max(error) < tol) or (n_max_steps < 1):
+            return E
+        return OrbitalTrajectoryGenerator.iterative_solver(E - (E - e*np.sin(E) - M)/(1 - e*np.cos(E)), e, M, n_max_steps-1, tol)
 
-        Parameters
-        ----------
-        data : np.ndarray
-            array of shape (batch_size, 4)
-        
-        Returns
-        -------
-        np.ndarray :
-            array of shape (batch_size, 4) of derivatives of (x, y, u, v) wrt time
-        """
-        X, V = data[:, :2], data[:, 2:]
-        r = np.linalg.norm(X, ord=2, axis=1)[:, None]
-        GM = 1.0
-        ur = X/r
-        return np.concatenate([V, GM/(r**2) * -ur], axis=-1)
-    
     @staticmethod
-    def runge_kutta_fehlberg(y0: np.ndarray, T: np.ndarray, dt_min: float, tol: float, verbose: bool) -> pd.DataFrame:
+    def initialize(M: np.ndarray, e: np.ndarray):
         """
-        Perform dynamic time step integration of the problem using runge kutta fehlberg method.
-        This is to avoid adding scipy.integrate.ode as a dependency.
+        Initialization point for the iterative solver
+        """
+        n = np.sqrt(5 + np.sqrt(16 + 9/e))
+        a = n*(e*(n**2 - 1)+1)/6
+        c = n*(1-e)
+        d = -M
+        assert np.all((a > 0) & (c > 0))
+        p = c/a
+        q = d/a
+        k = np.sqrt(q**2/4 + p**3/27)
+        s = np.cbrt(-q/2 - k) + np.cbrt(-q/2 + k)
+        return n*np.arcsin(s)  
 
-        https://en.wikipedia.org/wiki/Runge%E2%80%93Kutta_methods
-        https://en.wikipedia.org/wiki/Runge%E2%80%93Kutta%E2%80%93Fehlberg_method
-        https://maths.cnam.fr/IMG/pdf/RungeKuttaFehlbergProof.pdf
+    @staticmethod
+    def E(t: np.ndarray, e: np.ndarray) -> np.ndarray:
+        """
+        Returns the eccentricity anomaly E for given times using inverse Kepler's equation
+        (assuming a period of T=1s, and t=0s corresponding to a time of periapsis)
+        https://en.wikipedia.org/wiki/Kepler%27s_equation
+
+        This returns the E such that E - e*sin(E) = M, with M = 2π*t/T
 
         Parameters
         ----------
-        y0 : np.ndarray
-            initial conditions of (x, y, u, v)
-            array of floats of shape (n_objects, 4)
-        T : np.ndarray
-            array of interpolation times of shape (n_times,)
-        dt_min : float
-            minimum time step
-        tol : float
-            maximum tolerated order of magnitude of error per second of integration
-
-        Returns
-        -------
-        pd.DataFrame :
-            dataframe containing the (x, y, u, v) at each time 't', for each object 'ID'
+        t : np.ndarray
+            array of times of shape (n_objects, n_steps)
+        e : np.ndarray
+            array of trajectory eccentricities of shape (n_objects,)
+            of values such that 0 < e < 1
         """
-        n_ID, _ = y0.shape
-        dydt = OrbitalTrajectoryGenerator.derivatives
-        y, t, h = y0, T[0], (T[1] - T[0])
-        ID = np.arange(n_ID)[:, None]
-        data = [np.concatenate([ID, y0], axis=1)]
-        for t_next in T[1:]:
-            while t < t_next:
-                k1 = dydt(y)
-                k2 = dydt(y + h/4 * k1)
-                k3 = dydt(y + h*3/32 * k1 + h*9/32 * k2)
-                k4 = dydt(y + h*1932/2197 * k1 + h*-7200/2197 * k2 + h*7296/2197 * k3)
-                k5 = dydt(y + h*439/216 * k1 + h*-8 * k2 + h*3680/513 * k3 + h*-845/4104 * k4)
-                k6 = dydt(y + h*-8/27 * k1 + h*2 * k2 + h*-3544/2565 * k3 + h*1859/4104 * k4 + h*-11/40 * k5)
-                RK5 = (16/135*k1 + 6656/12825*k3 + 28561/56430*k4 - 9/50*k5 + 2/55*k6)
-                RK4 = (25/216*k1 + 1408/2565*k3 + 2197/4104*k4 - 1/5*k5)
-                error = np.max(np.abs(RK4 - RK5))
-                factor = (tol / (2*error))**(1/5)
-                h = h * factor
-                h = min(max(dt_min, h), t_next-t)
-                if verbose:
-                    print(f"t={t:.3g}, Δt={h:.3g}, error={error:.3g}, factor={factor:.3g}", flush=True)
-                t += h
-                y = y + h*RK5
-            data.append(np.concatenate([ID, y], axis=1))
-        data = np.concatenate([np.stack(data, axis=1), np.repeat(T[None, :, None], n_ID, axis=0)], axis=-1)
-        df = pd.DataFrame(data=data.reshape(-1, 6), columns=["ID", "x", "y", "u", "v", "t"])
-        return df
+        t = (((t + 0.5) % 1.0) - 0.5)  # the trajectory is 1-periodic, and t must be in [-0.5, 0.5] for algorithm convergence
+        M = 2*np.pi * t
+        e = e.reshape(-1, 1)
+        E = np.sign(M) * OrbitalTrajectoryGenerator.initialize(np.abs(M), e)
+        return OrbitalTrajectoryGenerator.iterative_solver(E, e, M)
+
+    @staticmethod
+    def xy(t: np.ndarray, a: np.ndarray, b: np.ndarray) -> np.ndarray:
+        """
+
+        Parameters
+        ----------
+        t : np.ndarray
+            array of times of shape (n_objects, n_steps)
+        a : np.ndarray
+            array of major axis lengths, of shape (n_objects)
+        b : np.ndarray
+            array of minor axis lengths, of shape (n_objects)
+        """
+        a, b = np.maximum(a, b).reshape(-1, 1), np.minimum(a, b).reshape(-1, 1)
+        e = np.sqrt(1 - b**2/a**2)
+        E = OrbitalTrajectoryGenerator.E(t, e)
+        x = a*(np.cos(E) - e)  # instead of a*(np.cos(E) - e) because in the referential of the foyer F and not of the origin F + a*e*ux
+        y = b*np.sin(E)
+        return np.stack([x, y], axis=-1)

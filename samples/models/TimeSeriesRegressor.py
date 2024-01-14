@@ -27,40 +27,35 @@ model.to(DEVICE)
 class Batchifyer:
 
     def __init__(self, n_batches: int, batch_size: int,
-                 device: torch.device = "cpu", sequence_length: int=501):
+                 device: torch.device = "cpu", sequence_length: int=101):
         self.device = torch.device(device)
         self.sequence_length = sequence_length
         self.data_generator = OrbitalTrajectoryGenerator(n_batches=n_batches, batch_size=batch_size,
-                                                         T=np.linspace(0.0, 5.0, sequence_length),
-                                                         dt_min=1.0E-4)
+                                                         n_steps=sequence_length)
 
     def __iter__(self):
         for batch in self.data_generator:
-            yield model.data_to_tensor(*self._filter(batch), self.device,
+            yield model.data_to_tensor(*self._split(batch), self.device,
                                        self.sequence_length-1, self.sequence_length-2)
 
     def get_batch(self):
-        return self._filter(next(iter(self.data_generator)))
+        return self._split(next(iter(self.data_generator)))
     
-    def _filter(self, df: pd.DataFrame) -> pd.DataFrame:
+    def _split(self, df: pd.DataFrame) -> pd.DataFrame:
         """
-        Filter out next steps as soon as data get out of bounds
+        Split the input and target time steps for each orbital trajectory
         """
         inputs = []
         targets = []
         for ID, sub in df.groupby("ID"):
-            out_of_bounds = (sub[["x", "y"]].abs() > 3).any(axis=1)  # | (sub[["u", "v"]].abs() > 10).any(axis=1)
-            if out_of_bounds.any():
-                i = out_of_bounds.argmax()
-                sub = sub.iloc[:i]
-            i = random.randint(2, len(sub)-1)
+            i = random.randint(10, len(sub)-10)
             inputs.append(sub.iloc[:i])
             targets.append(sub.iloc[i:])
         return pd.concat(inputs), pd.concat(targets)
 
 
-train_data = Batchifyer(1, 100)
-train_losses, val_losses, grad, best_step = model.fit(train_data, n_steps=10_000, keep_best=False, learning_rate=1.0E-3)
+train_data = Batchifyer(1, 1_000)
+train_losses, val_losses, grad, best_step = model.fit(train_data, n_steps=1_000, keep_best=False, learning_rate=1.0E-3)
 ml.utilities.plot_losses(train_losses, val_losses, grad, best_step)
 
 # testing trained model
@@ -72,6 +67,9 @@ for i, (ID, sub) in enumerate(past.groupby("ID")):
     ax.plot(list(full.x), list(full.y), color=f"C{i}", linewidth=1.0, linestyle="--")
     ax.plot(list(sub.x), list(sub.y), color=f"C{i}", linewidth=1.0, label=ID)
     ax.scatter(list(df[df.ID == ID].x), list(df[df.ID == ID].y), color=f"C{i}", marker=".")
+ax.set_xticks([])
+ax.set_yticks([])
+f.tight_layout()
 plt.show()
 
 if __name__ == "__main__":

@@ -122,6 +122,15 @@ A ProbabilityDistribution is a multilayer perceptron used to learn the CDF (Cumu
 
 ![distribution predictions](https://raw.githubusercontent.com/BFavier/Pygmalion/main/images/density.png)
 
+
+### **TimeSeriesRegressor**
+
+A TimeSeriesRegressor forecast future values of a time series.
+
+![orbital_trajectory](https://raw.githubusercontent.com/BFavier/Pygmalion/main/images/orbital_trajectories.png)
+
+It is implemented as an encoder/decoder Transformer.
+
 ### **ImageClassifier**
 
 An ImageClassifier predicts a str class given as input an image. Here below the predictions of a model trained on the fashion-MNIST dataset.
