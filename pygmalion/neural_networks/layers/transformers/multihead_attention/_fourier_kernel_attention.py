@@ -156,12 +156,12 @@ class FourrierKernelAttention(torch.nn.Module):
         N, H, Lk, d = k.shape
         if key_mask is not None:
             k = torch.masked_fill(k, key_mask.unsqueeze(1).unsqueeze(-1).expand(-1, H, -1, d).to(k.device), 0.)
-        attention = (FourrierKernelAttention._compute_cos_sin(q, pq, k, pk, v, torch.cos, mask_future, query_offset)
-                     + FourrierKernelAttention._compute_cos_sin(q, pq, k, pk, v, torch.sin, mask_future, query_offset)
+        attention = (FourrierKernelAttention._compute(q*torch.cos(pq), k*torch.cos(pk), v, mask_future, query_offset)
+                     + FourrierKernelAttention._compute(q*torch.sin(pq), k*torch.sin(pk), v, mask_future, query_offset)
                      + FourrierKernelAttention._compute(q, k, v, mask_future, query_offset))
         if scaled:
-            attention = attention / (FourrierKernelAttention._compute_cos_sin(q, pq, k, pk, None, torch.cos, mask_future, query_offset)
-                                     + FourrierKernelAttention._compute_cos_sin(q, pq, k, pk, None, torch.sin, mask_future, query_offset)
+            attention = attention / (FourrierKernelAttention._compute(q*torch.cos(pq), k*torch.cos(pk), None, mask_future, query_offset)
+                                     + FourrierKernelAttention._compute(q*torch.sin(pq), k*torch.sin(pk), None, mask_future, query_offset)
                                      + FourrierKernelAttention._compute(q, k, None, mask_future, query_offset)).unsqueeze(-1)
         return attention
 
@@ -202,10 +202,8 @@ class FourrierKernelAttention(torch.nn.Module):
         """
         N, H, Lq, d = q.shape
         N, H, Lk, d = k.shape
-        cos_pq, cos_pk = torch.cos(pq), torch.cos(pk)
-        sin_pq, sin_pk = torch.sin(pq), torch.sin(pk)
-        score = (torch.einsum("nhqd, nhkd, nhqd, nhkd -> nhqk", q, k, cos_pq, cos_pk)
-                 + torch.einsum("nhqd, nhkd, nhqd, nhkd -> nhqk", q, k, sin_pq, sin_pk)
+        score = (torch.einsum("nhqd, nhkd -> nhqk", q*torch.cos(pq), k*torch.cos(pk))
+                 + torch.einsum("nhqd, nhkd -> nhqk", q*torch.sin(pq), k*torch.sin(pk))
                  + torch.einsum("nhqd, nhkd -> nhqk", q, k))
         if mask_future:
             mask = _mask_chronological(Lq, Lk, score.device, query_offset).reshape(1, 1, Lq, Lk)
@@ -216,53 +214,6 @@ class FourrierKernelAttention(torch.nn.Module):
             score = torch.masked_fill(score, key_mask.reshape(N, 1, 1, Lk).to(score.device), 0.)
         attention = torch.matmul(score, v)
         return attention
-    
-    @staticmethod
-    def _compute_cos_sin(q: torch.Tensor, pq: torch.Tensor,
-                         k: torch.Tensor, pk: torch.Tensor, v: Optional[torch.Tensor],
-                         cos_sin: Callable, masked: bool, query_offset: int) -> torch.Tensor:
-        """
-        Compute :
-            \sum_k (q_{ik} * cos_sin(pq)_i * \sum_j (k_{jk} * cos_sin(pk)_j * v_{jd}))
-        If masked is True, the sum over j is replaced with a cumulated sum
-        If v is None, makes the denominator calculation with v_{jd} = 1.
-
-        Parameters
-        ----------
-        q : torch.Tensor
-            tensor of queries, post kernel function application, of shape (N, H, Lq, d)
-        pq : torch.Tensor
-            tensor of query positions, post projection to embedding dim, of shape (N, H, Lq, d)
-        k : torch.Tensor
-            tensor of queries, post kernel function application, of shape (N, H, Lk, d)
-        pq : torch.Tensor
-            tensor of query positions, post projection to embedding dim, of shape (N, H, Lk, d)
-        v : torch.Tensor or None
-            tensor of value vectors, of shape (N, H, Lk, d)
-            if None, compute the denominator instead of numerator
-        cos_sin : callable
-            cos function or sin function
-        masked : bool
-            If True, compute masked future variant
-        query_offset : int
-            the positive offset of the query positions for the masking
-            (should be 0 unless)
-        """
-        N, H, Lq, d = q.shape
-        if v is None:
-            if masked:
-                right = _align(torch.cumsum(k * cos_sin(pk), dim=2), n=Lq+query_offset, dim=2)[..., query_offset:, :]
-                return torch.einsum("nhqd, nhqd, nhqd -> nhq", q, cos_sin(pq), right)
-            else:
-                return torch.einsum("nhqd, nhqd, nhd -> nhq", q, cos_sin(pq), torch.sum(k * cos_sin(pk), 2))
-        else:
-            if masked:
-                right = torch.einsum("nhkd, nhkd, nhkv -> nhkdv", k, cos_sin(pk), v)
-                right = _align(torch.cumsum(right, dim=2), n=Lq+query_offset, dim=2)[..., query_offset:, :, :]
-                return torch.einsum("nhkd, nhkd, nhkdv -> nhkv", q, cos_sin(pq), right)
-            else:
-                right = torch.einsum("nhkd, nhkd, nhkv -> nhdv", k, cos_sin(pk), v)
-                return torch.einsum("nhqd, nhqd, nhdv -> nhqv", q, cos_sin(pq), right)
 
     @staticmethod
     def _compute(q: torch.Tensor, k: torch.Tensor, v: Optional[torch.Tensor],
@@ -275,20 +226,32 @@ class FourrierKernelAttention(torch.nn.Module):
 
         Parameters
         ----------
-            See 'self._compute_cos_sin' for parameters description
+        q : torch.Tensor
+            tensor of queries, post kernel function application, of shape (N, H, Lq, d)
+        k : torch.Tensor
+            tensor of queries, post kernel function application, of shape (N, H, Lk, d)
+        v : torch.Tensor or None
+            tensor of value vectors, of shape (N, H, Lk, d)
+            if None, compute the denominator instead of numerator
+        masked : bool
+            If True, compute masked future variant
+        query_offset : int
+            the positive offset of the query positions for the masking
+            (should be 0 unless)
         """
         N, H, Lq, d = q.shape
-        if v is None:
-            if masked:
-                right = _align(torch.cumsum(k, dim=2), n=Lq+query_offset, dim=2)[..., query_offset:, :]
-                return torch.einsum("nhqd, nhqd -> nhq", q, right)
-            else:
+        if not masked:
+            if v is None:
                 return torch.einsum("nhqd, nhd -> nhq", q, torch.sum(k, 2))
-        else:
-            if masked:
-                right = torch.einsum("nhkd, nhkv -> nhkdv", k, v)
-                right = _align(torch.cumsum(right, dim=2), n=Lq+query_offset, dim=2)[..., query_offset:, :, :]
-                return torch.einsum("nhkd, nhkdv -> nhkv", q, right)
             else:
                 right = torch.einsum("nhkd, nhkv -> nhdv", k, v)
                 return torch.einsum("nhqd, nhdv -> nhqv", q, right)
+        else:
+            if v is None:
+                right = _align(torch.cumsum(k, dim=2), n=Lq+query_offset, dim=2)[..., query_offset:, :]
+                return torch.einsum("nhqd, nhqd -> nhq", q, right)
+            else:
+                right = torch.einsum("nhkd, nhkv -> nhkdv", k, v)
+                right = _align(torch.cumsum(right, dim=2), n=Lq+query_offset, dim=2)[..., query_offset:, :, :]
+                return torch.einsum("nhkd, nhkdv -> nhkv", q, right)
+
