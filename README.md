@@ -1,4 +1,4 @@
-Pygmalion in the greek mythologie is a sculptor that fell in love with one of his creations. In the myth, Aphrodite gives life to Galatea, the sculpture he fell in love with. This package is a python machine learning library that implements models for some common machine learning tasks. Everything that you need to give a mind of their own to inanimate objects.
+Pygmalion in the greek mythologie is a sculptor that fell in love with one of his creations. In the myth, Aphrodite gives life to Galatea, the sculpture he fell in love with. This package is a python machine learning library that implements models for some common machine learning tasks. Everything that you need to give a mind of their own to inanimate silicon-based objects that are computers.
 
 # Installing pygmalion
 
