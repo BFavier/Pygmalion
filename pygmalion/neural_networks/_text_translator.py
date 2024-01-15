@@ -311,7 +311,7 @@ class TextTranslator(NeuralNetwork):
     def device(self) -> torch.device:
         return self.head.weight.device
     
-    def data_to_tensor(self, x: object, y: object,
+    def data_to_tensor(self, x: List[str], y: List[str],
                        weights: Optional[Sequence[float]] = None,
                        device: Optional[torch.device] = None,
                        max_input_sequence_length: Optional[int] = None,
