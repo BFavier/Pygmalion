@@ -162,7 +162,7 @@ class FourrierKernelAttention(torch.nn.Module):
         if scaled:
             attention = attention / (FourrierKernelAttention._compute(q*torch.cos(pq), k*torch.cos(pk), None, mask_future, query_offset)
                                      + FourrierKernelAttention._compute(q*torch.sin(pq), k*torch.sin(pk), None, mask_future, query_offset)
-                                     + FourrierKernelAttention._compute(q, k, None, mask_future, query_offset)).unsqueeze(-1)
+                                     + FourrierKernelAttention._compute(q, k, None, mask_future, query_offset) + 1.0E-8).unsqueeze(-1)
         return attention
 
     @staticmethod
@@ -209,7 +209,7 @@ class FourrierKernelAttention(torch.nn.Module):
             mask = _mask_chronological(Lq, Lk, score.device, query_offset).reshape(1, 1, Lq, Lk)
             score = torch.masked_fill(score, mask, 0)
         if scaled:
-            score = score / score.sum(dim=-1).unsqueeze(-1)
+            score = score / (score.sum(dim=-1).unsqueeze(-1) + 1.0E-8)
         if key_mask is not None:
             score = torch.masked_fill(score, key_mask.reshape(N, 1, 1, Lk).to(score.device), 0.)
         attention = torch.matmul(score, v)
