@@ -35,7 +35,7 @@ class LearnedPositionalEncoding(torch.nn.Module):
         """
         L, D = X.shape[-2:]
         sequence_length = self.embedding.weight.shape[0]
-        if (L+offset >= sequence_length):
+        if (L+offset > sequence_length):
             raise ValueError(f"Tried applying {type(self).__name__} with {sequence_length} learned positions to longer sequence of length {L}. (Tensor of shape {tuple(X.shape)})")
         P = torch.arange(L, device=X.device)
         shape = tuple(1 for _ in range(len(X.shape) - 2)) + (L, D)
