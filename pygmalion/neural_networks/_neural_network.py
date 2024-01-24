@@ -86,7 +86,7 @@ class NeuralNetwork(torch.nn.Module, Model):
             The learning rate used to update the parameters,
             or a learning rate function of 'step' the number
             of optimization steps performed
-        patience : int or None
+        patience : int or float("inf")
             The number of steps before early stopping
             (if no improvement for 'patience' steps, stops training early)
             If None, no early stoping is performed
