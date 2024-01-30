@@ -5,12 +5,12 @@ from datasets import load_dataset
 from pygmalion.utilities import plot_losses, load_model
 from pygmalion.tokenizers import BytePairEncoder
 from pygmalion.neural_networks import TextTranslator
-from pygmalion.neural_networks.layers.positional_encoding import LearnedPositionalEncoding
+from pygmalion.neural_networks.layers.positional_encoding import SinusoidalPositionalEncoding
 from pygmalion.neural_networks.layers.transformers.multihead_attention import FourrierKernelAttention, ScaledDotProductAttention
 import pandas as pd
 
 
-method = "new"  # "new" or "vanilla"
+method = "new"  # "new" or "vanilla" or "vanilla32"
 dataset = load_dataset('wmt14', 'fr-en', trust_remote_code=True)
 path = pathlib.Path(__file__).parent
 tokenizer_path = path / "tokenizer.json"
@@ -33,12 +33,12 @@ if not tokenizer_path.is_file():
 else:
     tokenizer = load_model(tokenizer_path)
 
-if method == "vanilla":
-    model = TextTranslator(tokenizer, tokenizer,
-                           n_stages=6, projection_dim=64, n_heads=8, dropout=None,
-                           positional_encoding_type=LearnedPositionalEncoding,
-                           input_positional_encoding_kwargs={"sequence_length": 256},
-                           output_positional_encoding_kwargs={"sequence_length": 256},
+if method.startswith("vanilla"):
+    model = TextTranslator(tokenizer, tokenizer, n_stages=6,
+                           projection_dim=16 if method.endswith("32") else 64,
+                           n_heads=32 if method.endswith("32") else 8,
+                           dropout=None,
+                           positional_encoding_type=SinusoidalPositionalEncoding,
                            attention_type=ScaledDotProductAttention)
 else:
     model = TextTranslator(tokenizer, tokenizer,
