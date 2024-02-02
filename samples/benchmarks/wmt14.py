@@ -2,15 +2,16 @@ import pathlib
 import json
 import torch
 from datasets import load_dataset
+from tqdm import tqdm
 from pygmalion.utilities import plot_losses, load_model
 from pygmalion.tokenizers import BytePairEncoder
 from pygmalion.neural_networks import TextTranslator
 from pygmalion.neural_networks.layers.positional_encoding import SinusoidalPositionalEncoding
 from pygmalion.neural_networks.layers.transformers.multihead_attention import FourrierKernelAttention, ScaledDotProductAttention
-import pandas as pd
+import numpy as np
 
 
-method = "new"  # "new" or "vanilla" or "vanilla32"
+method = "vanilla"  # "new" or "vanilla" or "vanilla32"
 dataset = load_dataset('wmt14', 'fr-en', trust_remote_code=True)
 path = pathlib.Path(__file__).parent
 tokenizer_path = path / "tokenizer.json"
@@ -60,28 +61,26 @@ class Batchifyer:
     
     def __iter__(self):
         for _ in range(self.n_batches):
-            fr, en = [], []
-            for _ in range(self.batch_size):
-                row = next(self.iterator, None)
-                if row is None:
-                    self.iterator = iter(self.dataset)
-                    row = next(self.iterator)
-                trsl = row["translation"]
-                fr.append(trsl["fr"])
-                en.append(trsl["en"])
-            yield model.data_to_tensor(fr, en, max_input_sequence_length=self.padded_size,
+            batch = self.dataset.select(np.random.choice(len(self.dataset), size=self.batch_size, replace=False))
+            en, fr = zip(*((b["en"], b["fr"]) for b in (b["translation"] for b in batch)))
+            yield model.data_to_tensor(en, fr, max_input_sequence_length=self.padded_size,
                                        max_output_sequence_length=self.padded_size)
 
 
 optimizer = torch.optim.Adam(model.parameters(), betas=(0.9, 0.98))
-hist = model.fit(Batchifyer(dataset["train"], batch_size=200, n_batches=1),
-                 Batchifyer(dataset["validation"], batch_size=200, n_batches=1),
-                 optimizer, n_steps=30_000, keep_best=False,
-                 learning_rate=lambda step: 1.0E-3 * 10**-(step/15_000),
-                 backup_path=path / "checkpoints", backup_prefix=f"{method}_model_", backup_frequency=5_000)
+hist = model.fit(Batchifyer(dataset["train"], batch_size=100, n_batches=1),
+                 Batchifyer(dataset["validation"], batch_size=100, n_batches=1),
+                 optimizer, n_steps=100_000, keep_best=False,
+                 learning_rate=lambda step: 1.0E-4 * 10**-(step/100_000),
+                 backup_path=path / "checkpoints", backup_prefix=f"{method}_model", backup_frequency=5_000)
 model.save(path / f"model_{method}.pth", overwrite=True)
 with open(path / f"history_{method}.json", "w", encoding="utf-8") as f:
     json.dump({"train_loss": hist[0], "val_loss": hist[1], "grad": hist[2], "best_step": hist[3]}, f)
+with open(path / "checkpoints" / f"{method}_predictions.json", "w") as f:
+    for r in tqdm(dataset["test"]):
+        r = r["translation"]
+        f.write(json.dumps({"predicted": model.predict(r["en"], max_tokens=256), "target": r["fr"]})+"\n")
+# sacrebleu.raw_corpus_bleu("hit the ceiling", ["hit the roof"]
 plot_losses(*hist)
 import matplotlib.pyplot as plt
 plt.show()
