@@ -70,9 +70,9 @@ class Batchifyer:
 optimizer = torch.optim.Adam(model.parameters(), betas=(0.9, 0.98))
 hist = model.fit(Batchifyer(dataset["train"], batch_size=100, n_batches=1),
                  Batchifyer(dataset["validation"], batch_size=100, n_batches=1),
-                 optimizer, n_steps=100_000, keep_best=False,
+                 optimizer, n_steps=400_000, keep_best=False,
                  learning_rate=lambda step: 1.0E-4 * 10**-(step/100_000),
-                 backup_path=path / "checkpoints", backup_prefix=f"{method}_model", backup_frequency=5_000)
+                 backup_path=path / "checkpoints", backup_prefix=f"{method}_model", backup_frequency=25_000)
 model.save(path / f"model_{method}.pth", overwrite=True)
 with open(path / f"history_{method}.json", "w", encoding="utf-8") as f:
     json.dump({"train_loss": hist[0], "val_loss": hist[1], "grad": hist[2], "best_step": hist[3]}, f)
