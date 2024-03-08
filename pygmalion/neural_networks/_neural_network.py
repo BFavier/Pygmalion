@@ -63,6 +63,7 @@ class NeuralNetwork(torch.nn.Module, Model):
             L1: Optional[float] = None,
             L2: Optional[float] = None,
             gradient_cliping: Optional[float] = None,
+            step_offset: int = 0,
             backup_path: Optional[str] = None,
             backup_prefix: str = "model",
             backup_frequency: int = 10000,
@@ -100,6 +101,8 @@ class NeuralNetwork(torch.nn.Module, Model):
             L2 regularization factor
         gradient_cliping : float or None
             if provided, the gradient vector is cliped in the (-gradient_clipping, gradient_clipping) range
+        step_offset : int
+            the step to start from, usefull for restarting from a checkpoint with scheduled learning rate
         backup_path : str or path like or None
             if provided, path where to backup the model (and optimizer) on disk
         backup_prefix : str
@@ -122,14 +125,14 @@ class NeuralNetwork(torch.nn.Module, Model):
             backup_path = pathlib.Path(backup_path)
             if not backup_path.is_dir():
                 raise NotADirectoryError(f"Backup path is not a valid directory: '{backup_path}'")
-        best_step = 0
+        best_step = step_offset
         if keep_best:
             best_state = {k: v.detach().cpu().clone() for k, v in self.state_dict().items()}
         best_metric = None
         train_losses = []
         val_losses = []
         grad_norms = []
-        lr = learning_rate(0) if callable(learning_rate) else learning_rate
+        lr = learning_rate(step_offset) if callable(learning_rate) else learning_rate
         if optimizer is None:
             optimizer = torch.optim.Adam(self.parameters(), lr)
         else:
@@ -137,7 +140,7 @@ class NeuralNetwork(torch.nn.Module, Model):
                 g["lr"] = lr
         try:
             # looping on epochs
-            for step in range(n_steps+1):
+            for step in range(step_offset, step_offset+n_steps+1):
                 # stepping the optimization
                 optimizer.step()
                 # updating learning rate
