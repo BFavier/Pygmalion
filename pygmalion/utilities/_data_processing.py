@@ -20,7 +20,7 @@ def _string_embedding(string: str, n: int=4) -> Tuple[float]:
 def embed_categorical(df: pd.DataFrame, dimension: int=4,
                       columns: Optional[Iterable[object]]=None,
                       skip_columns: Optional[Iterable[object]]=[],
-                      inplace: bool=False) -> pd.DataFrame:
+                      inplace: bool=False, remove_columns: bool=True) -> pd.DataFrame:
     """
     Converts each categorical columns to 'dimension' additional floating point columns.
     If the list of categorical columns is not supplied, all column that are not floating points are converted.
@@ -38,7 +38,8 @@ def embed_categorical(df: pd.DataFrame, dimension: int=4,
         the column that are in 'skip_columns' are not transformed
     inplace : bool
         If False, the operation is done on a copy of the dataframe
-
+    remove_columns : bool
+        If true, the embedded columns are removed
     Example:
     --------
     >>> df = pd.DataFrame([[1.0, 1, "a"], [2.0, 2, "b"]], columns=("floating", "integer", "string"))
@@ -61,7 +62,8 @@ def embed_categorical(df: pd.DataFrame, dimension: int=4,
         embeddings = tuple(zip(*(_string_embedding(str(v), n=dimension) for v in df[col])))
         for i, e in enumerate(embeddings, start=1):
             df[f"{col}_{i}"] = e
-        df.drop(columns=[col], inplace=True)
+        if remove_columns:
+            df.drop(columns=[col], inplace=True)
     return df
 
 
