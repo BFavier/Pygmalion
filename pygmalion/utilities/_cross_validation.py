@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 import torch
-from typing import Any, Tuple, Iterable, Sequence
+from typing import Any, Tuple, Iterable, Sequence, Generator
 
 
 def split(*data: Tuple[Sequence], weights: Tuple[float] = (0.8, 0.2),
@@ -39,7 +39,7 @@ def split(*data: Tuple[Sequence], weights: Tuple[float] = (0.8, 0.2),
     return splits
 
 
-def kfold(*data: Tuple[Iterable], k: int = 3, shuffle: bool = True) -> tuple:
+def kfold(*data: Tuple[Iterable], k: int = 3, shuffle: bool = True) -> Generator[Tuple[Iterable], None, None]:
     """
     Splits the input data into k-folds of (train, test) data
 

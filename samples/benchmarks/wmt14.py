@@ -1,6 +1,7 @@
 import pathlib
 import json
 import torch
+import evaluate
 from datasets import load_dataset
 from tqdm import tqdm
 from pygmalion.utilities import plot_losses, load_model
@@ -15,8 +16,9 @@ method = "vanilla"  # "new" or "vanilla" or "vanilla32"
 dataset = load_dataset('wmt14', 'fr-en', trust_remote_code=True)
 path = pathlib.Path(__file__).parent
 tokenizer_path = path / "tokenizer.json"
-model_checkpoint_path = path / "checkpoints" / "vanilla_model_050000.pth"
-optimizer_checkpoint_path = path / "checkpoints" / "optimizer_vanilla_model_050000.pth"
+restart_step = 0
+model_checkpoint_path = path #/ "checkpoints" / "vanilla_model_200000_label_smoothing.pth"
+optimizer_checkpoint_path = path #/ "checkpoints" / "optimizer_vanilla_model_200000_label_smoothing.pth"
 
 if tokenizer_path.is_file():
     print("Loading tokenizer")
@@ -45,13 +47,13 @@ elif method.startswith("vanilla"):
     model = TextTranslator(tokenizer, tokenizer, n_stages=6,
                            projection_dim=16 if method.endswith("32") else 64,
                            n_heads=32 if method.endswith("32") else 8,
-                           dropout=0.1,
+                           dropout=0.1, label_smoothing=0.1,
                            positional_encoding_type=SinusoidalPositionalEncoding,
                            attention_type=ScaledDotProductAttention)
 else:
     model = TextTranslator(tokenizer, tokenizer,
                            n_stages=6, projection_dim=16, n_heads=32, dropout=0.1,
-                           positional_encoding_type=None,
+                           positional_encoding_type=None, label_smoothing=0.1,
                            attention_type=FourrierKernelAttention)
 print(method, f"{sum(p.numel() for p in model.parameters()):.3g} parameters")
 model.to("cuda:0")
@@ -79,16 +81,26 @@ if optimizer_checkpoint_path.is_file():
 hist = model.fit(Batchifyer(dataset["train"], batch_size=100, n_batches=1),
                  Batchifyer(dataset["validation"], batch_size=100, n_batches=1),
                  optimizer, n_steps=300_000, keep_best=False,
-                 learning_rate=lambda step: 1.0E-4 * 10**-(step/300_000),
-                 backup_path=path / "checkpoints", backup_prefix=f"{method}_model", backup_frequency=50_000)
+                 learning_rate=lambda step: 512**-0.5 * min((step+1)**-0.5, (step+1) * 4000**-1.5),
+                 step_offset=restart_step, backup_path=path / "checkpoints", backup_prefix=f"{method}_model", backup_frequency=50_000)
+
+# save model
 model.save(path / f"model_{method}.pth", overwrite=True)
+# save history
 with open(path / f"history_{method}.json", "w", encoding="utf-8") as f:
     json.dump({"train_loss": hist[0], "val_loss": hist[1], "grad": hist[2], "best_step": hist[3]}, f)
+# save predictions
 with open(path / "checkpoints" / f"{method}_predictions.json", "w") as f:
     for r in tqdm(dataset["test"]):
         r = r["translation"]
-        f.write(json.dumps({"predicted": model.predict(r["en"], max_tokens=256), "target": r["fr"]})+"\n")
-# sacrebleu.raw_corpus_bleu("hit the ceiling", ["hit the roof"]
+        f.write(json.dumps({"predicted": model.predict(r["en"], max_tokens=256), "target": r["fr"]}, ensure_ascii=False)+"\n")
+# save BLEU score
+bleu = evaluate.load("bleu")
+with open(path / "checkpoints" / f"{method}_predictions.json", "r") as h:
+    predictions = [json.loads(line) for line in h.read().split("\n") if len(line) > 0]
+    with open(path / "checkpoints" / f"{method}_score.json", "w") as f:
+        json.dump(bleu.compute(predictions=[p["predicted"][0] for p in predictions], references=[[p["target"]] for p in predictions]), f)
+
 plot_losses(*hist)
 import matplotlib.pyplot as plt
 plt.show()
