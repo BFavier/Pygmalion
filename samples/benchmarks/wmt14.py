@@ -82,7 +82,7 @@ hist = model.fit(Batchifyer(dataset["train"], batch_size=100, n_batches=1),
                  Batchifyer(dataset["validation"], batch_size=100, n_batches=1),
                  optimizer, n_steps=300_000, keep_best=False,
                  learning_rate=lambda step: 512**-0.5 * min((step+1)**-0.5, (step+1) * 4000**-1.5),
-                 step_offset=restart_step, backup_path=path / "checkpoints", backup_prefix=f"{method}_model", backup_frequency=50_000)
+                 start_step=restart_step, backup_path=path / "checkpoints", backup_prefix=f"{method}_model", backup_frequency=50_000)
 
 # save model
 model.save(path / f"model_{method}.pth", overwrite=True)
