@@ -47,13 +47,13 @@ elif method.startswith("vanilla"):
     model = TextTranslator(tokenizer, tokenizer, n_stages=6,
                            projection_dim=16 if method.endswith("32") else 64,
                            n_heads=32 if method.endswith("32") else 8,
-                           dropout=0.1, label_smoothing=0.1,
+                           dropout=0.1, label_smoothing=0.,
                            positional_encoding_type=SinusoidalPositionalEncoding,
                            attention_type=ScaledDotProductAttention)
 else:
     model = TextTranslator(tokenizer, tokenizer,
                            n_stages=6, projection_dim=16, n_heads=32, dropout=0.1,
-                           positional_encoding_type=None, label_smoothing=0.1,
+                           positional_encoding_type=None, label_smoothing=0.,
                            attention_type=FourrierKernelAttention)
 print(method, f"{sum(p.numel() for p in model.parameters()):.3g} parameters")
 model.to("cuda:0")
