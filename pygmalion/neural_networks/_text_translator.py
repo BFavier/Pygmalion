@@ -265,6 +265,7 @@ class TextTranslator(NeuralNetwork):
             for _ in counter:
                 predicted_likelyhoods = [torch.log(torch.softmax(self.decode(torch.tensor(sequence[-1:], dtype=torch.long, device=self.device).unsqueeze(0),
                                                    encoded, encoded_padding_mask, history), dim=-1))
+                                         if sequence[-1] != END else None
                                          for sequence, history in zip(sequences, histories)]
                 beam_search(n_beams, sequences, histories, sum_likelyhoods, predicted_likelyhoods)
                 if all(sequence[-1] == END for sequence in sequences):
@@ -297,7 +298,7 @@ class TextTranslator(NeuralNetwork):
                 Q = self.embedding_output(predicted)
                 if self.positional_encoding_output is not None:
                     Q = self.positional_encoding_output(Q)
-                Q = self.transformer_decoder(Q, encoded, encoded_padding_mask)
+                Q = self.decoder(Q, encoded, encoded_padding_mask)
                 p = torch.softmax(self.head(Q), dim=-1)
                 token = p.max(dim=-1).indices[:, -1:]
                 predicted = torch.cat([predicted, token], dim=-1)

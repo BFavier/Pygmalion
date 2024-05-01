@@ -27,18 +27,20 @@ def beam_search(n_beams: int,
         Tensor of floats of shape (n_classes,).
         If the beam's sequence already ended, None instead.
     """
-    # for each beam get the token/predicted-log-likelyhood of the top k mean-log-likelyhood tokens
+    # for each beam, get the top-k (token index, log-likelyhood) of the token candidates for the beam
+    # aka : [[(token_index, log_likelyhood) for k] for beam]
     topk = [torch.topk(log.reshape(-1), n_beams) if log is not None else None
             for log in predicted_likelyhoods]
-    topk = [[(None, tk)] if isinstance(tk, float)
-            else list(zip(tk.indices.detach().cpu().tolist(),
-                          tk.values.detach().cpu().tolist()))
+    topk = [list(zip(tk.indices.detach().cpu().tolist(),
+                     tk.values.detach().cpu().tolist()))
+            if tk is not None else [(None, None)]
             for tk in topk]
     # get the (beam index, predicted token, mean-log-likelyhood) for the top most likely sequences
     beams = sorted([(beam, token, ll) for beam, tk in enumerate(topk) for token, ll in tk],
-                   key = lambda x: (sum_likelyhoods[x[0]] + x[-1]) / len(sequences[x[0]])
+                   key = lambda x: (sum_likelyhoods[x[0]] + x[-1]) / (len(sequences[x[0]])+1)
                                     if x[-1] is not None else
-                                    sum_likelyhoods[x[0]] / (len(sequences[x[0]]) - 1)
+                                    sum_likelyhoods[x[0]] / len(sequences[x[0]]),
+                    reverse=True
                     )[:n_beams]
     beam_indices, token_indices, predicted_ll = zip(*beams)
     # modify inputs
@@ -49,6 +51,6 @@ def beam_search(n_beams: int,
     new_histories = [deepcopy(histories[beam]) for beam in beam_indices]
     histories.clear()
     histories.extend(new_histories)
-    new_sum_log_likelyhoods = [sum_likelyhoods[beam] + ll for beam, ll in zip(beam_indices, predicted_ll)]
+    new_sum_log_likelyhoods = [sum_likelyhoods[beam] + (ll or 0) for beam, ll in zip(beam_indices, predicted_ll)]
     sum_likelyhoods.clear()
     sum_likelyhoods.extend(new_sum_log_likelyhoods)
