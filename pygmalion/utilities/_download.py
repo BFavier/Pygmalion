@@ -46,7 +46,8 @@ def _download_to_stream(url: str, stream: IOBase, file_name: str="Download"):
     Download the bytes of the give google drive file into the given IO stream
     """
     session = requests.Session()
-    response = session.get(_direct_url(url), stream=True)
+    headers = {'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_10_1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/39.0.2171.95 Safari/537.36'}
+    response = session.get(_direct_url(url), stream=True, headers=headers)
     if response.status_code >= 400:
         raise RuntimeError(f"http error: {response.status_code}")
     total_size = int(response.headers['content-length'])
