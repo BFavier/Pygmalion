@@ -1,15 +1,20 @@
 import torch
 import pathlib
-import IPython
 import numpy as np
 import pygmalion as ml
 import pygmalion.neural_networks as nn
 import matplotlib.pyplot as plt
+from pygmalion.datasets import fashion_mnist
+from pygmalion.cross_validation import split
+from pygmalion.metrics import confusion_matrix, accuracy
+from pygmalion.ploting import plot_matrix, plot_losses
+from pygmalion.data_processing import embed_categorical, mask_nullables
+
 plt.style.use("bmh")
 data_path = pathlib.Path(__file__).parents[1] / "data"
 
 # Download the data
-ml.datasets.fashion_mnist(data_path)
+fashion_mnist(data_path)
 
 # Load data
 data = dict(np.load(data_path / "fashion-MNIST.npz"))
@@ -39,16 +44,16 @@ class Batchifyer:
             idx = shuffle[i*self.batch_size:(i+1)*self.batch_size]
             yield (self.x[idx], self.y[idx])
 
-train_data, val_data = (Batchifyer(*data) for data in ml.utilities.split(x_train, y_train, weights=(0.8, 0.2)))
+train_data, val_data = (Batchifyer(*data) for data in split(x_train, y_train, weights=(0.8, 0.2)))
 train_losses, val_losses, grad, best_step = model.fit(train_data, val_data, n_steps=1000)
 
 # Plot results
-ml.utilities.plot_losses(train_losses, val_losses, grad, best_step)
+plot_losses(train_losses, val_losses, grad, best_step)
 f, ax = plt.subplots()
 y_pred = sum([model.predict(x_test[i:i+100]) for i in range(0, len(x_test), 100)], [])
 y_target = [classes[i] for i in y_test]
-ml.utilities.plot_matrix(ml.utilities.confusion_matrix(y_pred, y_target), ax=ax, color_bar=True)
-acc = ml.utilities.accuracy(y_pred, y_target)
+plot_matrix(confusion_matrix(y_pred, y_target), ax=ax, color_bar=True)
+acc = accuracy(y_pred, y_target)
 ax.set_title(f"Accuracy = {acc:.3g}")
 f.tight_layout()
 
@@ -70,4 +75,3 @@ for n in range(lx*ly):
 f.tight_layout()
 
 plt.show()
-IPython.embed()

@@ -3,13 +3,12 @@ The seasons - Copernicus
 """
 import random
 import torch
-import pygmalion as ml
-import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 from pygmalion.datasets.generators import OrbitalTrajectoryGenerator
 from pygmalion.neural_networks import TimeSeriesRegressor
 from pygmalion.neural_networks.layers.transformers.multihead_attention import FourrierKernelAttention
+from pygmalion.ploting import plot_losses
 
 DEVICE = "cuda:0" if torch.cuda.device_count() > 0 else "cpu"
 model = TimeSeriesRegressor(inputs=["x", "y"], targets=["x", "y"],
@@ -56,7 +55,7 @@ class Batchifyer:
 
 train_data = Batchifyer(1, 1_000)
 train_losses, val_losses, grad, best_step = model.fit(train_data, n_steps=1_000, keep_best=False, learning_rate=1.0E-3)
-ml.utilities.plot_losses(train_losses, val_losses, grad, best_step)
+plot_losses(train_losses, val_losses, grad, best_step)
 
 # testing trained model
 past, future = Batchifyer(1, 10).get_batch()
@@ -71,7 +70,3 @@ ax.set_xticks([])
 ax.set_yticks([])
 f.tight_layout()
 plt.show()
-
-if __name__ == "__main__":
-    import IPython
-    IPython.embed()

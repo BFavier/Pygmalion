@@ -2,6 +2,7 @@ import hashlib
 from typing import Tuple, Iterable, Optional
 import numpy as np
 import pandas as pd
+from pandas.api.types import is_numeric_dtype
 
 
 def _string_embedding(string: str, n: int=4) -> Tuple[float]:
@@ -55,7 +56,7 @@ def embed_categorical(df: pd.DataFrame, dimension: int=4,
     if not inplace:
         df = df.copy()
     if columns is None:
-        columns = [c for c, d in df.dtypes.items() if not np.issubdtype(d, np.floating)]
+        columns = [c for c, d in df.dtypes.items() if is_numeric_dtype(d)]
     for col in columns:
         if col in skip_columns:
             continue

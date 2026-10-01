@@ -3,9 +3,14 @@ Pygmalion in the greek mythologie is a sculptor that fell in love with one of hi
 # Installing pygmalion
 
 pygmalion can be installed through pip.
-
+~~~bash
+python -m pip install "pygmalion[all]"
 ~~~
-python -m pip install pygmalion
+
+
+Or uv:
+~~~bash
+uv pip install pygmalion --all-extras
 ~~~
 
 # Fast prototyping of models with pygmalion
@@ -17,7 +22,11 @@ The inputs and outputs of the models are common python objects (such as numpy ar
 In this section we are going to see how to load a dataset, train a model, display some metrics, and save a model.
 
 ~~~python
->>> import pygmalion as ml
+>>> from pygmalion.cross_validation import *
+>>> from pygmalion.datasets import *
+>>> from pygmalion.metrics import *
+>>> from pygmalion.ploting import *
+>>> from pygmalion.model import *
 >>> import pygmalion.neural_networks as nn
 >>> import pandas as pd
 >>> import numpy as np
@@ -29,7 +38,7 @@ You can download a dataset and split it with the **split** function.
 ~~~python
 >>> ml.datasets.boston_housing("./")
 >>> df = pd.read_csv("./boston_housing.csv")
->>> df_train, df_val, df_test = ml.utilities.split(df, weights=(0.8, 0.1, 0.1))
+>>> df_train, df_val, df_test = split(df, weights=(0.8, 0.1, 0.1))
 ~~~
 
 Creating and training a model takes few lines of code.
@@ -48,11 +57,10 @@ For a regressor model, the available metrics are [**MSE**](https://en.wikipedia.
 
 ~~~python
 >>> f, ax = plt.subplots()
->>> ml.utilities.plot_fitting(df_train[target], model.predict(df_train), ax=ax, label="training")
->>> ml.utilities.plot_fitting(df_val[target], model.predict(df_val), ax=ax, label="validation")
->>> ml.utilities.plot_fitting(df_test[target], model.predict(df_test), ax=ax, label="testing", color="C3")
->>> R2 = ml.utilities.R2(model.predict(df_test), df_test[target])
->>> ax.set_title(f"R²={R2:.3g}")
+>>> plot_fitting(df_train[target], model.predict(df_train), ax=ax, label="training")
+>>> plot_fitting(df_val[target], model.predict(df_val), ax=ax, label="validation")
+>>> plot_fitting(df_test[target], model.predict(df_test), ax=ax, label="testing", color="C3")
+>>> ax.set_title(f"R²={R2(model.predict(df_test), df_test[target]):.3g}")
 >>> ax.set_xlabel("target")
 >>> ax.set_ylabel("predicted")
 >>> plt.show()
@@ -64,9 +72,9 @@ For a regressor model, the available metrics are [**MSE**](https://en.wikipedia.
 For a classifier model you can evaluate the [**accuracy**](https://en.wikipedia.org/wiki/Accuracy_and_precision#In_binary_classification), and display the confusion matrix.
 
 ~~~python
->>> ml.datasets.iris("./")
+>>> iris("./")
 >>> df = pd.read_csv("./iris.csv")
->>> df_train, df_val, df_test = ml.utilities.split(df, weights=(0.7, 0.2, 0.1))
+>>> df_train, df_val, df_test = split(df, weights=(0.7, 0.2, 0.1))
 >>> inputs, target = [c for c in df.columns if c != "variety"], "variety"
 >>> classes = df[target].unique()
 >>> model = nn.DenseClassifier(inputs, target, classes, hidden_layers=[8, 8, 8])
@@ -75,8 +83,8 @@ For a classifier model you can evaluate the [**accuracy**](https://en.wikipedia.
 >>> model.fit(train_data, val_data, n_steps=1000, patience=100)
 >>> f, ax = plt.subplots()
 >>> y_test, y_pred = df_test[target], model.predict(df_test)
->>> ml.utilities.plot_matrix(ml.utilities.confusion_matrix(y_test, y_pred, classes=classes), ax=ax, cmap="Greens", write_values=True, format=".2%")
->>> acc = ml.utilities.accuracy(y_pred, y_test)
+>>> plot_matrix(confusion_matrix(y_test, y_pred, classes=classes), ax=ax, cmap="Greens", write_values=True, format=".2%")
+>>> acc = accuracy(y_pred, y_test)
 >>> ax.set_title(f"Accuracy: {acc:.2%}")
 >>> plt.tight_layout()
 >>> plt.show()
@@ -89,7 +97,7 @@ A model saved on the disk can then be loaded back with the **load_model** functi
 
 ~~~python
 >>> model.save("./model.pth")
->>> model = ml.utilities.load_model("./model.pth")
+>>> model = load_model("./model.pth")
 ~~~
 
 # Implemented models
@@ -103,7 +111,7 @@ Each model is a pytorch **Module**. The fit method of neural networks returns a 
 
 ~~~python
 >>> train_losses, val_losses, grad, best_step = model.fit(...)
->>> ml.utilities.plot_losses(train_losses, val_losses, grad, best_step)
+>>> plot_losses(train_losses, val_losses, grad, best_step)
 ~~~
 
 ![loss history](https://raw.githubusercontent.com/BFavier/Pygmalion/main/images/Fashion_MNIST_residuals.png)

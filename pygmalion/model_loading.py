@@ -2,10 +2,11 @@ import json
 import pathlib
 import pickle
 import torch
+
 from typing import Union, Type
 from io import IOBase
 from pygmalion._model import Model
-from ._download import download_bytes
+from pygmalion._utilities._download import download_bytes
 from pygmalion.unsupervised import *
 from pygmalion.neural_networks import *
 from pygmalion.decision_trees import *

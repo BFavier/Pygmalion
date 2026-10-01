@@ -1,6 +1,7 @@
+import io
 import json
 import pathlib
-import io
+
 from typing import Union
 
 

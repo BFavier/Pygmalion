@@ -79,7 +79,7 @@ class DecisionTree(Model):
             the device on which to perform the best split search
         """
         self.n_observations = len(df)
-        inputs = [torch.from_numpy(df[col].to_numpy(dtype=dtype)).to(device) for col in self.inputs]
+        inputs = [torch.tensor(df[col].to_numpy(dtype=dtype)).to(device) for col in self.inputs]
         target = self.target_preprocessor(df[self.target] if target is None else target, dtype).to(device)
         self.root = Branch(inputs=inputs, target=target, variables=self.inputs,
                            depth=0, max_depth=max_depth, min_leaf_size=min_leaf_size,

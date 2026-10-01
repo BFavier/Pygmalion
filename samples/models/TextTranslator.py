@@ -1,10 +1,9 @@
 import torch
-import pygmalion as ml
 from pygmalion.tokenizers import DummyTokenizer
 from pygmalion.neural_networks import TextTranslator
 from pygmalion.neural_networks.layers.positional_encoding import LearnedPositionalEncoding
 from pygmalion.datasets.generators import RomanNumeralsGenerator
-import IPython
+from pygmalion.ploting import plot_losses
 import matplotlib.pyplot as plt
 
 DEVICE = "cuda:0" if torch.cuda.device_count() > 0 else "cpu"
@@ -28,10 +27,9 @@ class Batchifyer:
 train_data = Batchifyer(model, batch_size=1000)
 
 train_losses, val_losses, grad, best_step = model.fit(train_data, n_steps=3000, learning_rate=1.0E-3)
-ml.utilities.plot_losses(train_losses, val_losses, grad, best_step)
+plot_losses(train_losses, val_losses, grad, best_step)
 plt.show()
 
 model.to("cpu")
 for n in torch.randint(0, 1999, size=(10,)):
     print(f"{n} >>> {model.predict(f'{n}', max_tokens=100)[0]}")
-IPython.embed()

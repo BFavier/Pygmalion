@@ -2,4 +2,6 @@
 /samples/data/*
 /dist/*
 /pygmalion.egg-info/*
+/.venv
 *.pyc
+uv.lock

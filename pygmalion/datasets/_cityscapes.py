@@ -1,5 +1,5 @@
 import pathlib
-from pygmalion.utilities._download import download
+from pygmalion._utilities._download import download
 
 def cityscapes(directory: str):
     """downloads the modified 'cityscapes' dataset in the given directory"""

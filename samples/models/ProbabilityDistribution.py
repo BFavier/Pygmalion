@@ -2,7 +2,8 @@ import torch
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-import pygmalion as ml
+import pygmalion.neural_networks as nn
+from pygmalion.ploting import plot_losses
 
 DEVICE = "cuda:0" if torch.cuda.device_count() > 0 else "cpu"
 
@@ -22,11 +23,11 @@ p = pdf(x, y)
 t = np.random.uniform(0., 1., size=(p.size,))
 df = df[t < p.reshape(-1)]
 
-model = ml.neural_networks.ProbabilityDistribution(["x", "y"], [150, 50], activation="tanh")
+model = nn.ProbabilityDistribution(["x", "y"], [150, 50], activation="tanh")
 model.to(DEVICE)
 train_data = model.data_to_tensor(df)
 train_losses, val_losses, grad, best_step = model.fit(train_data, validation_data=None, n_steps=10_000, learning_rate=1.0E-3, keep_best=False)
-ml.utilities.plot_losses(train_losses, val_losses, grad, best_step, log_scale=True)
+plot_losses(train_losses, val_losses, grad, best_step, log_scale=True)
 
 
 ncols = 5
@@ -56,8 +57,3 @@ for ax in axes:
     ax.set_yticks([])
 f.tight_layout()
 plt.show()
-
-
-if __name__ == "__main__":
-    import IPython
-    IPython.embed()

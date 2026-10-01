@@ -1,15 +1,14 @@
-import pygmalion as ml
 import matplotlib.pyplot as plt
 import pandas as pd
 import torch
 import pathlib
-import IPython
+from pygmalion.datasets import airline_tweets
 
 path = pathlib.Path(__file__).parent
 data_path = path.parent / "data"
 
 # Download the data
-ml.datasets.airline_tweets(data_path)
+airline_tweets(data_path)
 df = pd.read_csv(data_path / "airline_tweets.csv")
 class_freqs = pd.value_counts(df["sentiment"], normalize=True)
 classes = class_freqs.index
@@ -19,7 +18,7 @@ tokenizer = ml.tokenizers.WordsTokenizer(lowercase=True, special_tokens=["UNKNOW
 tokenizer.fit(df["text"], max_tokens=10000)
 
 DEVICE = "cuda:0" if torch.cuda.device_count() > 0 else "cpu"
-model = ml.neural_networks.TextSegmenter(classes, tokenizer,
+model = nn.TextSegmenter(classes, tokenizer,
                                          n_stages=3, projection_dim=16,
                                          n_heads=4, dropout=0.2)
 model.to(DEVICE)
