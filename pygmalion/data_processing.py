@@ -56,7 +56,7 @@ def embed_categorical(df: pd.DataFrame, dimension: int=4,
     if not inplace:
         df = df.copy()
     if columns is None:
-        columns = [c for c, d in df.dtypes.items() if is_numeric_dtype(d)]
+        columns = [c for c, d in df.dtypes.items() if not is_numeric_dtype(d)]
     for col in columns:
         if col in skip_columns:
             continue
